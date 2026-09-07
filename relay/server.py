@@ -72,11 +72,19 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
         parsed_url = urlparse(supplied_url)
         if parsed_url.scheme != "https" or parsed_url.hostname != host:
             raise ValueError("cookie url does not match target origin")
+    # Strip unsupported or risky internal Chrome attributes
     allowed = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "url"}
     item = {k: v for k, v in cookie.items() if k in allowed}
-    # Do not pass 'priority' or 'sourceScheme' as Lightpanda CDP rejects them with NotImplemented
+
+    # Handle __Host- prefix strict RFC compliance:
+    # Cookies with __Host- prefix MUST have path='/' and NO domain attribute set in CDP
+    if str(item.get("name", "")).startswith("__Host-"):
+        item["path"] = "/"
+        item.pop("domain", None)
+    else:
+        item.setdefault("path", "/")
+
     item["url"] = origin
-    item.setdefault("path", "/")
 
     # Normalize sameSite enum for Lightpanda CDP:
     # Chrome extension API returns lowercase: 'unspecified', 'no_restriction', 'lax', 'strict'

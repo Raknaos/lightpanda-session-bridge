@@ -23,7 +23,7 @@
       --danger: #e11d48;
       --glass-alpha: 0.85;
       --glass-surface: rgba(255, 255, 255, 0.72);
-      --glass-card: rgba(255, 255, 255, 0.84);
+      --glass-card: rgba(255, 255, 255, 0.86);
       --edge: rgba(255, 255, 255, 0.9);
       --edge-subtle: rgba(255, 255, 255, 0.6);
       --shadow-sm: 0 2px 8px rgba(15, 25, 65, 0.04);
@@ -38,7 +38,7 @@
     }
 
     body {
-      width: 390px;
+      width: 430px;
       margin: 0;
       color: var(--ink);
       font: 13.5px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -49,39 +49,39 @@
       user-select: none;
     }
 
-    /* Quota Glass Ambient Light Spheres */
+    /* Quota Glass Ambient Halos */
     body::before {
       content: '';
       position: fixed;
       z-index: -1;
-      width: 440px;
-      height: 440px;
-      left: -150px;
-      top: -160px;
+      width: 480px;
+      height: 480px;
+      left: -160px;
+      top: -170px;
       border-radius: 50%;
       background: radial-gradient(circle, #ffffff 0%, #c8f7ff 50%, transparent 75%);
       opacity: 0.6;
-      filter: blur(14px);
+      filter: blur(16px);
       pointer-events: none;
     }
     body::after {
       content: '';
       position: fixed;
       z-index: -1;
-      width: 400px;
-      height: 400px;
-      right: -170px;
-      bottom: -170px;
+      width: 440px;
+      height: 440px;
+      right: -180px;
+      bottom: -180px;
       border-radius: 50%;
       background: radial-gradient(circle, #e2d9ff 0%, #a8c6ff 50%, transparent 75%);
       opacity: 0.65;
-      filter: blur(14px);
+      filter: blur(16px);
       pointer-events: none;
     }
 
     .app-shell {
-      padding: 20px 22px;
-      min-height: 390px;
+      padding: 22px 24px;
+      min-height: 400px;
       display: flex;
       flex-direction: column;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 28px rgba(190, 175, 255, 0.2);
@@ -89,17 +89,19 @@
       -webkit-backdrop-filter: blur(32px) saturate(140%);
     }
 
-    /* Header with Brand, Relay Status & Language Switcher */
+    /* Header Layout */
     .app-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 16px;
+      gap: 16px;
+      margin-bottom: 18px;
     }
     .brand-wrap {
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-shrink: 0;
     }
     .brand-mark {
       width: 34px;
@@ -115,11 +117,12 @@
     }
     .brand-title {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 19px;
+      font-size: 18px;
       font-weight: 700;
-      letter-spacing: -0.6px;
+      letter-spacing: -0.5px;
       color: var(--ink);
       line-height: 1.1;
+      white-space: nowrap;
     }
     .brand-dot {
       background: linear-gradient(135deg, var(--blue), var(--violet));
@@ -130,7 +133,8 @@
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 10px;
+      flex-shrink: 0;
     }
 
     /* Language Switcher Pill */
@@ -140,29 +144,31 @@
     .lang-btn {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
+      gap: 5px;
+      padding: 5px 10px;
       border-radius: 99px;
       border: 1px solid var(--edge);
-      background: rgba(255, 255, 255, 0.65);
+      background: rgba(255, 255, 255, 0.75);
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 700;
-      color: var(--soft);
+      color: var(--ink-secondary);
       cursor: pointer;
       box-shadow: var(--shadow-sm);
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
     .lang-btn:hover {
       background: #ffffff;
       color: var(--ink);
+      box-shadow: 0 2px 10px rgba(84, 104, 255, 0.15);
     }
     .lang-dropdown {
       position: absolute;
       top: 100%;
       right: 0;
       margin-top: 6px;
-      width: 140px;
+      width: 145px;
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
@@ -203,28 +209,29 @@
       color: var(--violet);
     }
 
-    /* Relay Badge Pill */
+    /* Relay Badge - Single line guaranteed, spacious */
     .badge {
       font-size: 11px;
       font-weight: 600;
-      padding: 4px 10px;
+      padding: 5px 11px;
       border-radius: 99px;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       border: 1px solid var(--edge);
-      background: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.75);
       box-shadow: var(--shadow-sm);
+      white-space: nowrap;
     }
     .badge.online {
       color: #0d7a36;
-      background: rgba(214, 255, 225, 0.75);
-      border-color: rgba(46, 160, 67, 0.28);
+      background: rgba(214, 255, 225, 0.8);
+      border-color: rgba(46, 160, 67, 0.35);
     }
     .badge.offline {
       color: #c51834;
-      background: rgba(255, 225, 230, 0.75);
-      border-color: rgba(225, 29, 72, 0.28);
+      background: rgba(255, 225, 230, 0.8);
+      border-color: rgba(225, 29, 72, 0.35);
     }
     .badge .dot {
       width: 6px;
@@ -232,15 +239,16 @@
       border-radius: 50%;
       background: currentColor;
       box-shadow: 0 0 8px currentColor;
+      flex-shrink: 0;
     }
 
-    /* Glass Target Card */
+    /* Target Origin Glass Card */
     .glass-card {
       background: var(--glass-card);
       border: 1px solid var(--edge);
       border-radius: 16px;
-      padding: 13px 16px;
-      margin-bottom: 13px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
       box-shadow: var(--shadow-sm);
       position: relative;
     }
@@ -265,7 +273,7 @@
       font-weight: 600;
       color: #0d7a36;
       background: rgba(46, 160, 67, 0.1);
-      padding: 2px 7px;
+      padding: 2px 8px;
       border-radius: 99px;
     }
     .card-val {
@@ -284,7 +292,7 @@
       padding: 0 2px;
     }
 
-    /* Consent Card */
+    /* Consent Box */
     .consent-box {
       display: flex;
       align-items: flex-start;
@@ -299,7 +307,7 @@
       box-shadow: var(--shadow-sm);
     }
     .consent-box:hover {
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.92);
       border-color: #ffffff;
       transform: translateY(-0.5px);
     }
@@ -365,7 +373,7 @@
       transition: all 0.15s ease;
     }
 
-    /* Refined Minimal Glass Footer */
+    /* Footer */
     .app-footer {
       margin-top: auto;
       padding-top: 16px;
@@ -373,7 +381,7 @@
       align-items: center;
       justify-content: space-between;
       border-top: 1px solid rgba(0, 0, 0, 0.06);
-      font-size: 11px;
+      font-size: 11.5px;
       color: var(--soft);
       font-weight: 500;
     }
@@ -381,8 +389,8 @@
       display: flex;
       align-items: center;
       gap: 5px;
-      background: rgba(255, 255, 255, 0.5);
-      padding: 3px 8px;
+      background: rgba(255, 255, 255, 0.55);
+      padding: 4px 9px;
       border-radius: 99px;
       border: 1px solid var(--edge);
     }
@@ -453,7 +461,7 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         <span id="footer-secure-tag">Isolated Profile · Localhost CDP</span>
       </div>
-      <span>v0.3.0</span>
+      <span>v0.3.1</span>
     </footer>
   </div>
 
