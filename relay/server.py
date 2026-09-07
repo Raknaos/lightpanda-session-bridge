@@ -7,9 +7,13 @@ provide a valid public HTTPS origin, its cookies, and optional storage entries.
 from __future__ import annotations
 
 import argparse
+import hmac
 import ipaddress
 import json
+import os
+import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -18,35 +22,132 @@ import websocket
 HOST = "127.0.0.1"
 PORT = 8765
 CDP = "ws://127.0.0.1:9222/"
-EXTENSION_ORIGIN = "chrome-extension://"
 CDP_LOCK = threading.RLock()
 _CDP_SOCKET = None
 _CDP_TRANSPORT = None
 _CDP_SESSION_ID = None
 _CDP_TARGET_ID = None
 _CDP_ORIGIN = None
+_DNS_CACHE: dict = {}
+_DNS_CACHE_TTL = 60.0
 BLOCKED_IDP_HOSTS = {
     "accounts.google.com", "login.microsoftonline.com", "appleid.apple.com",
     "login.live.com", "auth0.com", "github.com",
 }
+# Suffixes that must never be treated as registrable parent domains (cookie domain)
+PUBLIC_SUFFIXES = {
+    "com", "org", "net", "io", "co", "fr", "de", "uk", "us", "eu", "ru", "cn",
+    "app", "dev", "ai", "cloud", "page", "site", "tech", "store", "online", "xyz",
+    "com.au", "co.uk", "com.br", "co.jp", "com.cn", "co.in", "com.mx", "co.za",
+}
+
+def _load_secret() -> str:
+    """Load the shared secret from the local secret file or env var.
+    The secret file lives OUTSIDE the repo (~/.config/lightpanda-bridge/secret)
+    so it is never committed. The extension stores the same value under the
+    chrome.storage key 'lpBridgeToken'."""
+    env = os.environ.get("LP_BRIDGE_SECRET")
+    if env:
+        return env
+    path = _secret_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            value = fh.read().strip()
+            if value:
+                return value
+    except FileNotFoundError:
+        pass
+    # Generate a fresh random secret and persist it
+    import secrets
+    value = secrets.token_urlsafe(32)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(value)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        pass
+    return value
+
+
+def _secret_path() -> str:
+    """Cross-platform per-user config path, never inside the repo."""
+    base = os.environ.get("LP_BRIDGE_CONFIG_DIR") or os.path.join(
+        os.path.expanduser("~"), ".config", "lightpanda-bridge"
+    )
+    return os.path.join(base, "secret")
+
+
+def _is_global_hostname(hostname: str) -> bool:
+    """Resolve DNS and confirm every answer is a global (non-loopback,
+    non-private, non-link-local, non-reserved) IP. Rejects split-horizon and
+    public-suffix wildcard tricks (nip.io, localtest.me, .localhost)."""
+    if not hostname:
+        return False
+    # Reject obvious non-canonical numeric encodings before DNS
+    lowered = hostname.lower()
+    # IPv4-mapped IPv6 forms handled by ipaddress below; reject hex/octal/dword ints
+    if lowered.startswith(("0x", "0o", "0b")):
+        return False
+    # Reject any hostname ending with a public-suffix wildcard service
+    for suffix in (".nip.io", ".localhost", ".local", ".internal", ".lan", ".home.arpa"):
+        if lowered.endswith(suffix):
+            return False
+    try:
+        now = time.time()
+        cached = _DNS_CACHE.get(hostname)
+        if cached and (now - cached[0]) < _DNS_CACHE_TTL:
+            return cached[1]
+        infos = socket.getaddrinfo(hostname, None)
+        if not infos:
+            return False
+        for info in infos:
+            try:
+                address = ipaddress.ip_address(info[4][0])
+            except ValueError:
+                return False
+            if not address.is_global:
+                _DNS_CACHE[hostname] = (now, False)
+                return False
+        _DNS_CACHE[hostname] = (now, True)
+        return True
+    except socket.gaierror:
+        return False
 
 
 def valid_origin(origin: str) -> bool:
     parsed = urlparse(origin)
-    hostname = (parsed.hostname or "").lower().rstrip(".")
+    raw_hostname = parsed.hostname or ""
+    hostname = raw_hostname.lower().rstrip(".")
     if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/") or parsed.params or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        return False
+    if not hostname:
+        return False
+    # Normalize IDNA: reject confusable non-ASCII hostnames outright
+    try:
+        hostname.encode("ascii")
+    except UnicodeEncodeError:
         return False
     if hostname in BLOCKED_IDP_HOSTS or any(hostname.endswith("." + blocked) for blocked in BLOCKED_IDP_HOSTS):
         return False
     if hostname in {"localhost", "localhost.localdomain"}:
         return False
+    # Canonical numeric forms (IPv4-mapped IPv6 included) rejected here
     try:
         address = ipaddress.ip_address(hostname)
         if not address.is_global:
             return False
+        return True
     except ValueError:
         pass
-    return True
+    # Hostnames must be strictly DNS-safe: letters, digits, hyphen, dots only
+    import re
+    if not re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*", hostname):
+        return False
+    return _is_global_hostname(hostname)
 
 
 def origin_hostname(origin: str) -> str:
@@ -57,7 +158,18 @@ def origin_hostname(origin: str) -> str:
 def domain_matches_host(cookie_domain: str, host: str) -> bool:
     domain = str(cookie_domain or "").lower().lstrip(".").rstrip(".")
     target = str(host or "").lower().rstrip(".")
-    return bool(domain and target and (domain == target or target.endswith("." + domain)))
+    if not domain or not target:
+        return False
+    if domain == target:
+        return True
+    if not target.endswith("." + domain):
+        return False
+    # Never allow a public suffix as cookie domain: a cookie can't be set for
+    # Domain=com (x.com), Domain=co.uk (a.co.uk), Domain=io, etc. A registrable
+    # domain like 'a6api.com' is fine even though it ends with '.com'.
+    if domain in PUBLIC_SUFFIXES:
+        return False
+    return True
 
 
 def cookie_for_cdp(cookie: dict, origin: str) -> dict:
@@ -84,6 +196,10 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     else:
         item.setdefault("path", "/")
 
+    # __Secure- prefixed cookies MUST be Secure (RFC 6265bis)
+    if str(item.get("name", "")).startswith("__Secure-"):
+        item["secure"] = True
+
     item["url"] = origin
 
     # Normalize sameSite enum for Lightpanda CDP:
@@ -96,7 +212,9 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
         elif raw_ss in ("lax",):
             item["sameSite"] = "Lax"
         elif raw_ss in ("none", "no_restriction"):
+            # sameSite=None requires Secure per RFC 6265bis; enforce it
             item["sameSite"] = "None"
+            item["secure"] = True
         else:
             del item["sameSite"]
 
@@ -221,50 +339,52 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        # CORS is only reflected for chrome-extension:// callers (the popup needs
+        # it to read responses). Web pages never get CORS -> their cross-origin
+        # POSTs die at the preflight. State changes additionally require the
+        # shared X-Bridge-Token (see _authorized), so a rogue extension cannot
+        # import/overwrite a session either.
         request_origin = self.headers.get("Origin", "")
-        if request_origin.startswith(EXTENSION_ORIGIN):
+        if request_origin.startswith("chrome-extension://"):
             self.send_header("Access-Control-Allow-Origin", request_origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
         self.wfile.write(body)
+
+    def _authorized(self) -> bool:
+        """Require the shared bridge token on every state-changing call.
+        The extension stores the same value under chrome.storage 'lpBridgeToken'."""
+        supplied = self.headers.get("X-Bridge-Token", "")
+        expected = _load_secret()
+        if not expected or not supplied:
+            return False
+        return hmac.compare_digest(supplied, expected)
+
+    def _check_extension_caller(self) -> bool:
+        """Caller must be a chrome extension (the popup) or local CLI tooling
+        (no Origin header). Any web page origin (https://...) is refused."""
+        request_origin = self.headers.get("Origin", "")
+        if not request_origin:
+            return True
+        return request_origin.startswith("chrome-extension://")
 
     def do_OPTIONS(self) -> None:
         self.send_json(204, {})
 
     def do_GET(self) -> None:
         if self.path == "/health":
+            # Sanitized health: no active origin, no PII, no page URL.
             self.send_json(200, {
                 "ok": True,
                 "service": "lightpanda-session-bridge",
-                "active_origin": _CDP_ORIGIN,
                 "attached": _CDP_SESSION_ID is not None
             })
         elif self.path == "/v1/session/inspect":
-            with CDP_LOCK:
-                if _CDP_TRANSPORT is None or _CDP_SESSION_ID is None:
-                    self.send_json(200, {"active": False, "error": "no active session"})
-                    return
-                try:
-                    res = _CDP_TRANSPORT.request("Network.getCookies", {}, session_id=_CDP_SESSION_ID)
-                    cookies = res.get("cookies", [])
-                    names = [c.get("name") for c in cookies]
-                    eval_res = _CDP_TRANSPORT.request(
-                        "Runtime.evaluate",
-                        {"expression": "({ title: document.title, url: window.location.href })", "returnByValue": True},
-                        session_id=_CDP_SESSION_ID
-                    )
-                    page_info = eval_res.get("result", {}).get("value", {})
-                    self.send_json(200, {
-                        "active": True,
-                        "origin": _CDP_ORIGIN,
-                        "cookie_count": len(cookies),
-                        "cookie_names": names,
-                        "page": page_info
-                    })
-                except Exception as e:
-                    self.send_json(500, {"error": str(e)})
+            # Removed: leaked cookie names, origin, page URL/title to any caller.
+            self.send_json(404, {"ok": False, "error": "not found"})
         else:
             self.send_json(404, {"ok": False, "error": "not found"})
 
@@ -272,10 +392,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/v1/session/import":
             self.send_json(404, {"ok": False, "error": "not found"})
             return
+        if not self._check_extension_caller():
+            self.send_json(403, {"ok": False, "error": "origin refused"})
+            return
+        if not self._authorized():
+            self.send_json(401, {"ok": False, "error": "unauthorized"})
+            return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > 2_000_000:
                 raise ValueError("body refused")
+            # Enforce a read timeout so slow/stalled bodies cannot exhaust threads.
+            self.connection.settimeout(10)
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             cookies = payload.get("cookies", [])
             origin = payload.get("origin", "")
@@ -292,11 +420,41 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def self_test() -> int:
+    # Global public HTTPS hosts
     assert valid_origin("https://a6api.com")
+    assert valid_origin("https://mail.google.com")
+    assert valid_origin("https://console.runpod.io")
+    # Blocked IdPs, http scheme, localhost/loopback, private IPs
     assert not valid_origin("https://accounts.google.com")
     assert not valid_origin("http://a6api.com")
+    assert not valid_origin("https://localhost")
+    assert not valid_origin("https://127.0.0.1")
+    assert not valid_origin("https://10.0.0.4")
+    assert not valid_origin("https://192.168.1.5")
+    # Non-canonical numeric encodings of loopback/private (SSRF bypasses)
+    assert not valid_origin("https://127.1")
+    assert not valid_origin("https://2130706433")
+    assert not valid_origin("https://0x7f000001")
+    assert not valid_origin("https://0177.0.0.1")
+    assert not valid_origin("https://[::ffff:127.0.0.1]")
+    # Wildcard public-suffix / split-horizon services
+    assert not valid_origin("https://foo.127.0.0.1.nip.io")
+    assert not valid_origin("https://localtest.me")
+    assert not valid_origin("https://foo.localhost")
+    # Non-ASCII confusable hostnames (IDNA)
+    assert not valid_origin("https://аccounts.google.com")
+    # Cookie domain validation
+    assert domain_matches_host("a6api.com", "a6api.com")
+    assert domain_matches_host("a6api.com", "sub.a6api.com")
+    assert not domain_matches_host("com", "x.com")
+    assert not domain_matches_host("co.uk", "a.co.uk")
     assert cookie_for_cdp({"name": "x", "value": "y", "storeId": "secret"}, "https://a6api.com")["name"] == "x"
     assert "storeId" not in cookie_for_cdp({"name": "x", "value": "y", "storeId": "secret"}, "https://a6api.com")
+    # __Secure- and sameSite=None cookies must be forced Secure
+    c = cookie_for_cdp({"name": "__Secure-x", "value": "y", "domain": "a6api.com"}, "https://a6api.com")
+    assert c.get("secure") is True
+    c2 = cookie_for_cdp({"name": "x", "value": "y", "sameSite": "no_restriction", "domain": "a6api.com"}, "https://a6api.com")
+    assert c2.get("secure") is True and c2.get("sameSite") == "None"
     print("security self-test: ok")
     return 0
 

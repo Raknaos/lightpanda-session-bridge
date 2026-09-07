@@ -64,7 +64,12 @@ def generate_panda_icon(size):
     icon = img.resize((size, size), Image.Resampling.LANCZOS)
     return icon
 
+import os
+
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extension", "icons")
+os.makedirs(OUT_DIR, exist_ok=True)
+
 for sz in [16, 32, 48, 128]:
     ico = generate_panda_icon(sz)
-    ico.save(f"./extension/icons/icon{sz}.png")
+    ico.save(os.path.join(OUT_DIR, f"icon{sz}.png"))
     print(f"Icon {sz}x{sz} générée avec succès.")

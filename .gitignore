@@ -10,3 +10,6 @@ storage.sqlite
 *.har
 *.log
 .hermes/
+popup_current.png
+*.png
+!extension/icons/*.png

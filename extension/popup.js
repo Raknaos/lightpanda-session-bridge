@@ -213,6 +213,31 @@ const footerSecureTag = document.querySelector('#footer-secure-tag');
 
 let currentTab = null;
 let currentLanguage = localStorage.getItem('lightpanda-lang') || 'en'; // Default English
+let bridgeToken = ''; // loaded before any transfer
+
+// Shared-secret token: stored in the extension's OWN localStorage (origin
+// chrome-extension://<id>, isolated from web pages, no extra permission).
+// Same value as the relay's ~/.config/lightpanda-bridge/secret (see server.py).
+const TOKEN_KEY = 'lpBridgeToken';
+
+async function loadBridgeToken() {
+  try {
+    bridgeToken = localStorage.getItem(TOKEN_KEY) || '';
+    if (!bridgeToken) {
+      // Fallback: chrome.storage.local (set by background/bootstrap tooling)
+      const stored = await chrome.storage.local.get(TOKEN_KEY);
+      bridgeToken = stored[TOKEN_KEY] || '';
+    }
+  } catch (_) {
+    bridgeToken = bridgeToken || '';
+  }
+}
+
+function bridgeHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (bridgeToken) headers['X-Bridge-Token'] = bridgeToken;
+  return headers;
+}
 
 function t(key, ...args) {
   const dict = I18N[currentLanguage] || I18N.en;
@@ -282,6 +307,7 @@ async function checkRelay() {
 
 async function init() {
   applyTranslations();
+  await loadBridgeToken();
   const relayOk = await checkRelay();
 
   // Find target tab
@@ -371,11 +397,11 @@ transferEl.addEventListener('click', async () => {
       }
     } catch (_) {}
 
-    // 3. Send payload to Relay
+    // 3. Send payload to Relay (authenticated with shared token)
     const payload = { origin, cookies, storage };
     const response = await fetch(`${RELAY}/v1/session/import`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: bridgeHeaders(),
       body: JSON.stringify(payload)
     });
 

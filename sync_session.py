@@ -11,6 +11,20 @@ RELAY_URL = "http://127.0.0.1:8765/v1/session/import"
 CHROME_CDP = "http://127.0.0.1:9223"
 LIGHTPANDA_CDP = "ws://127.0.0.1:9222/"
 
+def _load_token() -> str:
+    """Read the shared bridge token from the local secret file (~/.config/
+    lightpanda-bridge/secret), same source as the relay. Returns '' if absent."""
+    import os
+    env = os.environ.get("LP_BRIDGE_SECRET")
+    if env:
+        return env
+    path = os.path.join(os.path.expanduser("~"), ".config", "lightpanda-bridge", "secret")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
 def extract_and_transfer():
     try:
         tabs = json.loads(urllib.request.urlopen(f"{CHROME_CDP}/json/list").read())
@@ -37,14 +51,18 @@ def extract_and_transfer():
     ws.close()
 
     user_dict = json.loads(user_val) if user_val else {}
-    print(f"[+] Compte: {user_dict.get('username')} ({user_dict.get('email')}), ID: {user_dict.get('id')}")
+    # Never print account identifiers: username, email, or numeric ID may end up
+    # in agent logs / chat history. Only the cookie count is logged.
     print(f"[+] {len(cookies)} cookie(s) de session trouvés.")
 
-    # 3. Envoyer au Relais
+    # 3. Envoyer au Relais (authentifié par le jeton partagé local)
     req = urllib.request.Request(
         RELAY_URL,
         data=json.dumps({"origin": "https://a6api.com", "cookies": cookies}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-Bridge-Token": _load_token(),
+        },
         method="POST"
     )
     with urllib.request.urlopen(req, timeout=10) as r:
