@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Lightpanda Session Bridge</title>
+<style>
+body { width: 330px; margin: 16px; font: 14px system-ui, sans-serif; color: #202124; }
+h1 { font-size: 17px; margin: 0 0 10px; }
+.origin { padding: 8px; background: #f1f3f4; word-break: break-all; margin: 8px 0; }
+.warning { color: #8a1c1c; font-size: 12px; }
+button { width: 100%; padding: 9px; margin-top: 10px; }
+#status { margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+<h1>Session Lightpanda</h1>
+<p>Transfert explicite de la session de la page actuelle.</p>
+<div class="origin" id="origin">Lecture…</div>
+<p class="warning">Ne transfère jamais une session vers un Lightpanda ou un relais que tu ne contrôles pas.</p>
+<label><input id="confirm" type="checkbox"> Je confirme cet origin</label>
+<button id="transfer" disabled>Transférer vers Lightpanda</button>
+<div id="status"></div>
+<script src="popup.js"></script>
+</body>
+</html>

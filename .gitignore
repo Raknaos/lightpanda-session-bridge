@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+neo-upstream/
+.env
+*.cookie
+cookies.json
+storage.sqlite
+*.har
+*.log
+.hermes/

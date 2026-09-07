@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Lightpanda Session Bridge",
+  "version": "0.1.0",
+  "description": "Explicitly transfer the current site session to a local Lightpanda browser.",
+  "permissions": ["cookies", "activeTab"],
+  "host_permissions": ["https://*/*", "http://127.0.0.1:8765/*"],
+  "action": {
+    "default_title": "Transfer session to Lightpanda",
+    "default_popup": "popup.html"
+  }
+}
