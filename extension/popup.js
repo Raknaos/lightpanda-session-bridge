@@ -4,16 +4,17 @@ const confirmEl = document.querySelector('#confirm');
 const transferEl = document.querySelector('#transfer');
 const statusEl = document.querySelector('#status');
 const relayBadge = document.querySelector('#relay-badge');
+const relayText = document.querySelector('#relay-text');
 let currentTab = null;
 
 function setStatus(text, type = 'info') {
   statusEl.textContent = text;
   if (type === 'error') {
-    statusEl.style.color = 'var(--red)';
+    statusEl.style.color = '#fb7185';
   } else if (type === 'success') {
-    statusEl.style.color = 'var(--green-hover)';
+    statusEl.style.color = '#4ade80';
   } else {
-    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.color = '#94a3b8';
   }
 }
 
@@ -30,36 +31,47 @@ async function checkRelay() {
   try {
     const res = await fetch(`${RELAY}/health`, { method: 'GET', cache: 'no-store' });
     if (res.ok) {
-      relayBadge.textContent = 'Relais en ligne';
       relayBadge.className = 'badge online';
+      relayText.textContent = 'Relais en ligne';
       return true;
     }
   } catch (_) {}
-  relayBadge.textContent = 'Relais hors-ligne';
   relayBadge.className = 'badge offline';
+  relayText.textContent = 'Relais hors-ligne';
   return false;
 }
 
 async function init() {
   const relayOk = await checkRelay();
-  
-  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-    currentTab = tabs[0];
-    const url = currentTab?.url || '';
-    let origin = '';
-    try {
-      origin = new URL(url).origin;
-    } catch (_) {}
 
-    originEl.textContent = origin || 'Page non compatible';
-    originEl.dataset.origin = origin;
+  // Identifier le dernier onglet actif sur une page web réelle
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  // Filtrer les pages internes
+  const webTabs = tabs.filter(t => t.url && eligible(t.url));
+  const activeTab = tabs.find(t => t.active);
 
-    if (!eligible(url)) {
-      setStatus('Un site HTTPS public est requis.', 'error');
-    } else if (!relayOk) {
-      setStatus('Le relais local (port 8765) n’est pas démarré.', 'error');
-    }
-  });
+  if (activeTab && eligible(activeTab.url)) {
+    currentTab = activeTab;
+  } else if (webTabs.length > 0) {
+    currentTab = webTabs[0];
+  } else {
+    currentTab = activeTab;
+  }
+
+  const url = currentTab?.url || '';
+  let origin = '';
+  try {
+    origin = new URL(url).origin;
+  } catch (_) {}
+
+  originEl.textContent = origin || 'Page non compatible';
+  originEl.dataset.origin = origin;
+
+  if (!eligible(url)) {
+    setStatus('Ouvrez un onglet HTTPS public (ex: Gmail, A6API).', 'error');
+  } else if (!relayOk) {
+    setStatus('Le relais local (port 8765) n’est pas démarré.', 'error');
+  }
 }
 
 confirmEl.addEventListener('change', () => {
@@ -72,26 +84,20 @@ transferEl.addEventListener('click', async () => {
   setStatus('Transfert et vérification en cours…');
 
   try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
-    const url = tab?.url || '';
+    const url = currentTab?.url || '';
     const origin = new URL(url).origin;
 
-    if (origin !== originEl.dataset.origin) {
-      throw new Error('La page a changé. Veuillez réouvrir le popup.');
-    }
-
-    // Récupération des cookies
+    // 1. Récupération des cookies
     const cookies = await chrome.cookies.getAll({ url });
     if (!cookies || cookies.length === 0) {
-      throw new Error('Aucun cookie trouvé pour cette origine.');
+      throw new Error('Aucun cookie trouvé pour cette page.');
     }
 
-    // Extraction localStorage optionnelle
+    // 2. Extraction localStorage
     let storage = null;
     try {
       const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId: currentTab.id },
         func: () => {
           const data = {};
           for (let i = 0; i < localStorage.length; i++) {
@@ -106,6 +112,7 @@ transferEl.addEventListener('click', async () => {
       }
     } catch (_) {}
 
+    // 3. Envoi au Relais
     const payload = { origin, cookies, storage };
     const response = await fetch(`${RELAY}/v1/session/import`, {
       method: 'POST',
@@ -118,7 +125,7 @@ transferEl.addEventListener('click', async () => {
       throw new Error(result.error || 'Transfert refusé par le relais.');
     }
 
-    setStatus(`✓ Session synchronisée (${result.cookie_count} cookies).`, 'success');
+    setStatus(`✓ Session synchronisée (${result.cookie_count} cookies injectés).`, 'success');
   } catch (error) {
     setStatus(error.message || 'Échec du transfert.', 'error');
   } finally {

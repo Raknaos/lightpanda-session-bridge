@@ -240,8 +240,8 @@ class Handler(BaseHTTPRequestHandler):
                 "storage_count": storage_count,
                 "origin": origin
             })
-        except Exception:
-            self.send_json(400, {"ok": False, "error": "session import refused"})
+        except Exception as err:
+            self.send_json(400, {"ok": False, "error": str(err) or "session import refused"})
 
 
 def self_test() -> int:
