@@ -9,8 +9,9 @@
 [![Protocol](https://img.shields.io/badge/CDP-1.3-38bdf8.svg?style=flat-square)](https://chromedevtools.github.io/devtools-protocol/)
 [![Engine](https://img.shields.io/badge/Engine-Lightpanda%20(Zig%2FV8)-22c55e.svg?style=flat-square)](https://lightpanda.io)
 [![Live Site](https://img.shields.io/badge/Website-raknaos.github.io-5468ff?style=flat-square)](https://raknaos.github.io/lightpanda-session-bridge/)
+[![Dev.to](https://img.shields.io/badge/DEV.to-Read%20Article-0a0a0a.svg?style=flat-square&logo=devdotto)](https://dev.to/raknaos/handing-real-logins-to-headless-ai-agents-building-the-lightpanda-session-bridge-17je)
 
-**[Live Showcase Website](https://raknaos.github.io/lightpanda-session-bridge/)** · **[Architecture](#-architecture)** · **[Quickstart](#-quickstart)** · **[Security Standard](#-security-guarantees)** · **[Python SDK](#-python-sdk)**
+**[Live Showcase Website](https://raknaos.github.io/lightpanda-session-bridge/)** · **[Read Article on DEV.to](https://dev.to/raknaos/handing-real-logins-to-headless-ai-agents-building-the-lightpanda-session-bridge-17je)** · **[Architecture](#-architecture)** · **[Quickstart](#-quickstart)** · **[Security Standard](#-security-guarantees)** · **[Python SDK](#-python-sdk)**
 
 <br/>
 
