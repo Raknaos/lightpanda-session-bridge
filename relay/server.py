@@ -371,6 +371,14 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return request_origin.startswith("chrome-extension://")
 
+    def _require_extension_origin(self) -> bool:
+        """STRICT variant for secret-delivering endpoints: an Origin header
+        starting with chrome-extension:// is mandatory. Requests with no
+        Origin (curl, CLI tools, malware probes) are refused so the shared
+        secret can never be exfiltrated by a plain local process."""
+        request_origin = self.headers.get("Origin", "")
+        return request_origin.startswith("chrome-extension://")
+
     def do_OPTIONS(self) -> None:
         self.send_json(204, {})
 
@@ -382,6 +390,15 @@ class Handler(BaseHTTPRequestHandler):
                 "service": "lightpanda-session-bridge",
                 "attached": _CDP_SESSION_ID is not None
             })
+        elif self.path == "/v1/bootstrap":
+            # One-time pairing handshake: delivers the shared secret to the
+            # official extension so it can authenticate /v1/session/import.
+            # STRICT extension origin required (web pages and Origin-less
+            # local processes get 403: they must never read the secret).
+            if not self._require_extension_origin():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
+            self.send_json(200, {"ok": True, "token": _load_secret()})
         elif self.path == "/v1/session/inspect":
             # Removed: leaked cookie names, origin, page URL/title to any caller.
             self.send_json(404, {"ok": False, "error": "not found"})

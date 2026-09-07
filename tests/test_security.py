@@ -93,6 +93,45 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(transport.calls[1], ('Target.createTarget', {'url': 'https://a6api.com'}, None))
         self.assertEqual(transport.calls[2], ('Target.attachToTarget', {'targetId': 'FID-1', 'flatten': True}, None))
 
+    def test_bootstrap_requires_strict_extension_origin(self):
+        # Secret-delivering endpoint: ONLY a real chrome-extension:// Origin
+        # may read the token. Web pages, Origin-less processes (curl/malware)
+        # and CLI tools must all be refused.
+        class FakeHandler(BaseFakeHandler):
+            def __init__(self, origin):
+                super().__init__({'Origin': origin} if origin else {})
+
+        for origin in (None, 'https://evil.com', 'https://a6api.com', 'null'):
+            handler = FakeHandler(origin)
+            self.assertFalse(handler._require_extension_origin(), repr(origin))
+        for origin in ('chrome-extension://fcigkjkchglchhohedljlenopbkgnino',
+                       'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'):
+            handler = FakeHandler(origin)
+            self.assertTrue(handler._require_extension_origin(), repr(origin))
+
+    def test_import_accepts_extension_or_originless_caller(self):
+        # /v1/session/import is guarded by the shared token; the caller check
+        # is intentionally looser (extension OR local CLI without Origin),
+        # because the token itself is the real gate for state changes.
+        class FakeHandler(BaseFakeHandler):
+            def __init__(self, origin):
+                super().__init__({'Origin': origin} if origin else {})
+
+        self.assertTrue(FakeHandler(None)._check_extension_caller())
+        self.assertTrue(FakeHandler('chrome-extension://fcigkjkchglchhohedljlenopbkgnino')._check_extension_caller())
+        self.assertFalse(FakeHandler('https://evil.com')._check_extension_caller())
+        self.assertFalse(FakeHandler('null')._check_extension_caller())
+
+
+class BaseFakeHandler:
+    """Minimal stand-in exposing just the origin-check helpers."""
+    def __init__(self, headers):
+        self.headers = headers
+    def _check_extension_caller(self):
+        return server.Handler._check_extension_caller(self)
+    def _require_extension_origin(self):
+        return server.Handler._require_extension_origin(self)
+
 
 if __name__ == '__main__':
     unittest.main()

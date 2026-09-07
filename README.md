@@ -73,29 +73,47 @@ flowchart LR
 
 ## 🚀 Quickstart
 
+### 0. Prerequisites (first time only)
+| Requirement | Why | Install |
+|---|---|---|
+| **WSL2 with Ubuntu** | Lightpanda runs natively in Linux | `wsl --install -d Ubuntu` |
+| **Lightpanda binary** (in WSL, `~/lightpanda`) | Headless CDP browser engine | Inside WSL: `curl -fsSL https://pkg.lightpanda.io/install.sh \| bash` (see [lightpanda.io](https://lightpanda.io)) |
+| **Python 3.10+** | Relay server & SDK | [python.org](https://www.python.org/downloads/) |
+| **Python dependencies** | `websocket-client` for CDP | `pip install -r requirements.txt` |
+
+> **Windows Firewall:** when WSL2 launches Lightpanda, accept the firewall prompt so `127.0.0.1:9222` stays reachable from Windows.
+
 ### 1. Clone the repository
 ```bash
 git clone https://github.com/Raknaos/lightpanda-session-bridge.git
 cd lightpanda-session-bridge
+pip install -r requirements.txt
 ```
 
 ### 2. Launch Lightpanda CDP server (WSL2)
 ```powershell
 ./scripts/start-lightpanda.ps1
 ```
-*Listens on `http://127.0.0.1:9222`.*
+*Listens on `http://127.0.0.1:9222`. Keep this terminal window open.*
 
 ### 3. Start the local bridge relay
 ```powershell
 ./scripts/start-relay.ps1
 ```
-*Listens on loopback `http://127.0.0.1:8765`.*
+*Listens on loopback `http://127.0.0.1:8765`. Keep this terminal window open.*
 
 ### 4. Install the Chrome Extension
 1. Open `chrome://extensions` (or Comet / Edge extension manager).
 2. Enable **Developer Mode**.
 3. Click **Load unpacked** and select the `extension/` folder.
 4. Pin the 🐼 **Lightpanda Bridge** icon to your toolbar.
+
+### 5. Pair the extension with the relay (automatic)
+On first use the extension **auto-pairs** with the local relay: the first time you open the popup it fetches the shared secret from the relay's `/v1/bootstrap` endpoint and stores it in its own isolated storage. No manual token copy is needed — just open the popup once with the relay running, then close and reopen it.
+
+> **What if the popup shows `relay offline`?** Start the relay (step 3), then reopen the popup. The badge must read **online** before syncing.
+
+> **Security note:** `/v1/bootstrap` only answers to callers carrying a real `chrome-extension://` Origin — web pages, curl and other local processes are refused (HTTP 403), so the shared secret can only ever reach the official extension.
 
 ---
 

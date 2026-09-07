@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://raknaos.github.io/lightpanda-session-bridge/sitemap.xml

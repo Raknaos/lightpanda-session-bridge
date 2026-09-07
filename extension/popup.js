@@ -233,6 +233,25 @@ async function loadBridgeToken() {
   }
 }
 
+async function bootstrapToken() {
+  // One-time pairing with the local relay: fetch the shared secret from
+  // /v1/bootstrap (restricted to chrome-extension:// callers) and persist it.
+  try {
+    const res = await fetch(`${RELAY}/v1/bootstrap`, { method: 'GET', cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.token) {
+        bridgeToken = data.token;
+        try {
+          localStorage.setItem(TOKEN_KEY, bridgeToken);
+        } catch (_) { /* extension storage may be unavailable in some contexts */ }
+        return true;
+      }
+    }
+  } catch (_) { /* relay offline */ }
+  return false;
+}
+
 function bridgeHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   if (bridgeToken) headers['X-Bridge-Token'] = bridgeToken;
@@ -308,6 +327,10 @@ async function checkRelay() {
 async function init() {
   applyTranslations();
   await loadBridgeToken();
+  if (!bridgeToken) {
+    // First run: auto-pair with the local relay (fetch shared secret).
+    await bootstrapToken();
+  }
   const relayOk = await checkRelay();
 
   // Find target tab
