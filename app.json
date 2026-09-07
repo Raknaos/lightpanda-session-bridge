@@ -1,0 +1,16 @@
+{
+  "name": "Lightpanda Session Bridge",
+  "description": "The Authenticated Session Bridge for Machines and Autonomous AI Agents — transfer real browser sessions into Lightpanda headless runtime via CDP",
+  "repository": "https://github.com/Raknaos/lightpanda-session-bridge",
+  "logo": "https://raknaos.github.io/lightpanda-session-bridge/extension/icons/icon128.png",
+  "keywords": ["ai-agents", "browser-automation", "cdp", "lightpanda", "session", "cookies", "security"],
+  "scripts": {
+    "test": "python -m unittest discover -s tests -v"
+  },
+  "env": {
+    "LP_RELAY_PORT": {
+      "description": "Port for the loopback relay",
+      "value": "8765"
+    }
+  }
+}

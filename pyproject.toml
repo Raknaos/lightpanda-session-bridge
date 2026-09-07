@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightpanda-session-bridge"
+version = "0.3.4"
+description = "The Authenticated Session Bridge for Machines and Autonomous AI Agents — transfer real browser sessions into Lightpanda headless runtime via CDP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Raknaos" }
+]
+keywords = [
+  "lightpanda", "headless-browser", "cdp", "browser-automation",
+  "ai-agents", "cookies", "session-bridge", "security", "ssrf"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Browsers",
+  "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+  "websocket-client>=1.6.0"
+]
+
+[project.urls]
+Homepage = "https://raknaos.github.io/lightpanda-session-bridge/"
+Documentation = "https://github.com/Raknaos/lightpanda-session-bridge#readme"
+Repository = "https://github.com/Raknaos/lightpanda-session-bridge"
+Issues = "https://github.com/Raknaos/lightpanda-session-bridge/issues"
+"Dev.to Article" = "https://dev.to/raknaos/handing-real-logins-to-headless-ai-agents-building-the-lightpanda-session-bridge-17je"

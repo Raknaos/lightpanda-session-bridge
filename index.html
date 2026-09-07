@@ -19,21 +19,54 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Lightpanda Session Bridge">
   <meta name="twitter:description" content="Transfer authenticated browser sessions (OAuth, SSO, 2FA) into an isolated Lightpanda headless browser via CDP.">
-  <!-- Structured data for search engines and AI crawlers -->
+  <!-- Structured data for search engines and AI crawlers (SoftwareApplication + FAQPage) -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Lightpanda Session Bridge",
-    "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "Windows, macOS, Linux",
-    "url": "https://raknaos.github.io/lightpanda-session-bridge/",
-    "description": "Open-source tool to transfer an authenticated browser session into a local Lightpanda headless browser runtime via CDP, with zero secret leakage to AI agents.",
-    "codeRepository": "https://github.com/Raknaos/lightpanda-session-bridge",
-    "license": "https://opensource.org/licenses/MIT",
-    "softwareVersion": "0.3.4",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "author": { "@type": "Organization", "name": "Raknaos" }
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "Lightpanda Session Bridge",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "url": "https://raknaos.github.io/lightpanda-session-bridge/",
+        "description": "Open-source tool to transfer an authenticated browser session into a local Lightpanda headless browser runtime via CDP, with zero secret leakage to AI agents.",
+        "codeRepository": "https://github.com/Raknaos/lightpanda-session-bridge",
+        "license": "https://opensource.org/licenses/MIT",
+        "softwareVersion": "0.3.4",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Organization", "name": "Raknaos" }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How does Lightpanda Session Bridge pass logins to AI agents?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The human user authenticates normally in their desktop browser (Chrome, Comet, Edge) using their standard 2FA, passkey, or Google OAuth. An open-source Manifest V3 extension captures scoped cookies upon explicit user click and securely relays them to a local Lightpanda headless instance via CDP WebSocket without exposing passwords to the LLM."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does the local relay store or log my passwords and cookies?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. The local relay binds strictly to loopback (127.0.0.1) and enforces a zero-logging security policy. Cookie values never touch disk logs, chat traces, or agent prompt contexts."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What protections prevent SSRF and cookie theft?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The relay blacklists identity provider roots (accounts.google.com, login.microsoftonline.com, auth0.com, github.com), enforces mandatory DNS resolution with 60-second caching against TOCTOU rebinding, and strictly blocks private IP subnets and wildcard DNS tools like nip.io."
+            }
+          }
+        ]
+      }
+    ]
   }
   </script>
   

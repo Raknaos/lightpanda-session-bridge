@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest an idea or architectural improvement for the bridge
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Feature requests and architecture proposals are warmly welcome!
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Is your feature request related to a specific agent use-case, browser quirk, or security boundary?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed interface, API, or architectural change.
+    validations:
+      required: true

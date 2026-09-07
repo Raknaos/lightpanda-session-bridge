@@ -1,0 +1,34 @@
+name: Bug report
+description: Create a report to help us improve the bridge
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug!
+  - type: input
+    id: version
+    attributes:
+      label: Extension & Relay Version
+      description: What version of the bridge are you using? (e.g. 0.3.4)
+      placeholder: v0.3.4
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Host Browser
+      options:
+        - Chrome
+        - Edge
+        - Comet (Perplexity)
+        - Brave
+        - Chromium
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe what failed during session transfer or CDP evaluation. (DO NOT paste cookies or passwords!)
+    validations:
+      required: true
