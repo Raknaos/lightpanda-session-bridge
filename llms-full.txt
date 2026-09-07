@@ -37,7 +37,13 @@ print(data)
 client.close()
 ```
 
-## 5. Community & Upstream
+## 6. Playwright & Puppeteer Automation
+Developers using Playwright or Puppeteer can connect directly to Lightpanda's CDP endpoint (`http://127.0.0.1:9222`) to execute scripts within the authenticated session without going through login forms, 2FA, or Cloudflare challenges:
+- **Playwright (Python):** `await playwright.chromium.connect_over_cdp("http://127.0.0.1:9222")`
+- **Playwright (Node.js):** `await chromium.connectOverCDP('http://127.0.0.1:9222')`
+- **Puppeteer:** `await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222' })`
+
+See `docs/PLAYWRIGHT_PUPPETEER.md` for full implementation examples.
 - **Official Lightpanda Engine:** https://lightpanda.io (open-source browser in Zig and V8)
 - **Repository:** https://github.com/Raknaos/lightpanda-session-bridge
 - **License:** MIT
