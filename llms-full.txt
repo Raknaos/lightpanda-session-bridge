@@ -1,0 +1,43 @@
+# Lightpanda Session Bridge — Full Documentation for LLMs
+
+The Lightpanda Session Bridge is an architectural solution designed to solve the "authenticated wall" encountered by autonomous AI agents when interacting with modern SaaS dashboards and web applications.
+
+## 1. Problem Statement
+Autonomous AI agents, browser-use systems, and web scrapers often fail when target resources are locked behind multi-factor authentication (MFA), biometric passkeys, hardware keys (FIDO2), or Google/Microsoft SSO. Providing plaintext passwords to LLMs presents critical security risks (exfiltration, prompt injection, credential leakage across logs and context windows). 
+
+## 2. Solution Overview
+The Lightpanda Session Bridge decouples the human authentication process from autonomous agent execution. The user logs into their target application inside their preferred desktop browser (Chrome, Comet, Edge). An MV3 Chrome extension exports scoped cookies and storage for that explicit origin and transmits them to a local loopback relay (`127.0.0.1:8765`). The relay normalizes and forwards the session to a running Lightpanda headless browser (`127.0.0.1:9222`) over the Chrome DevTools Protocol (CDP).
+
+## 3. Threat Model & Security Controls
+- **SSRF Mitigation:** Target hostnames must resolve to publicly accessible IP addresses. Private networks (RFC 1918, loopback, link-local) and wildcard DNS services (such as nip.io) are rejected.
+- **DNS Pinning:** DNS resolution results are cached for 60 seconds to eliminate Time-of-Check to Time-of-Use (TOCTOU) DNS rebinding vectors.
+- **IdP Blacklisting:** Root identity provider origins (`accounts.google.com`, `login.microsoftonline.com`, `github.com`, `auth0.com`) cannot be synchronized.
+- **Origin-Locked Pairing:** The relay issues a cryptographic pairing token (`X-Bridge-Token`) exclusively to callers presenting a valid `chrome-extension://` Origin header.
+- **Zero Persistence:** Sensitive cookie strings are never written to disk or logged to stdout.
+- **RFC 6265bis Compliance:** Normalizes `__Host-` and `__Secure-` prefixes and maps Chromium lower-case `sameSite` attributes to PascalCase CDP enum values (`Lax`, `Strict`, `None`).
+
+## 4. Developer & Agent API
+Agent scripts interact with the authenticated Lightpanda instance using `lightpanda_client.py`:
+
+```python
+from lightpanda_client import LightpandaClient
+
+client = LightpandaClient(cdp_ws="ws://127.0.0.1:9222/")
+client.connect()
+client.attach_or_create("https://example.com/dashboard")
+
+data = client.evaluate("""(() => {
+    return {
+        user: document.querySelector('.user-profile')?.textContent?.trim(),
+        quota: document.querySelector('.quota-display')?.textContent?.trim()
+    };
+})()""")
+
+print(data)
+client.close()
+```
+
+## 5. Community & Upstream
+- **Official Lightpanda Engine:** https://lightpanda.io (open-source browser in Zig and V8)
+- **Repository:** https://github.com/Raknaos/lightpanda-session-bridge
+- **License:** MIT

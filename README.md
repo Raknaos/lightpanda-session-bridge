@@ -5,6 +5,7 @@
 ### The Authenticated Session Bridge for Machines and Autonomous AI Agents
 
 [![GitHub release](https://img.shields.io/github/v/release/Raknaos/lightpanda-session-bridge?color=6b52ff&style=flat-square)](https://github.com/Raknaos/lightpanda-session-bridge/releases)
+[![CI Tests](https://img.shields.io/github/actions/workflow/status/Raknaos/lightpanda-session-bridge/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/Raknaos/lightpanda-session-bridge/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Protocol](https://img.shields.io/badge/CDP-1.3-38bdf8.svg?style=flat-square)](https://chromedevtools.github.io/devtools-protocol/)
 [![Engine](https://img.shields.io/badge/Engine-Lightpanda%20(Zig%2FV8)-22c55e.svg?style=flat-square)](https://lightpanda.io)

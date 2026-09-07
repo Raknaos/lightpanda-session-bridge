@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - name: "Raknaos"
+title: "Lightpanda Session Bridge: Authenticated Session Transfer for Autonomous AI Agents"
+version: 0.3.4
+date-released: 2026-09-08
+url: "https://github.com/Raknaos/lightpanda-session-bridge"
+repository-code: "https://github.com/Raknaos/lightpanda-session-bridge"
+license: MIT
+keywords:
+  - "ai-agents"
+  - "browser-automation"
+  - "headless-browser"
+  - "cdp"
+  - "lightpanda"
+  - "cookie-synchronization"
+  - "ssrf-protection"
