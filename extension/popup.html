@@ -107,17 +107,12 @@
       gap: 10px;
       flex-shrink: 0;
     }
-    .brand-mark {
+    .brand-mark-img {
       width: 34px;
       height: 34px;
       border-radius: 11px;
-      background: linear-gradient(145deg, #071019 0%, #171a38 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 17px;
-      color: #fff;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 0 6px 18px rgba(84, 104, 255, 0.25);
+      box-shadow: 0 4px 14px rgba(15, 25, 65, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.8);
+      object-fit: cover;
     }
     .brand-title {
       font-family: 'Space Grotesk', sans-serif;
@@ -404,7 +399,7 @@
   <div class="app-shell">
     <header class="app-header">
       <div class="brand-wrap">
-        <div class="brand-mark">🐼</div>
+        <img class="brand-mark-img" src="icons/icon48.png" width="34" height="34" alt="Panda Logo">
         <div class="brand-title">Lightpanda<span class="brand-dot">.Bridge</span></div>
       </div>
       <div class="header-actions">
