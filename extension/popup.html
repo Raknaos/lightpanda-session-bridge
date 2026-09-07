@@ -2,17 +2,16 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Lightpanda Bridge</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lightpanda Session Bridge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #060b13;
+      color-scheme: light;
       --ink: #071019;
-      --ink-secondary: #243342;
       --soft: #546573;
-      --muted: #8295a5;
       --blue: #3579ff;
       --violet: #6b52ff;
       --violet-blue: #5468ff;
@@ -20,118 +19,117 @@
       --ice: #c8f7ff;
       --lime: #16a34a;
       --danger: #e11d48;
-      --glass-alpha: 0.88;
-      --edge: rgba(255, 255, 255, 0.18);
-      --edge-strong: rgba(255, 255, 255, 0.35);
-      --radius-lg: 18px;
-      --radius-md: 12px;
-      --radius-sm: 8px;
+      --glass-alpha: 0.85;
+      --glass: rgba(255, 255, 255, calc(var(--glass-alpha) * 0.55));
+      --glass2: rgba(255, 255, 255, calc(var(--glass-alpha) * 0.82));
+      --edge: rgba(255, 255, 255, 0.85);
+      --shadow: 0 18px 55px rgba(15, 25, 65, 0.16);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      background: linear-gradient(140deg, rgba(235, 246, 255, var(--glass-alpha)) 0%, rgba(242, 234, 255, var(--glass-alpha)) 55%, rgba(230, 242, 255, var(--glass-alpha)) 100%);
+    }
+
     body {
-      width: 360px;
-      padding: 18px;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #060b13;
-      color: #e6edf3;
-      font-size: 13px;
+      width: 400px;
+      margin: 0;
+      color: var(--ink);
+      font: 13.5px/1.5 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(140deg, rgba(235, 246, 255, var(--glass-alpha)) 0%, rgba(242, 234, 255, var(--glass-alpha)) 55%, rgba(230, 242, 255, var(--glass-alpha)) 100%);
       position: relative;
+      isolation: isolate;
       overflow: hidden;
     }
 
-    /* Dégradé Ambiant Quota Glass (140° Lilas / Cyan / Bleu / Violet) */
-    body::before {
+    /* Halos lumineux Quota Glass identiques */
+    body::before, body::after {
       content: '';
-      position: absolute;
-      width: 280px;
-      height: 280px;
-      top: -90px;
-      left: -60px;
+      position: fixed;
+      z-index: -1;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(107, 82, 255, 0.35) 0%, rgba(53, 121, 255, 0.25) 45%, rgba(200, 247, 255, 0.1) 75%, transparent 100%);
-      filter: blur(45px);
+      filter: blur(8px);
       pointer-events: none;
-      z-index: 0;
+    }
+    body::before {
+      width: 450px;
+      height: 450px;
+      left: -160px;
+      top: -180px;
+      background: radial-gradient(circle, #ffffff 0%, #c8f7ff 45%, transparent 70%);
+      opacity: 0.55;
     }
     body::after {
-      content: '';
-      position: absolute;
-      width: 200px;
-      height: 200px;
-      bottom: -60px;
-      right: -40px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(53, 121, 255, 0.3) 0%, rgba(226, 217, 255, 0.15) 55%, transparent 80%);
-      filter: blur(40px);
-      pointer-events: none;
-      z-index: 0;
+      width: 420px;
+      height: 420px;
+      right: -190px;
+      bottom: -190px;
+      background: radial-gradient(circle, #e2d9ff 0%, #b8d0ff 45%, transparent 70%);
+      opacity: 0.65;
     }
 
-    .app-card {
-      position: relative;
-      z-index: 1;
-      background: rgba(13, 20, 32, var(--glass-alpha));
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--edge);
-      border-radius: var(--radius-lg);
-      padding: 16px;
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    .app-shell {
+      padding: 20px 22px;
+      min-height: 380px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 25px rgba(190, 175, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(135%);
+      -webkit-backdrop-filter: blur(28px) saturate(135%);
     }
 
-    .header {
+    /* En-tête Quota Glass */
+    .app-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 16px;
     }
     .brand {
       display: flex;
+      gap: 10px;
       align-items: center;
-      gap: 9px;
+      font: 700 20px 'Space Grotesk', sans-serif;
+      letter-spacing: -0.6px;
+      color: var(--ink);
     }
     .brand-mark {
-      width: 30px;
-      height: 30px;
-      border-radius: 9px;
-      background: linear-gradient(135deg, #6b52ff, #3579ff);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      box-shadow: 0 4px 12px rgba(107, 82, 255, 0.4);
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #081320 0%, #151433 100%);
+      color: var(--ice);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 6px 16px rgba(107, 82, 255, 0.25);
+      font-size: 16px;
     }
-    .brand-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: -0.2px;
-      background: linear-gradient(135deg, #ffffff 40%, #c8f7ff 100%);
+    .title-dot {
+      background: linear-gradient(135deg, var(--blue), var(--violet));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
     .badge {
       font-size: 11px;
-      font-weight: 500;
-      padding: 3px 8px;
-      border-radius: 20px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 99px;
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      background: rgba(255, 255, 255, 0.06);
       border: 1px solid var(--edge);
+      background: rgba(255, 255, 255, 0.65);
+      box-shadow: 0 2px 8px rgba(15, 25, 65, 0.05);
     }
     .badge.online {
-      background: rgba(22, 163, 74, 0.15);
-      border-color: rgba(34, 197, 94, 0.35);
-      color: #4ade80;
+      color: #0d7a36;
+      background: rgba(214, 255, 225, 0.7);
+      border-color: rgba(46, 160, 67, 0.3);
     }
     .badge.offline {
-      background: rgba(225, 29, 72, 0.15);
-      border-color: rgba(225, 29, 72, 0.35);
-      color: #fb7185;
+      color: #c51834;
+      background: rgba(255, 225, 230, 0.7);
+      border-color: rgba(225, 29, 72, 0.3);
     }
     .badge .dot {
       width: 6px;
@@ -140,142 +138,192 @@
       background: currentColor;
     }
 
-    .origin-box {
-      background: rgba(7, 16, 25, 0.55);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: var(--radius-md);
-      padding: 11px 13px;
-      margin-bottom: 12px;
+    /* Cartouche Contexte / URL */
+    .glass-card {
+      background: var(--glass2);
+      border: 1px solid var(--edge);
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 24px rgba(15, 25, 65, 0.06);
     }
-    .origin-label {
-      font-size: 10px;
+    .card-label {
+      font-size: 10.5px;
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      color: var(--muted);
-      margin-bottom: 5px;
-      font-weight: 600;
+      color: var(--soft);
+      font-weight: 700;
+      margin-bottom: 4px;
     }
-    .origin-val {
+    .card-val {
       font-family: 'Space Grotesk', monospace;
-      font-size: 12px;
-      color: #93c5fd;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
       word-break: break-all;
     }
 
     .desc {
-      font-size: 11.5px;
-      color: #94a3b8;
+      font-size: 12px;
+      color: var(--soft);
       line-height: 1.45;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+      padding: 0 2px;
     }
 
-    .confirm-card {
+    /* Consent Checkbox Quota Style */
+    .consent-box {
       display: flex;
       align-items: flex-start;
       gap: 10px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: var(--radius-md);
-      padding: 10px 12px;
-      margin-bottom: 15px;
+      background: var(--glass);
+      border: 1px solid var(--edge);
+      border-radius: 12px;
+      padding: 11px 13px;
+      margin-bottom: 16px;
       cursor: pointer;
       user-select: none;
-      transition: background 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease;
     }
-    .confirm-card:hover {
-      background: rgba(255, 255, 255, 0.06);
+    .consent-box:hover {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: #fff;
     }
-    .confirm-card input[type="checkbox"] {
+    .consent-box input[type="checkbox"] {
       margin-top: 2px;
       accent-color: var(--violet);
       cursor: pointer;
-      width: 15px;
-      height: 15px;
+      width: 16px;
+      height: 16px;
     }
-    .confirm-card span {
-      font-size: 11.5px;
-      color: #cbd5e1;
+    .consent-box span {
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 500;
       line-height: 1.35;
     }
 
-    .btn-sync {
+    /* Bouton Primaire Quota Glass (140° Dégradé Bleu-Violet) */
+    .btn-primary {
       width: 100%;
-      padding: 11px 16px;
-      border-radius: var(--radius-md);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      background: linear-gradient(135deg, #6b52ff 0%, #3579ff 100%);
+      padding: 13px 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      background: linear-gradient(135deg, var(--blue) 0%, var(--violet) 100%);
       color: #ffffff;
       font-family: 'Space Grotesk', sans-serif;
-      font-weight: 600;
-      font-size: 13.5px;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.2px;
       cursor: pointer;
-      box-shadow: 0 6px 20px rgba(107, 82, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      box-shadow: 0 10px 25px rgba(84, 104, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.45);
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
     }
-    .btn-sync:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 25px rgba(107, 82, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-      background: linear-gradient(135deg, #7861ff 0%, #4687ff 100%);
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1.5px);
+      box-shadow: 0 14px 30px rgba(84, 104, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      filter: brightness(1.05);
     }
-    .btn-sync:active:not(:disabled) {
+    .btn-primary:active:not(:disabled) {
       transform: translateY(0);
     }
-    .btn-sync:disabled {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: rgba(255, 255, 255, 0.08);
-      color: rgba(255, 255, 255, 0.25);
+    .btn-primary:disabled {
+      background: rgba(0, 0, 0, 0.08);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: rgba(0, 0, 0, 0.28);
       box-shadow: none;
       cursor: not-allowed;
     }
 
     #status {
-      margin-top: 12px;
-      font-size: 11.5px;
-      min-height: 18px;
+      margin-top: 14px;
+      font-size: 12px;
+      font-weight: 600;
+      min-height: 20px;
       line-height: 1.4;
       word-break: break-word;
-      transition: color 0.15s ease;
+    }
+
+    /* Footer Quota Glass */
+    .app-footer {
+      margin-top: auto;
+      padding-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 11.5px;
+      color: var(--soft);
+    }
+    .footer-note {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .glass-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.5);
+      padding: 3px 8px;
+      border-radius: 99px;
+      border: 1px solid var(--edge);
+    }
+    .glass-slider-wrap input[type="range"] {
+      width: 55px;
+      accent-color: var(--violet);
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <div class="app-card">
-    <div class="header">
+  <div class="app-shell">
+    <header class="app-header">
       <div class="brand">
         <div class="brand-mark">🐼</div>
-        <div class="brand-title">Lightpanda Bridge</div>
+        <span>Lightpanda<span class="title-dot">.Bridge</span></span>
       </div>
       <div id="relay-badge" class="badge">
         <span class="dot"></span>
         <span id="relay-text">Vérification…</span>
       </div>
-    </div>
+    </header>
 
-    <div class="origin-box">
-      <div class="origin-label">Origine cible</div>
-      <div class="origin-val" id="origin">Détection en cours…</div>
+    <div class="glass-card">
+      <div class="card-label">Origine Cible</div>
+      <div class="card-val" id="origin">Lecture de la page…</div>
     </div>
 
     <p class="desc">
-      Transfert chiffré et direct des sessions authentifiées vers le runtime Lightpanda isolé en arrière-plan.
+      Synchronisation directe et sécurisée des cookies de session et du stockage local vers le moteur autonome Lightpanda.
     </p>
 
-    <label class="confirm-card">
+    <label class="consent-box">
       <input id="confirm" type="checkbox">
-      <span>J'autorise le transfert sécurisé de cette session vers Lightpanda.</span>
+      <span>J'autorise le transfert explicite de la session de cet onglet vers Lightpanda.</span>
     </label>
 
-    <button id="transfer" class="btn-sync" disabled>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
-      <span>Synchroniser la session</span>
+    <button id="transfer" class="btn-primary" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+      <span>Synchroniser vers Lightpanda</span>
     </button>
 
     <div id="status"></div>
+
+    <footer class="app-footer">
+      <div class="footer-note">
+        <span>Sécurisé · Profil isolé</span>
+      </div>
+      <div class="glass-slider-wrap" title="Opacité du verre">
+        <span>Verre</span>
+        <input id="glass-range" type="range" min="0.30" max="0.98" step="0.01" value="0.85">
+        <span id="glass-val" style="font-weight:700">85%</span>
+      </div>
+    </footer>
   </div>
 
   <script src="popup.js"></script>

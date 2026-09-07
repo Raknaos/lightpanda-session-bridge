@@ -5,16 +5,34 @@ const transferEl = document.querySelector('#transfer');
 const statusEl = document.querySelector('#status');
 const relayBadge = document.querySelector('#relay-badge');
 const relayText = document.querySelector('#relay-text');
+const glassRange = document.querySelector('#glass-range');
+const glassVal = document.querySelector('#glass-val');
+
 let currentTab = null;
+
+// Slider d'opacité dynamique Quota Glass
+if (glassRange && glassVal) {
+  const saved = localStorage.getItem('quota-glass-alpha') || "0.85";
+  glassRange.value = saved;
+  glassVal.textContent = `${Math.round(parseFloat(saved) * 100)}%`;
+  document.documentElement.style.setProperty('--glass-alpha', saved);
+
+  glassRange.addEventListener('input', (e) => {
+    const val = e.target.value;
+    glassVal.textContent = `${Math.round(parseFloat(val) * 100)}%`;
+    document.documentElement.style.setProperty('--glass-alpha', val);
+    localStorage.setItem('quota-glass-alpha', val);
+  });
+}
 
 function setStatus(text, type = 'info') {
   statusEl.textContent = text;
   if (type === 'error') {
-    statusEl.style.color = '#fb7185';
+    statusEl.style.color = 'var(--danger)';
   } else if (type === 'success') {
-    statusEl.style.color = '#4ade80';
+    statusEl.style.color = '#0d7a36';
   } else {
-    statusEl.style.color = '#94a3b8';
+    statusEl.style.color = 'var(--soft)';
   }
 }
 
@@ -46,7 +64,6 @@ async function init() {
 
   // Identifier le dernier onglet actif sur une page web réelle
   const tabs = await chrome.tabs.query({ currentWindow: true });
-  // Filtrer les pages internes
   const webTabs = tabs.filter(t => t.url && eligible(t.url));
   const activeTab = tabs.find(t => t.active);
 
@@ -68,7 +85,7 @@ async function init() {
   originEl.dataset.origin = origin;
 
   if (!eligible(url)) {
-    setStatus('Ouvrez un onglet HTTPS public (ex: Gmail, A6API).', 'error');
+    setStatus('Ouvrez un site HTTPS public (ex: Gmail, A6API).', 'error');
   } else if (!relayOk) {
     setStatus('Le relais local (port 8765) n’est pas démarré.', 'error');
   }

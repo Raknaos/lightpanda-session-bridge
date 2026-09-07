@@ -77,6 +77,21 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     # Do not pass 'priority' or 'sourceScheme' as Lightpanda CDP rejects them with NotImplemented
     item["url"] = origin
     item.setdefault("path", "/")
+
+    # Normalize sameSite enum for Lightpanda CDP:
+    # Chrome extension API returns lowercase: 'unspecified', 'no_restriction', 'lax', 'strict'
+    # CDP expects: 'Strict', 'Lax', 'None' (InvalidEnumTag error if lowercase or unknown)
+    if "sameSite" in item:
+        raw_ss = str(item["sameSite"]).lower()
+        if raw_ss in ("strict",):
+            item["sameSite"] = "Strict"
+        elif raw_ss in ("lax",):
+            item["sameSite"] = "Lax"
+        elif raw_ss in ("none", "no_restriction"):
+            item["sameSite"] = "None"
+        else:
+            del item["sameSite"]
+
     return {k: v for k, v in item.items() if v is not None}
 
 
