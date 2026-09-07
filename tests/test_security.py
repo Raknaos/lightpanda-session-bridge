@@ -28,9 +28,9 @@ class SecurityTests(unittest.TestCase):
 
     def test_empty_or_oversized_cookie_lists_rejected(self):
         with self.assertRaises(ValueError):
-            server.set_cookies('https://a6api.com', [])
+            server.set_session('https://a6api.com', [])
         with self.assertRaises(ValueError):
-            server.set_cookies('https://a6api.com', [{} for _ in range(501)])
+            server.set_session('https://a6api.com', [{} for _ in range(501)])
 
     def test_private_and_identity_origins_are_rejected(self):
         for origin in (

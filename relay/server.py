@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Loopback-only cookie importer for Lightpanda CDP.
+"""Loopback-only session importer for Lightpanda CDP.
 
-No cookie values are logged or written. The caller must explicitly provide a
-current HTTPS origin and its cookies after the extension confirmation step.
+No credentials, passwords, or tokens are logged. The caller must explicitly
+provide a valid public HTTPS origin, its cookies, and optional storage entries.
 """
 from __future__ import annotations
 
@@ -76,7 +76,6 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     item = {k: v for k, v in cookie.items() if k in allowed}
     item["url"] = origin
     item.setdefault("path", "/")
-    # Browser extension cookie records can contain unsupported nulls.
     return {k: v for k, v in item.items() if v is not None}
 
 
@@ -96,7 +95,7 @@ class CdpTransport:
             if response.get("id") != self.next_id:
                 continue
             if "error" in response:
-                raise RuntimeError("Lightpanda CDP request failed")
+                raise RuntimeError(f"Lightpanda CDP request failed: {response['error']}")
             return response.get("result", {})
 
 
@@ -113,7 +112,7 @@ def attach_page(transport: CdpTransport, url: str) -> tuple[str, str]:
     return target_id, session_id
 
 
-def set_cookies(origin: str, cookies: list[dict]) -> int:
+def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -> tuple[int, int]:
     global _CDP_SOCKET, _CDP_TRANSPORT, _CDP_SESSION_ID, _CDP_TARGET_ID, _CDP_ORIGIN
     if not valid_origin(origin):
         raise ValueError("origin refused: HTTPS target origin required")
@@ -123,6 +122,7 @@ def set_cookies(origin: str, cookies: list[dict]) -> int:
     if not converted:
         raise ValueError("no valid cookies")
 
+    storage_count = 0
     with CDP_LOCK:
         if _CDP_TRANSPORT is None or _CDP_ORIGIN != origin:
             if _CDP_SOCKET is not None:
@@ -134,11 +134,42 @@ def set_cookies(origin: str, cookies: list[dict]) -> int:
             _CDP_TRANSPORT = CdpTransport(_CDP_SOCKET)
             _CDP_TARGET_ID, _CDP_SESSION_ID = attach_page(_CDP_TRANSPORT, origin)
             _CDP_ORIGIN = origin
+
+        # Inject cookies via Network.setCookies
         _CDP_TRANSPORT.request(
             "Network.setCookies",
             {"cookies": converted},
             session_id=_CDP_SESSION_ID,
         )
+
+        # Inject localStorage if provided
+        if isinstance(storage, dict) and storage:
+            # Build safe js injection script
+            entries_json = json.dumps({str(k): str(v) for k, v in storage.items() if len(str(k)) < 128 and len(str(v)) < 16384})
+            expr = f"""(() => {{
+                try {{
+                    const data = {entries_json};
+                    for (const [k, v] of Object.entries(data)) {{
+                        localStorage.setItem(k, v);
+                    }}
+                    return Object.keys(data).length;
+                }} catch (e) {{
+                    return -1;
+                }}
+            }})()"""
+            try:
+                res = _CDP_TRANSPORT.request(
+                    "Runtime.evaluate",
+                    {"expression": expr, "returnByValue": True},
+                    session_id=_CDP_SESSION_ID
+                )
+                val = res.get("result", {}).get("value", 0)
+                if val > 0:
+                    storage_count = val
+            except Exception:
+                pass
+
+        # Verification via Network.getCookies
         result = _CDP_TRANSPORT.request(
             "Network.getCookies",
             {"urls": [origin + "/"]},
@@ -147,14 +178,14 @@ def set_cookies(origin: str, cookies: list[dict]) -> int:
         names = {str(item.get("name")) for item in result.get("cookies", [])}
         if not all(str(item["name"]) in names for item in converted):
             raise RuntimeError("Lightpanda cookie verification failed")
-        return len(converted)
+
+        return len(converted), storage_count
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LightpandaSessionBridge/0.1"
+    server_version = "LightpandaSessionBridge/0.2"
 
     def log_message(self, _format: str, *_args) -> None:
-        # Never log requests: request bodies may contain cookies.
         return
 
     def send_json(self, status: int, data: dict) -> None:
@@ -166,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
         if request_origin.startswith(EXTENSION_ORIGIN):
             self.send_header("Access-Control-Allow-Origin", request_origin)
             self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
@@ -176,7 +207,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            self.send_json(200, {"ok": True, "service": "lightpanda-session-bridge"})
+            self.send_json(200, {
+                "ok": True,
+                "service": "lightpanda-session-bridge",
+                "active_origin": _CDP_ORIGIN,
+                "attached": _CDP_SESSION_ID is not None
+            })
         else:
             self.send_json(404, {"ok": False, "error": "not found"})
 
@@ -189,10 +225,17 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > 2_000_000:
                 raise ValueError("body refused")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            count = set_cookies(payload.get("origin", ""), payload.get("cookies", []))
-            self.send_json(200, {"ok": True, "cookie_count": count})
+            cookies = payload.get("cookies", [])
+            origin = payload.get("origin", "")
+            storage = payload.get("storage")
+            cookie_count, storage_count = set_session(origin, cookies, storage)
+            self.send_json(200, {
+                "ok": True,
+                "cookie_count": cookie_count,
+                "storage_count": storage_count,
+                "origin": origin
+            })
         except Exception:
-            # Do not return exception details: they can contain request data.
             self.send_json(400, {"ok": False, "error": "session import refused"})
 
 
