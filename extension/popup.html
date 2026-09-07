@@ -37,8 +37,12 @@
       background: linear-gradient(140deg, rgba(235, 246, 255, var(--glass-alpha)) 0%, rgba(243, 236, 255, var(--glass-alpha)) 55%, rgba(230, 244, 255, var(--glass-alpha)) 100%);
     }
 
-    body {
+    html, body {
       width: 430px;
+      max-width: 430px;
+      min-width: 430px;
+      min-height: 400px;
+      max-height: 580px;
       margin: 0;
       color: var(--ink);
       font: 13.5px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

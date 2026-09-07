@@ -1,12 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Lightpanda Session Bridge",
-  "version": "0.1.0",
+  "version": "0.3.2",
   "description": "Explicitly transfer the current site session to a local Lightpanda browser.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["cookies", "activeTab", "scripting"],
   "host_permissions": ["https://*/*", "http://127.0.0.1:8765/*"],
   "action": {
     "default_title": "Transfer session to Lightpanda",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }
