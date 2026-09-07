@@ -1,0 +1,34 @@
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            self.send_json(200, {
+                "ok": True,
+                "service": "lightpanda-session-bridge",
+                "active_origin": _CDP_ORIGIN,
+                "attached": _CDP_SESSION_ID is not None
+            })
+        elif self.path == "/v1/session/inspect":
+            with CDP_LOCK:
+                if _CDP_TRANSPORT is None or _CDP_SESSION_ID is None:
+                    self.send_json(200, {"active": False, "error": "no active session"})
+                    return
+                try:
+                    res = _CDP_TRANSPORT.request("Network.getCookies", {}, session_id=_CDP_SESSION_ID)
+                    cookies = res.get("cookies", [])
+                    names = [c.get("name") for c in cookies]
+                    eval_res = _CDP_TRANSPORT.request(
+                        "Runtime.evaluate",
+                        {"expression": "({ title: document.title, url: window.location.href })", "returnByValue": True},
+                        session_id=_CDP_SESSION_ID
+                    )
+                    page_info = eval_res.get("result", {}).get("value", {})
+                    self.send_json(200, {
+                        "active": True,
+                        "origin": _CDP_ORIGIN,
+                        "cookie_count": len(cookies),
+                        "cookie_names": names,
+                        "page": page_info
+                    })
+                except Exception as e:
+                    self.send_json(500, {"error": str(e)})
+        else:
+            self.send_json(404, {"ok": False, "error": "not found"})
