@@ -113,6 +113,8 @@ On first use the extension **auto-pairs** with the local relay: the first time y
 
 > **What if the popup shows `relay offline`?** Start the relay (step 3), then reopen the popup. The badge must read **online** before syncing.
 
+> **Updating the extension:** because Chrome only auto-updates extensions signed for the Chrome Web Store (or pushed via enterprise policy), the `update_url` manifest points at GitHub Releases as a manual-check channel. To update: download the latest `.zip` from [Releases](https://github.com/Raknaos/lightpanda-session-bridge/releases) and **Load unpacked** it again (your relay secret is stored in the extension, so pairing survives reloads). A Web Store publication is planned.
+
 > **Security note:** `/v1/bootstrap` only answers to callers carrying a real `chrome-extension://` Origin — web pages, curl and other local processes are refused (HTTP 403), so the shared secret can only ever reach the official extension.
 
 ---
