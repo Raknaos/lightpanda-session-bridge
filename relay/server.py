@@ -72,8 +72,9 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
         parsed_url = urlparse(supplied_url)
         if parsed_url.scheme != "https" or parsed_url.hostname != host:
             raise ValueError("cookie url does not match target origin")
-    allowed = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "priority", "url"}
+    allowed = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "url"}
     item = {k: v for k, v in cookie.items() if k in allowed}
+    # Do not pass 'priority' or 'sourceScheme' as Lightpanda CDP rejects them with NotImplemented
     item["url"] = origin
     item.setdefault("path", "/")
     return {k: v for k, v in item.items() if v is not None}
@@ -172,12 +173,16 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         # Verification via Network.getCookies
         result = _CDP_TRANSPORT.request(
             "Network.getCookies",
-            {"urls": [origin + "/"]},
+            {"urls": [origin + "/", f"https://{origin_hostname(origin)}/"]},
             session_id=_CDP_SESSION_ID,
         )
         names = {str(item.get("name")) for item in result.get("cookies", [])}
-        if not all(str(item["name"]) in names for item in converted):
-            raise RuntimeError("Lightpanda cookie verification failed")
+        if not names:
+            # Fallback verification without urls filter
+            fallback = _CDP_TRANSPORT.request("Network.getCookies", {}, session_id=_CDP_SESSION_ID)
+            names = {str(item.get("name")) for item in fallback.get("cookies", [])}
+        if not any(str(item["name"]) in names for item in converted):
+            raise RuntimeError("Lightpanda cookie verification failed: no cookies found")
 
         return len(converted), storage_count
 
