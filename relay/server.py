@@ -260,8 +260,50 @@ def attach_page(transport: CdpTransport, url: str) -> tuple[str, str]:
     return target_id, session_id
 
 
+# Last synced session, MEMORY ONLY (never written to disk). If Lightpanda
+# restarts, the daemon re-injects it automatically so the session survives.
+_LAST_SESSION: dict | None = None
+
+
+def _ensure_connection(origin: str) -> None:
+    """Open the CDP connection if needed. The connection is NEVER discarded on
+    origin change: Lightpanda scopes its cookie jar per connection, so tearing
+    it down would wipe every previously synced session."""
+    global _CDP_SOCKET, _CDP_TRANSPORT, _CDP_SESSION_ID, _CDP_TARGET_ID
+    if _CDP_TRANSPORT is not None:
+        return
+    if _CDP_SOCKET is not None:
+        try:
+            _CDP_SOCKET.close()
+        except Exception:
+            pass
+    _CDP_SOCKET = websocket.create_connection(CDP, timeout=15, suppress_origin=True)
+    _CDP_TRANSPORT = CdpTransport(_CDP_SOCKET)
+    _CDP_TARGET_ID, _CDP_SESSION_ID = attach_page(_CDP_TRANSPORT, origin)
+
+
+def _connection_resync() -> None:
+    """Reconnect to Lightpanda (e.g. after a restart) and replay the last
+    synced session from memory so agents keep their authenticated context."""
+    global _CDP_SOCKET, _CDP_TRANSPORT, _CDP_SESSION_ID, _CDP_TARGET_ID
+    with CDP_LOCK:
+        origin = _LAST_SESSION["origin"] if _LAST_SESSION else "https://example.com"
+        _CDP_SOCKET = None
+        _CDP_TRANSPORT = None
+        _CDP_SESSION_ID = None
+        _CDP_TARGET_ID = None
+        _ensure_connection(origin)
+        if _LAST_SESSION:
+            cookies = _LAST_SESSION["cookies"]
+            _CDP_TRANSPORT.request(
+                "Network.setCookies",
+                {"cookies": cookies},
+                session_id=_CDP_SESSION_ID,
+            )
+
+
 def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -> tuple[int, int]:
-    global _CDP_SOCKET, _CDP_TRANSPORT, _CDP_SESSION_ID, _CDP_TARGET_ID, _CDP_ORIGIN
+    global _LAST_SESSION
     if not valid_origin(origin):
         raise ValueError("origin refused: HTTPS target origin required")
     if not isinstance(cookies, list) or not cookies or len(cookies) > 500:
@@ -272,16 +314,7 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
 
     storage_count = 0
     with CDP_LOCK:
-        if _CDP_TRANSPORT is None or _CDP_ORIGIN != origin:
-            if _CDP_SOCKET is not None:
-                try:
-                    _CDP_SOCKET.close()
-                except Exception:
-                    pass
-            _CDP_SOCKET = websocket.create_connection(CDP, timeout=15, suppress_origin=True)
-            _CDP_TRANSPORT = CdpTransport(_CDP_SOCKET)
-            _CDP_TARGET_ID, _CDP_SESSION_ID = attach_page(_CDP_TRANSPORT, origin)
-            _CDP_ORIGIN = origin
+        _ensure_connection(origin)
 
         # Inject cookies via Network.setCookies
         _CDP_TRANSPORT.request(
@@ -317,6 +350,15 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
             except Exception:
                 pass
 
+        # Navigate the live target onto the origin so the authenticated page
+        # is immediately usable by agents (Lightpanda exposes a single page).
+        try:
+            _CDP_TRANSPORT.request(
+                "Page.navigate", {"url": origin + "/"}, session_id=_CDP_SESSION_ID
+            )
+        except Exception:
+            pass
+
         # Verification via Network.getCookies
         result = _CDP_TRANSPORT.request(
             "Network.getCookies",
@@ -331,7 +373,38 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         if not any(str(item["name"]) in names for item in converted):
             raise RuntimeError("Lightpanda cookie verification failed: no cookies found")
 
+        # Remember in memory for automatic resync after a Lightpanda restart.
+        _LAST_SESSION = {"origin": origin, "cookies": converted}
+
         return len(converted), storage_count
+
+
+def proxy_cdp(method: str, params: dict | None = None) -> dict:
+    """Execute a CDP command on the daemon's persistent connection.
+
+    Agents MUST go through this proxy: Lightpanda scopes its cookie jar per
+    CDP connection, so a socket opened by an agent would see none of the
+    synced session cookies. One connection, owned by the relay, shared by all."""
+    if not method or not isinstance(method, str) or not re_fullmatch_method(method):
+        raise ValueError("invalid CDP method")
+    if params is not None and not isinstance(params, dict):
+        raise ValueError("invalid CDP params")
+    blocked = ("Browser.close", "Target.disposeBrowserContext", "Network.deleteCookies")
+    if method in blocked:
+        raise ValueError("method refused by proxy")
+    with CDP_LOCK:
+        try:
+            _ensure_connection("https://example.com")
+            return _CDP_TRANSPORT.request(method, params, session_id=_CDP_SESSION_ID)
+        except (websocket.WebSocketException, OSError, RuntimeError):
+            # Connection lost (Lightpanda restarted?) -> resync + one retry
+            _connection_resync()
+            return _CDP_TRANSPORT.request(method, params, session_id=_CDP_SESSION_ID)
+
+
+def re_fullmatch_method(method: str) -> bool:
+    import re as _re
+    return bool(_re.fullmatch(r"[A-Za-z]+\.[A-Za-z]+", method))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -412,6 +485,25 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self) -> None:
+        if self.path == "/v1/cdp":
+            # CDP proxy for agents: executes on the daemon's persistent
+            # connection (the ONLY connection that holds the synced sessions).
+            # Local-only tooling: no Origin means no web page can call it.
+            # State-changing CDP requires the shared token like /import.
+            if not self._authorized():
+                self.send_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 1_000_000:
+                    raise ValueError("body refused")
+                self.connection.settimeout(30)
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                result = proxy_cdp(payload.get("method", ""), payload.get("params"))
+                self.send_json(200, {"ok": True, "result": result})
+            except Exception as err:
+                self.send_json(400, {"ok": False, "error": str(err) or "cdp call refused"})
+            return
         if self.path != "/v1/session/import":
             self.send_json(404, {"ok": False, "error": "not found"})
             return

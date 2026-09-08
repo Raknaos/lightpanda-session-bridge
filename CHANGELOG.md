@@ -2,6 +2,14 @@
 
 All notable changes to the Lightpanda Session Bridge will be documented in this file.
 
+## [0.4.0] - 2026-09-08
+### The zero-configuration release
+- **Relay owns the only CDP connection.** Lightpanda scopes its cookie jar **per CDP connection** — an agent opening its own socket never saw synced sessions (the failure hit in practice on dev.to). The relay now keeps its connection for good and exposes `POST /v1/cdp` so every agent executes commands on the connection that holds the sessions. If Lightpanda restarts, the last session is replayed from memory automatically.
+- **`bridge.py` one-command lifecycle**: `setup` (installs WSL2/Lightpanda/deps), `start` (idempotent), `status`, `doctor`, `install-browser-ext`.
+- **`bridge_agent.py` SDK**: authenticated automation in 3 lines from any synced site; evaluation hardened with retry-on-None.
+- **Import navigates the live target to the synced origin immediately** — the authenticated page is ready the moment the sync ends.
+- `lightpanda_client.py` kept as a compatibility shim routed through the same proxy.
+
 ## [0.3.5] - 2026-09-08
 ### Fixed
 - Relay: drop the `expires` attribute when injecting cookies — Lightpanda silently discards cookies carrying `expires`, which broke every transferred session (verified server-side: `logged-in` confirmed on dev.to after the fix).

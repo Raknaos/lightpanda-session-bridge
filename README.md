@@ -94,26 +94,48 @@ pip install lightpanda-session-bridge
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Quickstart (zero configuration)
 
-### 0. Prerequisites (first time only)
-| Requirement | Why | Install |
-|---|---|---|
-| **WSL2 with Ubuntu** | Lightpanda runs natively in Linux | `wsl --install -d Ubuntu` |
-| **Lightpanda binary** (in WSL, `~/lightpanda`) | Headless CDP browser engine | Inside WSL: `curl -fsSL https://pkg.lightpanda.io/install.sh \| bash` (see [lightpanda.io](https://lightpanda.io)) |
-| **Python 3.10+** | Relay server & SDK | [python.org](https://www.python.org/downloads/) |
-| **Python dependencies** | `websocket-client` for CDP | `pip install -r requirements.txt` |
-
-> **Windows Firewall:** when WSL2 launches Lightpanda, accept the firewall prompt so `127.0.0.1:9222` stays reachable from Windows.
-
-### 1. Clone the repository
+### One command — everything installs and starts:
 ```bash
-git clone https://github.com/Raknaos/lightpanda-session-bridge.git
-cd lightpanda-session-bridge
-pip install -r requirements.txt
+python bridge.py setup
+```
+*Installs Python deps, WSL2/Ubuntu check, the Lightpanda binary (auto-download), starts Lightpanda + the relay daemon, and prints what to do next (30 seconds, no manual steps).*
+
+### Then load the browser extension (the only manual step, ~30 s):
+```bash
+python bridge.py install-browser-ext
+```
+1. Open `chrome://extensions` in your Chromium browser (Chrome, Edge, Brave, Opera, Vivaldi, Arc, Comet — `edge://extensions` in Edge, `arc://extensions` in Arc).
+2. Enable **Developer Mode** → **Load unpacked** → select the `extension/` folder.
+3. Pin the 🐼 icon. **The extension auto-pairs with the relay on first open — no token to copy.**
+
+### Sync any site and use it from agents:
+- Click the 🐼 icon on any logged-in page → **Sync Session**. Done.
+- Agents immediately act on the authenticated page:
+
+```python
+from bridge_agent import AuthenticatedSession
+
+s = AuthenticatedSession()          # connects through the relay (token auto-read)
+s.open("https://dev.to/settings")   # any site you synced
+print(s.js("document.body.getAttribute('data-user-status')"))  # -> logged-in
 ```
 
-### 2. Launch Lightpanda CDP server
+### Diagnose / status:
+```bash
+python bridge.py status   # what's running
+python bridge.py doctor   # full diagnosis with fixes
+```
+
+---
+
+## 🛠️ Advanced: manual service control
+
+<details>
+<summary>Start services individually (legacy workflow)</summary>
+
+### Launch Lightpanda CDP server
 
 **Windows (WSL2):**
 ```powershell
@@ -124,9 +146,9 @@ pip install -r requirements.txt
 chmod +x scripts/start-lightpanda.sh scripts/start-relay.sh
 ./scripts/start-lightpanda.sh
 ```
-*Listens on `http://127.0.0.1:9222`. Keep this terminal window open.*
+*Listens on `http://127.0.0.1:9222`.*
 
-### 3. Start the local bridge relay
+### Start the local bridge relay
 
 **Windows (WSL2):**
 ```powershell
@@ -136,48 +158,37 @@ chmod +x scripts/start-lightpanda.sh scripts/start-relay.sh
 ```bash
 ./scripts/start-relay.sh
 ```
-*Listens on loopback `http://127.0.0.1:8765`. Keep this terminal window open.*
+*Listens on loopback `http://127.0.0.1:8765`.*
 
-### 4. Install the Bridge extension (any Chromium browser)
-1. Open your browser's extension manager — `chrome://extensions` in Chrome, Comet, Brave, Opera, Vivaldi or Chromium; `edge://extensions` in Edge; `arc://extensions` in Arc.
-2. Enable **Developer Mode**.
-3. Click **Load unpacked** and select the `extension/` folder.
-4. Pin the 🐼 **Lightpanda Bridge** icon to your toolbar.
+> **Or simply:** `python bridge.py start` (idempotent — starts only what's missing).
 
-### 5. Pair the extension with the relay (automatic)
-On first use the extension **auto-pairs** with the local relay: the first time you open the popup it fetches the shared secret from the relay's `/v1/bootstrap` endpoint and stores it in its own isolated storage. No manual token copy is needed — just open the popup once with the relay running, then close and reopen it.
-
-> **What if the popup shows `relay offline`?** Start the relay (step 3), then reopen the popup. The badge must read **online** before syncing.
-
-> **Updating the extension:** because Chrome only auto-updates extensions signed for the Chrome Web Store (or pushed via enterprise policy), the `update_url` manifest points at GitHub Releases as a manual-check channel. To update: download the latest `.zip` from [Releases](https://github.com/Raknaos/lightpanda-session-bridge/releases) and **Load unpacked** it again (your relay secret is stored in the extension, so pairing survives reloads). A Web Store publication is planned.
-
-> **Security note:** `/v1/bootstrap` only answers to callers carrying a real `chrome-extension://` Origin — web pages, curl and other local processes are refused (HTTP 403), so the shared secret can only ever reach the official extension.
+</details>
 
 ---
 
-## 🐍 Python SDK (`lightpanda_client.py`)
+## 🐍 Python SDK (`bridge_agent.py`)
 
-Once a session is synchronized, autonomous agents can interact directly with the authenticated page:
+Once a session is synchronized, autonomous agents interact through the relay's persistent CDP connection (the only connection that holds the synced sessions):
 
 ```python
-from lightpanda_client import LightpandaClient
+from bridge_agent import AuthenticatedSession
 
-# Connect to the running Lightpanda runtime
-client = LightpandaClient(cdp_ws="ws://127.0.0.1:9222/")
-client.connect()
+# Connects through the relay — token is read automatically
+s = AuthenticatedSession()
 
-# Attach to the synchronized session target
-client.attach_or_create("https://a6api.com/console/log")
+# Navigate to the authenticated page
+s.open("https://a6api.com/console/log")
 
 # Evaluate and extract authenticated data in memory
-stats = client.evaluate("""(async () => {
+stats = s.js("""(async () => {
     let res = await fetch('/api/user/self');
     return await res.json();
-})()""")
+})()""", await_promise=True)
 
 print(f"Logged in user: {stats['data']['username']}")
-client.close()
 ```
+
+> ⚠️ **Why not connect to `ws://127.0.0.1:9222` directly?** Lightpanda scopes its cookie jar **per CDP connection**. A raw socket sees none of the synced sessions. All agent traffic must flow through `POST /v1/cdp` on the relay (loopback-only, token-authenticated) — `bridge_agent.py` does this for you. The legacy `lightpanda_client.py` is kept as a compatibility shim routed through the same proxy.
 
 ---
 
