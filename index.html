@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lightpanda Session Bridge — Transfer Browser Sessions to Lightpanda CDP</title>
-  <meta name="description" content="Open-source bridge that explicitly transfers an authenticated browser session (cookies, Google OAuth, SSO, 2FA) from Chrome into a fast, isolated Lightpanda headless browser via CDP. Zero credentials typed, zero secrets exposed to AI agents.">
+  <meta name="description" content="Open-source bridge that explicitly transfers an authenticated browser session (cookies, Google OAuth, SSO, 2FA) from any Chromium-based browser — Chrome, Edge, Brave, Opera, Vivaldi, Arc, Comet — into a fast, isolated Lightpanda headless browser via CDP. Zero credentials typed, zero secrets exposed to AI agents.">
   <meta name="keywords" content="lightpanda, headless browser, CDP, session transfer, cookie sync, browser automation, chrome extension, AI agents, web scraping, OAuth session, playwright, puppeteer, passkey, login bypass, 2FA">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://raknaos.github.io/lightpanda-session-bridge/">
@@ -49,7 +49,7 @@
             "name": "How does Lightpanda Session Bridge pass logins to AI agents?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "The human user authenticates normally in their desktop browser (Chrome, Comet, Edge) using their standard 2FA, passkey, or Google OAuth. An open-source Manifest V3 extension captures scoped cookies upon explicit user click and securely relays them to a local Lightpanda headless instance via CDP WebSocket without exposing passwords to the LLM."
+              "text": "The human user authenticates normally in their desktop browser — any Chromium-based browser: Chrome, Edge, Brave, Opera, Vivaldi, Arc or Comet — using their standard 2FA, passkey, or Google OAuth. An open-source Manifest V3 extension captures scoped cookies upon explicit user click and securely relays them to a local Lightpanda headless instance via CDP WebSocket without exposing passwords to the LLM."
             }
           },
           {

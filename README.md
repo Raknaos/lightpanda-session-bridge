@@ -19,7 +19,9 @@
 <img src="extension/icons/icon128.png" width="96" height="96" alt="Lightpanda Session Bridge Logo" />
 
 <p>
-Seamlessly bridge real-world authenticated web sessions (Google OAuth, Passkeys, SSO, 2FA) from your primary browser (Chrome / Comet / Edge) into a fast, isolated <b>Lightpanda</b> headless browser runtime in a single click. <b>Zero credentials typed, zero secrets exposed to LLMs.</b>
+Seamlessly bridge real-world authenticated web sessions (Google OAuth, Passkeys, SSO, 2FA) from your primary browser into a fast, isolated <b>Lightpanda</b> headless browser runtime in a single click. <b>Zero credentials typed, zero secrets exposed to LLMs.</b>
+
+> **Works with any Chromium-based browser** — Chrome, Edge, Brave, Opera, Vivaldi, Arc, Comet, Chromium itself. Any browser that can load a Manifest V3 extension and speak CDP works as the *source* of the session.
 </p>
 
 </div>
@@ -135,8 +137,8 @@ chmod +x scripts/start-lightpanda.sh scripts/start-relay.sh
 ```
 *Listens on loopback `http://127.0.0.1:8765`. Keep this terminal window open.*
 
-### 4. Install the Chrome Extension
-1. Open `chrome://extensions` (or Comet / Edge extension manager).
+### 4. Install the Bridge extension (any Chromium browser)
+1. Open your browser's extension manager — `chrome://extensions` in Chrome, Comet, Brave, Opera, Vivaldi or Chromium; `edge://extensions` in Edge; `arc://extensions` in Arc.
 2. Enable **Developer Mode**.
 3. Click **Load unpacked** and select the `extension/` folder.
 4. Pin the 🐼 **Lightpanda Bridge** icon to your toolbar.

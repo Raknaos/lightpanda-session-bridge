@@ -12,7 +12,7 @@
 
 ## Core Capabilities
 - **Zero Credential Sharing:** AI agents and LLMs never receive plain text passwords or long-lived API keys.
-- **Human-in-the-Loop Authentication:** The human user authenticates normally inside a standard desktop browser (Chrome, Comet, Edge). The extension securely captures scoped cookies for the active origin upon explicit user interaction.
+- **Human-in-the-Loop Authentication:** The human user authenticates normally inside any Chromium-based desktop browser (Chrome, Edge, Brave, Opera, Vivaldi, Arc, Comet). The extension securely captures scoped cookies for the active origin upon explicit user interaction.
 - **Strict SSRF Firewall:** The local relay blocks identity providers (Google accounts, Microsoft, Apple, GitHub, Auth0), rejects private IPv4/IPv6 ranges (`127.0.0.0/8`, `10.0.0.0/8`, `192.168.0.0/16`), and resolves DNS with 60-second pinning to prevent TOCTOU / DNS rebinding.
 - **Automatic Token Pairing:** First-run handshake via `/v1/bootstrap` ensures only callers carrying a verified `chrome-extension://` Origin receive the shared authorization secret (`X-Bridge-Token`).
 - **Python Client SDK:** Simple Python module (`lightpanda_client.py`) allowing agents to attach to authenticated pages and execute DOM/JS evaluations.
