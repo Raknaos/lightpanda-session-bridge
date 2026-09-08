@@ -2,6 +2,10 @@
 
 All notable changes to the Lightpanda Session Bridge will be documented in this file.
 
+## [0.4.2] - 2026-09-08
+### Fixed
+- Sessions panel now refreshes **immediately after a successful sync** (counter and list update without any click) and auto-expands to show the newly synced site.
+- Counter refreshes on every popup open even while the panel is collapsed.
 ## [0.4.1] - 2026-09-08
 ### Added
 - **Session manager in the popup**: see which sites have active sessions inside Lightpanda (origin, cookie count, nearest expiry — never cookie values), remove a single site's session, or clear everything at once.

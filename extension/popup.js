@@ -590,6 +590,10 @@ transferEl.addEventListener('click', async () => {
     }
 
     setStatus(t('success', result.cookie_count), 'success');
+    // Refresh the sessions panel immediately so the counter and the list
+    // reflect the sync that just happened (no extra click needed).
+    sessionsCard.classList.add('open');
+    await refreshSessions();
   } catch (error) {
     setStatus(error.message || t('errRefused'), 'error');
   } finally {
