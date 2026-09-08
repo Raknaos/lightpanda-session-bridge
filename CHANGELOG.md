@@ -2,6 +2,13 @@
 
 All notable changes to the Lightpanda Session Bridge will be documented in this file.
 
+## [0.3.5] - 2026-09-08
+### Fixed
+- Relay: drop the `expires` attribute when injecting cookies — Lightpanda silently discards cookies carrying `expires`, which broke every transferred session (verified server-side: `logged-in` confirmed on dev.to after the fix).
+- Cookie injection shape: explicit `Domain` + `httpOnly` + `Secure`, path `/`.
+### Added
+- `lightpanda_agent_session.py`: single-connection authenticated agent SDK. Lightpanda scopes its cookie jar per CDP connection, so the pulling/injecting/acting connection must be one and the same — this module encapsulates the working pattern (pull cookies from the desktop browser over loopback CDP, inject, navigate, evaluate with retry-on-None).
+
 ## [0.3.4] - 2026-09-08
 ### Added
 - Automated token pairing via `/v1/bootstrap` restricted to `chrome-extension://` origins.

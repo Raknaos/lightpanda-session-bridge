@@ -202,6 +202,12 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
 
     item["url"] = origin
 
+    # Lightpanda drops cookies set with an `expires` attribute (verified: cookies
+    # with expires silently vanish from its jar, breaking the whole session).
+    # Omit it: the injected cookie becomes a session cookie for the runtime,
+    # which is the correct lifetime for a transferred session anyway.
+    item.pop("expires", None)
+
     # Normalize sameSite enum for Lightpanda CDP:
     # Chrome extension API returns lowercase: 'unspecified', 'no_restriction', 'lax', 'strict'
     # CDP expects: 'Strict', 'Lax', 'None' (InvalidEnumTag error if lowercase or unknown)
