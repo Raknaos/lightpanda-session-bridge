@@ -73,6 +73,23 @@ flowchart LR
 
 ---
 
+## 📦 Installation Options
+
+### Option A: Clone & Run Locally
+```bash
+git clone https://github.com/Raknaos/lightpanda-session-bridge.git
+cd lightpanda-session-bridge
+pip install -r requirements.txt
+```
+
+### Option B: Install via Pip (Package mode)
+```bash
+pip install lightpanda-session-bridge
+```
+*(Provides `lightpanda_client` module and CLI utilities directly in your Python environment).*
+
+---
+
 ## 🚀 Quickstart
 
 ### 0. Prerequisites (first time only)
