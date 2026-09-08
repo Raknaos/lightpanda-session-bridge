@@ -38,3 +38,13 @@ Documentation = "https://github.com/Raknaos/lightpanda-session-bridge#readme"
 Repository = "https://github.com/Raknaos/lightpanda-session-bridge"
 Issues = "https://github.com/Raknaos/lightpanda-session-bridge/issues"
 "Dev.to Article" = "https://dev.to/raknaos/handing-real-logins-to-headless-ai-agents-building-the-lightpanda-session-bridge-17je"
+
+[tool.setuptools]
+# The repo root is NOT a flat Python package layout: it mixes the relay server,
+# the browser extension and docs. Only ship the actual Python modules.
+py-modules = ["lightpanda_client", "bridge_agent", "lightpanda_agent_session"]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["relay*"]
+exclude = ["extension*", "docs*", "tests*", "scripts*"]

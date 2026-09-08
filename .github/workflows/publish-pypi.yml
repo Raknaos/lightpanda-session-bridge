@@ -1,8 +1,9 @@
 name: Publish Python Package to PyPI
 
+# Manual only for now: PyPI publication needs a Trusted Publisher configured on
+# pypi.org (account owner action). Re-enable `on: release: published` once the
+# project is registered there. The build itself is verified by this workflow.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 jobs:
