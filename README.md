@@ -45,6 +45,7 @@ Autonomous AI agents using headless browsers cannot easily log in themselves wit
 - **🍪 RFC 6265bis Compliance (`__Host-` / `__Secure-`):** Domain attributes on domain-locked cookies are automatically normalized to guarantee zero rejection by Lightpanda's CDP parser.
 - **⚡ CDP Enum Translation:** Automatic translation of Chromium's lowercase `sameSite` strings (`no_restriction`, `lax`) into strict PascalCase enum tags (`Strict`, `Lax`, `None`) preventing `-31998 InvalidEnumTag` errors.
 - **🔑 Zero Secret Leakage:** No passwords, refresh tokens, or API keys are ever stored in disk logs or transmitted in chat histories.
+- **🔌 Playwright & Puppeteer ready:** Connect any CDP client (`playwright.chromium.connect_over_cdp`, `puppeteer.connect`) to the authenticated Lightpanda instance on `127.0.0.1:9222` — no login walls, no 2FA prompts inside your tests. See [docs/PLAYWRIGHT_PUPPETEER.md](docs/PLAYWRIGHT_PUPPETEER.md).
 
 ---
 
@@ -109,15 +110,28 @@ cd lightpanda-session-bridge
 pip install -r requirements.txt
 ```
 
-### 2. Launch Lightpanda CDP server (WSL2)
+### 2. Launch Lightpanda CDP server
+
+**Windows (WSL2):**
 ```powershell
 ./scripts/start-lightpanda.ps1
+```
+**Linux / macOS (native):**
+```bash
+chmod +x scripts/start-lightpanda.sh scripts/start-relay.sh
+./scripts/start-lightpanda.sh
 ```
 *Listens on `http://127.0.0.1:9222`. Keep this terminal window open.*
 
 ### 3. Start the local bridge relay
+
+**Windows (WSL2):**
 ```powershell
 ./scripts/start-relay.ps1
+```
+**Linux / macOS (native):**
+```bash
+./scripts/start-relay.sh
 ```
 *Listens on loopback `http://127.0.0.1:8765`. Keep this terminal window open.*
 

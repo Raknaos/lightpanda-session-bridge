@@ -13,3 +13,4 @@ storage.sqlite
 popup_current.png
 *.png
 !extension/icons/*.png
+!og-image.png

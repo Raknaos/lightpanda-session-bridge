@@ -7,6 +7,12 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://raknaos.github.io/lightpanda-session-bridge/og-image.png</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://raknaos.github.io/lightpanda-session-bridge/llms.txt</loc>
     <lastmod>2026-09-08</lastmod>
     <changefreq>weekly</changefreq>
