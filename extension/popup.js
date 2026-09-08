@@ -19,7 +19,11 @@ const I18N = {
     errNoRelay: "Local relay (port 8765) is not running.",
     errNoCookies: "No cookies found for this page.",
     errRefused: "Transfer refused by local relay.",
-    footerTag: "Isolated Profile · Localhost CDP"
+    footerTag: "Isolated Profile · Localhost CDP",
+    sessionsLabel: "Active sessions in Lightpanda",
+    sessionsEmpty: "No sessions synced into Lightpanda.",
+    sessionsClear: (n) => `Clear all (${n})`,
+    sessionRemove: "Remove this session"
   },
   fr: {
     code: "FR",
@@ -38,7 +42,11 @@ const I18N = {
     errNoRelay: "Le relais local (port 8765) n’est pas démarré.",
     errNoCookies: "Aucun cookie trouvé pour cette page.",
     errRefused: "Transfert refusé par le relais local.",
-    footerTag: "Profil isolé · Localhost CDP"
+    footerTag: "Profil isolé · Localhost CDP",
+    sessionsLabel: "Sessions actives dans Lightpanda",
+    sessionsEmpty: "Aucune session synchronisée dans Lightpanda.",
+    sessionsClear: (n) => `Tout retirer (${n})`,
+    sessionRemove: "Retirer cette session"
   },
   es: {
     code: "ES",
@@ -57,7 +65,11 @@ const I18N = {
     errNoRelay: "El relé local (puerto 8765) no está en ejecución.",
     errNoCookies: "No se encontraron cookies para esta página.",
     errRefused: "Transferencia rechazada por el relé local.",
-    footerTag: "Perfil aislado · Localhost CDP"
+    footerTag: "Perfil aislado · Localhost CDP",
+    sessionsLabel: "Sesiones activas en Lightpanda",
+    sessionsEmpty: "No hay sesiones sincronizadas en Lightpanda.",
+    sessionsClear: (n) => `Borrar todas (${n})`,
+    sessionRemove: "Eliminar esta sesión"
   },
   de: {
     code: "DE",
@@ -76,7 +88,11 @@ const I18N = {
     errNoRelay: "Lokales Relais (Port 8765) läuft nicht.",
     errNoCookies: "Keine Cookies für diese Seite gefunden.",
     errRefused: "Übertragung vom lokalen Relais abgelehnt.",
-    footerTag: "Isoliertes Profil · Localhost CDP"
+    footerTag: "Isoliertes Profil · Localhost CDP",
+    sessionsLabel: "Aktive Sitzungen in Lightpanda",
+    sessionsEmpty: "Keine Sitzungen in Lightpanda synchronisiert.",
+    sessionsClear: (n) => `Alle löschen (${n})`,
+    sessionRemove: "Diese Sitzung entfernen"
   },
   zh: {
     code: "ZH",
@@ -95,7 +111,11 @@ const I18N = {
     errNoRelay: "本地中继（端口 8765）未启动。",
     errNoCookies: "未找到此页面的 Cookie。",
     errRefused: "本地中继拒绝了传输。",
-    footerTag: "隔离配置文件 · 本地 CDP"
+    footerTag: "隔离配置文件 · 本地 CDP",
+    sessionsLabel: "Lightpanda 中的活动会话",
+    sessionsEmpty: "Lightpanda 中没有已同步的会话。",
+    sessionsClear: (n) => `清除全部（${n}）`,
+    sessionRemove: "移除此会话"
   },
   ja: {
     code: "JA",
@@ -114,7 +134,11 @@ const I18N = {
     errNoRelay: "ローカルリレー（ポート8765）が起動していません。",
     errNoCookies: "このページのCookieが見つかりません。",
     errRefused: "ローカルリレーによって転送が拒否されました。",
-    footerTag: "分離プロファイル · Localhost CDP"
+    footerTag: "分離プロファイル · Localhost CDP",
+    sessionsLabel: "Lightpanda内のアクティブなセッション",
+    sessionsEmpty: "Lightpandaに同期されたセッションはありません。",
+    sessionsClear: (n) => `すべて削除（${n}）`,
+    sessionRemove: "このセッションを削除"
   },
   it: {
     code: "IT",
@@ -133,7 +157,11 @@ const I18N = {
     errNoRelay: "Il relè locale (porta 8765) non è attivo.",
     errNoCookies: "Nessun cookie trovato per questa pagina.",
     errRefused: "Trasferimento rifiutato dal relè locale.",
-    footerTag: "Profilo isolato · Localhost CDP"
+    footerTag: "Profilo isolato · Localhost CDP",
+    sessionsLabel: "Sessioni attive in Lightpanda",
+    sessionsEmpty: "Nessuna sessione sincronizzata in Lightpanda.",
+    sessionsClear: (n) => `Rimuovi tutte (${n})`,
+    sessionRemove: "Rimuovi questa sessione"
   },
   pt: {
     code: "PT",
@@ -152,7 +180,11 @@ const I18N = {
     errNoRelay: "O relé local (porta 8765) não está em execução.",
     errNoCookies: "Nenhum cookie encontrado para esta página.",
     errRefused: "Transferência recusada pelo relé local.",
-    footerTag: "Perfil isolado · Localhost CDP"
+    footerTag: "Perfil isolado · Localhost CDP",
+    sessionsLabel: "Sessões ativas no Lightpanda",
+    sessionsEmpty: "Nenhuma sessão sincronizada no Lightpanda.",
+    sessionsClear: (n) => `Limpar todas (${n})`,
+    sessionRemove: "Remover esta sessão"
   },
   ar: {
     code: "AR",
@@ -171,7 +203,11 @@ const I18N = {
     errNoRelay: "المرحل المحلي (المنفذ 8765) لا يعمل.",
     errNoCookies: "لم يتم العثور على ملفات تعريف الارتباط.",
     errRefused: "تم رفض النقل بواسطة المرحل المحلي.",
-    footerTag: "ملف تعريف معزول · Localhost CDP"
+    footerTag: "ملف تعريف معزول · Localhost CDP",
+    sessionsLabel: "الجلسات النشطة في Lightpanda",
+    sessionsEmpty: "لا توجد جلسات متزامنة في Lightpanda.",
+    sessionsClear: (n) => `إزالة الكل (${n})`,
+    sessionRemove: "إزالة هذه الجلسة"
   },
   ru: {
     code: "RU",
@@ -190,7 +226,11 @@ const I18N = {
     errNoRelay: "Локальное реле (порт 8765) не запущено.",
     errNoCookies: "Файлы cookie для этой страницы не найдены.",
     errRefused: "Перенос отклонен локальным реле.",
-    footerTag: "Изолированный профиль · Localhost CDP"
+    footerTag: "Изолированный профиль · Localhost CDP",
+    sessionsLabel: "Активные сеансы в Lightpanda",
+    sessionsEmpty: "Нет сеансов, синхронизированных с Lightpanda.",
+    sessionsClear: (n) => `Удалить все (${n})`,
+    sessionRemove: "Удалить этот сеанс"
   }
 };
 
@@ -210,6 +250,15 @@ const descText = document.querySelector('#desc-text');
 const consentText = document.querySelector('#consent-text');
 const btnText = document.querySelector('#btn-text');
 const footerSecureTag = document.querySelector('#footer-secure-tag');
+
+// Active sessions UI
+const sessionsCard = document.querySelector('#sessions-card');
+const sessionsToggle = document.querySelector('#sessions-toggle');
+const sessionsCount = document.querySelector('#sessions-count');
+const sessionsList = document.querySelector('#sessions-list');
+const sessionsClear = document.querySelector('#sessions-clear');
+const labelSessions = document.querySelector('#label-sessions');
+const clearText = document.querySelector('#clear-text');
 
 let currentTab = null;
 let currentLanguage = localStorage.getItem('lightpanda-lang') || 'en'; // Default English
@@ -274,6 +323,7 @@ function applyTranslations() {
   consentText.textContent = t('consent');
   btnText.textContent = t('btnSync');
   footerSecureTag.textContent = t('footerTag');
+  labelSessions.textContent = t('sessionsLabel');
 
   // Update dropdown active item
   document.querySelectorAll('.lang-item').forEach(item => {
@@ -324,6 +374,111 @@ async function checkRelay() {
   return false;
 }
 
+// ---------- Active sessions (what's synced inside Lightpanda) ----------
+
+async function fetchSessions() {
+  try {
+    const res = await fetch(`${RELAY}/v1/sessions`, {
+      method: 'GET', cache: 'no-store', headers: bridgeHeaders()
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.ok ? data : null;
+  } catch (_) { return null; }
+}
+
+function fmtExpiry(ts) {
+  const d = new Date(ts * 1000);
+  const days = Math.floor((ts * 1000 - Date.now()) / 86400000);
+  if (days > 0) return `~${days}d`;
+  const hours = Math.floor((ts * 1000 - Date.now()) / 3600000);
+  if (hours > 0) return `~${hours}h`;
+  return '<1h';
+}
+
+function renderSessions(data) {
+  const sessions = (data && data.sessions) || [];
+  sessionsCount.textContent = String(sessions.length);
+  sessionsList.innerHTML = '';
+
+  if (!sessions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sessions-empty';
+    empty.textContent = t('sessionsEmpty');
+    sessionsList.appendChild(empty);
+    sessionsClear.style.display = 'none';
+    return;
+  }
+
+  sessions.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'session-row';
+
+    const info = document.createElement('div');
+    const host = document.createElement('div');
+    host.className = 'session-host';
+    host.textContent = s.host;
+    const meta = document.createElement('div');
+    meta.className = 'session-meta';
+    meta.textContent = `${s.cookie_count} cookies` +
+      (s.expires && !s.expired ? ` · ${fmtExpiry(s.expires)}` : '') +
+      (s.expired ? ' · expired' : '');
+    info.appendChild(host);
+    info.appendChild(meta);
+
+    const rm = document.createElement('button');
+    rm.className = 'session-remove';
+    rm.type = 'button';
+    rm.innerHTML = '✕';
+    rm.title = t('sessionRemove');
+    rm.addEventListener('click', async () => {
+      rm.disabled = true;
+      await clearSessionsOnRelay(s.origin);
+      await refreshSessions();
+    });
+
+    row.appendChild(info);
+    row.appendChild(rm);
+    sessionsList.appendChild(row);
+  });
+
+  sessionsClear.style.display = 'block';
+  clearText.textContent = t('sessionsClear', sessions.length);
+}
+
+async function clearSessionsOnRelay(origin = null) {
+  try {
+    const body = origin ? { origin } : {};
+    const res = await fetch(`${RELAY}/v1/sessions/clear`, {
+      method: 'POST', headers: bridgeHeaders(), body: JSON.stringify(body)
+    });
+    return res.ok;
+  } catch (_) { return false; }
+}
+
+async function refreshSessions() {
+  const data = await fetchSessions();
+  if (data === null) {
+    sessionsCount.textContent = '—';
+    sessionsList.innerHTML = '';
+    sessionsClear.style.display = 'none';
+    return;
+  }
+  renderSessions(data);
+}
+
+sessionsToggle.addEventListener('click', () => {
+  sessionsCard.classList.toggle('open');
+  if (sessionsCard.classList.contains('open')) refreshSessions();
+});
+
+sessionsClear.addEventListener('click', async () => {
+  sessionsClear.disabled = true;
+  await clearSessionsOnRelay(null);
+  await refreshSessions();
+  sessionsClear.disabled = false;
+});
+
 async function init() {
   applyTranslations();
   await loadBridgeToken();
@@ -332,6 +487,7 @@ async function init() {
     await bootstrapToken();
   }
   const relayOk = await checkRelay();
+  if (relayOk) refreshSessions();  // populate the sessions counter badge
 
   // Find target tab
   const tabs = await chrome.tabs.query({ currentWindow: true });

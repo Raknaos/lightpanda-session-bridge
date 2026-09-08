@@ -263,6 +263,9 @@ def attach_page(transport: CdpTransport, url: str) -> tuple[str, str]:
 # Last synced session, MEMORY ONLY (never written to disk). If Lightpanda
 # restarts, the daemon re-injects it automatically so the session survives.
 _LAST_SESSION: dict | None = None
+# Every synced session this daemon run: origin -> converted cookie list
+# (values kept in memory only, never logged, never returned by the API).
+_SYNCED_SESSIONS: dict[str, list[dict]] = {}
 
 
 def _ensure_connection(origin: str) -> None:
@@ -375,6 +378,7 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
 
         # Remember in memory for automatic resync after a Lightpanda restart.
         _LAST_SESSION = {"origin": origin, "cookies": converted}
+        _SYNCED_SESSIONS[origin] = converted
 
         return len(converted), storage_count
 
@@ -400,6 +404,69 @@ def proxy_cdp(method: str, params: dict | None = None) -> dict:
             # Connection lost (Lightpanda restarted?) -> resync + one retry
             _connection_resync()
             return _CDP_TRANSPORT.request(method, params, session_id=_CDP_SESSION_ID)
+
+
+def list_sessions() -> list[dict]:
+    """Sanitized view of synced sessions: origin, cookie count, expiry metadata.
+    Never returns cookie values."""
+    out = []
+    for origin, cookies in _SYNCED_SESSIONS.items():
+        host = origin_hostname(origin)
+        now = time.time()
+        expiries = [c.get("expires", -1) for c in cookies
+                    if isinstance(c, dict) and isinstance(c.get("expires", -1), (int, float)) and c.get("expires", -1) > 0]
+        next_expiry = min(expiries) if expiries else None
+        out.append({
+            "origin": origin,
+            "host": host,
+            "cookie_count": len(cookies),
+            "expires": next_expiry,
+            "expired": bool(next_expiry and next_expiry < now),
+        })
+    return out
+
+
+def clear_sessions(origin: str | None = None) -> int:
+    """Remove cookies from Lightpanda for one origin or every synced origin.
+    Returns the number of origins cleared."""
+    with CDP_LOCK:
+        targets = [origin] if origin else list(_SYNCED_SESSIONS.keys())
+        cleared = 0
+        for org in targets:
+            host = origin_hostname(org)
+            try:
+                res = _CDP_TRANSPORT.request(
+                    "Network.getCookies",
+                    {"urls": [org + "/", f"https://{host}/"]},
+                    session_id=_CDP_SESSION_ID,
+                ) if _CDP_TRANSPORT else {"cookies": []}
+            except Exception:
+                try:
+                    _ensure_connection(org)
+                    res = _CDP_TRANSPORT.request(
+                        "Network.getCookies",
+                        {"urls": [org + "/", f"https://{host}/"]},
+                        session_id=_CDP_SESSION_ID,
+                    )
+                except Exception:
+                    res = {"cookies": []}
+            removed = 0
+            for c in res.get("cookies", []):
+                try:
+                    _CDP_TRANSPORT.request(
+                        "Network.deleteCookies",
+                        {"name": c["name"], "domain": c.get("domain", host)},
+                        session_id=_CDP_SESSION_ID,
+                    )
+                    removed += 1
+                except Exception:
+                    pass
+            _SYNCED_SESSIONS.pop(org, None)
+            if _LAST_SESSION and _LAST_SESSION.get("origin") == org:
+                globals()["_LAST_SESSION"] = None
+            if removed or org in _SYNCED_SESSIONS:
+                cleared += 1
+        return cleared
 
 
 def re_fullmatch_method(method: str) -> bool:
@@ -478,6 +545,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(403, {"ok": False, "error": "origin refused"})
                 return
             self.send_json(200, {"ok": True, "token": _load_secret()})
+        elif self.path == "/v1/sessions":
+            # Sanitized list of synced sessions (no cookie values, no URLs).
+            # Requires the shared token: reveals which origins are bridged.
+            if not self._authorized():
+                self.send_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            sessions = list_sessions()
+            self.send_json(200, {"ok": True, "sessions": sessions, "count": len(sessions)})
         elif self.path == "/v1/session/inspect":
             # Removed: leaked cookie names, origin, page URL/title to any caller.
             self.send_json(404, {"ok": False, "error": "not found"})
@@ -485,6 +560,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self) -> None:
+        if self.path == "/v1/sessions/clear":
+            # Remove synced cookies from Lightpanda: one origin or all.
+            # Requires the shared token (state-changing).
+            if not self._authorized():
+                self.send_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                origin = None
+                if length > 0:
+                    self.connection.settimeout(10)
+                    payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                    origin = payload.get("origin") or None
+                    if origin is not None:
+                        if not isinstance(origin, str) or not valid_origin(origin):
+                            raise ValueError("origin refused")
+                cleared = clear_sessions(origin)
+                self.send_json(200, {"ok": True, "cleared": cleared})
+            except Exception as err:
+                self.send_json(400, {"ok": False, "error": str(err) or "clear refused"})
+            return
         if self.path == "/v1/cdp":
             # CDP proxy for agents: executes on the daemon's persistent
             # connection (the ONLY connection that holds the synced sessions).

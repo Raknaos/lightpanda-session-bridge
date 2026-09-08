@@ -2,6 +2,11 @@
 
 All notable changes to the Lightpanda Session Bridge will be documented in this file.
 
+## [0.4.1] - 2026-09-08
+### Added
+- **Session manager in the popup**: see which sites have active sessions inside Lightpanda (origin, cookie count, nearest expiry — never cookie values), remove a single site's session, or clear everything at once.
+- Relay endpoints: `GET /v1/sessions` (sanitized list, token-required) and `POST /v1/sessions/clear` (per-origin or all, token-required). Cookies are deleted from Lightpanda's jar over CDP.
+- i18n: session manager translated in all 10 popup languages.
 ## [0.4.0] - 2026-09-08
 ### The zero-configuration release
 - **Relay owns the only CDP connection.** Lightpanda scopes its cookie jar **per CDP connection** — an agent opening its own socket never saw synced sessions (the failure hit in practice on dev.to). The relay now keeps its connection for good and exposes `POST /v1/cdp` so every agent executes commands on the connection that holds the sessions. If Lightpanda restarts, the last session is replayed from memory automatically.

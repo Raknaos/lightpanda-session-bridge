@@ -391,6 +391,48 @@
       border-radius: 99px;
       border: 1px solid var(--edge);
     }
+
+    /* ---- Active sessions (Lightpanda side) ---- */
+    .sessions-card { margin-top: 14px; }
+    .sessions-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; border: none; background: transparent; cursor: pointer;
+      padding: 0; font: inherit;
+    }
+    .sessions-toggle:hover .card-label { color: var(--violet); }
+    .sessions-count {
+      font-size: 10.5px; font-weight: 700; color: var(--ink-secondary);
+      background: rgba(84, 104, 255, 0.12); border-radius: 99px; padding: 2px 8px;
+    }
+    .sessions-list { margin-top: 10px; display: none; flex-direction: column; gap: 6px; }
+    .sessions-card.open .sessions-list { display: flex; }
+    .session-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: var(--glass-surface); border: 1px solid var(--edge-subtle);
+      border-radius: 10px; padding: 7px 10px;
+    }
+    .session-host {
+      font-family: 'Space Grotesk', monospace; font-size: 12px; font-weight: 700;
+      color: var(--ink); word-break: break-all;
+    }
+    .session-meta { font-size: 10.5px; color: var(--muted); font-weight: 600; }
+    .session-remove {
+      border: none; background: rgba(225, 29, 72, 0.1); color: var(--danger);
+      border-radius: 8px; padding: 5px 8px; cursor: pointer; flex-shrink: 0;
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px; font-weight: 700;
+      transition: background 0.12s ease;
+    }
+    .session-remove:hover { background: rgba(225, 29, 72, 0.2); }
+    .sessions-clear {
+      margin-top: 8px; width: 100%;
+      border: 1px solid rgba(225, 29, 72, 0.3); background: rgba(225, 29, 72, 0.06);
+      color: var(--danger); border-radius: 10px; padding: 8px 10px;
+      font-family: 'Space Grotesk', sans-serif; font-size: 11.5px; font-weight: 700;
+      cursor: pointer; transition: background 0.12s ease;
+    }
+    .sessions-clear:hover { background: rgba(225, 29, 72, 0.14); }
+    .sessions-empty { font-size: 11.5px; color: var(--muted); font-weight: 600; padding: 2px 0; }
   </style>
 </head>
 <body>
@@ -453,12 +495,24 @@
 
     <div id="status"></div>
 
+    <!-- Active sessions inside Lightpanda -->
+    <div id="sessions-card" class="glass-card sessions-card">
+      <button id="sessions-toggle" class="sessions-toggle" type="button">
+        <div class="card-label" id="label-sessions">Active sessions in Lightpanda</div>
+        <div class="sessions-count" id="sessions-count">…</div>
+      </button>
+      <div id="sessions-list" class="sessions-list"></div>
+      <button id="sessions-clear" class="sessions-clear" type="button" style="display:none">
+        <span id="clear-text">Clear all sessions</span>
+      </button>
+    </div>
+
     <footer class="app-footer">
       <div class="footer-badge">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         <span id="footer-secure-tag">Isolated Profile · Localhost CDP</span>
       </div>
-      <span>v0.3.3</span>
+      <span>v0.4.1</span>
     </footer>
   </div>
 
