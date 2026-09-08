@@ -1,4 +1,0 @@
-bridge_agent
-lightpanda_agent_session
-lightpanda_client
-relay
