@@ -11,6 +11,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 import socket
 import threading
 import time
@@ -73,12 +74,107 @@ def _load_secret() -> str:
     return value
 
 
-def _secret_path() -> str:
+def _config_dir() -> str:
     """Cross-platform per-user config path, never inside the repo."""
-    base = os.environ.get("LP_BRIDGE_CONFIG_DIR") or os.path.join(
+    return os.environ.get("LP_BRIDGE_CONFIG_DIR") or os.path.join(
         os.path.expanduser("~"), ".config", "lightpanda-bridge"
     )
-    return os.path.join(base, "secret")
+
+
+def _secret_path() -> str:
+    return os.path.join(_config_dir(), "secret")
+
+
+def _pinned_extension_path() -> str:
+    return os.path.join(_config_dir(), "pinned_extension_id")
+
+
+EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
+OFFICIAL_EXTENSION_ID = "fcigkjkchglchhohedljlenopbkgnino"
+_PINNED_EXTENSION_ID: str | None = None
+
+
+def extract_extension_id(origin: str) -> str | None:
+    """Extract a clean 32-character Chrome extension ID from an origin, or None."""
+    if not origin or not origin.startswith("chrome-extension://"):
+        return None
+    raw = origin[len("chrome-extension://"):].rstrip("/")
+    ext_id = raw.split("/")[0].split(":")[0].lower()
+    if EXTENSION_ID_RE.fullmatch(ext_id):
+        return ext_id
+    return None
+
+
+def _load_pinned_extension_id() -> str | None:
+    """Load the pinned extension ID from disk cache, memory, or fallback to official ID.
+    If LP_BRIDGE_TOFU=1 is explicitly set, allows open first-caller TOFU."""
+    global _PINNED_EXTENSION_ID
+    if _PINNED_EXTENSION_ID is not None:
+        return _PINNED_EXTENSION_ID
+    path = _pinned_extension_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            val = fh.read().strip().lower()
+            if EXTENSION_ID_RE.fullmatch(val):
+                _PINNED_EXTENSION_ID = val
+                return val
+    except (FileNotFoundError, OSError):
+        pass
+    if os.environ.get("LP_BRIDGE_TOFU") == "1":
+        return None
+    return OFFICIAL_EXTENSION_ID
+
+
+def _save_pinned_extension_id(ext_id: str) -> None:
+    """Persist the pinned extension ID to disk."""
+    global _PINNED_EXTENSION_ID
+    _PINNED_EXTENSION_ID = ext_id
+    path = _pinned_extension_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(ext_id)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
+def _clear_pinned_extension_cache() -> None:
+    """Reset the pinned extension ID in memory (useful for testing)."""
+    global _PINNED_EXTENSION_ID
+    _PINNED_EXTENSION_ID = None
+
+
+def _get_allowed_extension_ids() -> set[str]:
+    """Return set of explicitly allowed extension IDs from env var."""
+    allowed = set()
+    env_ids = os.environ.get("LP_BRIDGE_ALLOWED_EXTENSION_IDS", "")
+    if env_ids:
+        for item in env_ids.split(","):
+            cleaned = item.strip().lower()
+            if EXTENSION_ID_RE.fullmatch(cleaned):
+                allowed.add(cleaned)
+    return allowed
+
+
+def is_valid_extension_origin(origin: str, auto_pin: bool = False) -> bool:
+    """Validate origin against pinned or explicitly allowed extension IDs.
+    If auto_pin is True and no extension is pinned yet, pin the extension ID
+    on first use (TOFU - Trust On First Use)."""
+    ext_id = extract_extension_id(origin)
+    if not ext_id:
+        return False
+    pinned = _load_pinned_extension_id()
+    if not pinned:
+        if auto_pin:
+            _save_pinned_extension_id(ext_id)
+            return True
+        return True
+    allowed = _get_allowed_extension_ids()
+    return ext_id == pinned or ext_id in allowed
 
 
 def _is_global_hostname(hostname: str) -> bool:
@@ -91,6 +187,10 @@ def _is_global_hostname(hostname: str) -> bool:
     lowered = hostname.lower()
     # IPv4-mapped IPv6 forms handled by ipaddress below; reject hex/octal/dword ints
     if lowered.startswith(("0x", "0o", "0b")):
+        return False
+    # Reject non-canonical numeric IPv4 representations (e.g. octal leading zeros like 0177.0.0.1)
+    parts = lowered.split(".")
+    if len(parts) == 4 and all(p.isdigit() for p in parts) and any(len(p) > 1 and p.startswith("0") for p in parts):
         return False
     # Reject any hostname ending with a public-suffix wildcard service
     for suffix in (".nip.io", ".localhost", ".local", ".internal", ".lan", ".home.arpa"):
@@ -485,13 +585,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        # CORS is only reflected for chrome-extension:// callers (the popup needs
-        # it to read responses). Web pages never get CORS -> their cross-origin
-        # POSTs die at the preflight. State changes additionally require the
-        # shared X-Bridge-Token (see _authorized), so a rogue extension cannot
-        # import/overwrite a session either.
+        # CORS is only reflected for valid chrome-extension:// callers (the popup needs
+        # it to read responses). Web pages and untrusted extensions never get CORS.
         request_origin = self.headers.get("Origin", "")
-        if request_origin.startswith("chrome-extension://"):
+        if request_origin.startswith("chrome-extension://") and is_valid_extension_origin(request_origin):
             self.send_header("Access-Control-Allow-Origin", request_origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -510,22 +607,27 @@ class Handler(BaseHTTPRequestHandler):
         return hmac.compare_digest(supplied, expected)
 
     def _check_extension_caller(self) -> bool:
-        """Caller must be a chrome extension (the popup) or local CLI tooling
-        (no Origin header). Any web page origin (https://...) is refused."""
+        """Caller must be the pinned chrome extension (the popup) or local CLI tooling
+        (no Origin header). Any web page origin (https://...) or untrusted extension is refused."""
         request_origin = self.headers.get("Origin", "")
         if not request_origin:
             return True
-        return request_origin.startswith("chrome-extension://")
+        return is_valid_extension_origin(request_origin, auto_pin=False)
 
     def _require_extension_origin(self) -> bool:
         """STRICT variant for secret-delivering endpoints: an Origin header
-        starting with chrome-extension:// is mandatory. Requests with no
-        Origin (curl, CLI tools, malware probes) are refused so the shared
-        secret can never be exfiltrated by a plain local process."""
+        from the pinned chrome-extension:// is mandatory (TOFU on first call).
+        Requests with no Origin (curl, CLI tools, malware probes) or from
+        untrusted extensions are refused so the shared secret can never be exfiltrated."""
         request_origin = self.headers.get("Origin", "")
-        return request_origin.startswith("chrome-extension://")
+        if not request_origin:
+            return False
+        return is_valid_extension_origin(request_origin, auto_pin=True)
 
     def do_OPTIONS(self) -> None:
+        if not self._check_extension_caller():
+            self.send_json(403, {"ok": False, "error": "origin refused"})
+            return
         self.send_json(204, {})
 
     def do_GET(self) -> None:
@@ -547,7 +649,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "token": _load_secret()})
         elif self.path == "/v1/sessions":
             # Sanitized list of synced sessions (no cookie values, no URLs).
-            # Requires the shared token: reveals which origins are bridged.
+            # Requires valid extension or CLI caller and the shared token.
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
             if not self._authorized():
                 self.send_json(401, {"ok": False, "error": "unauthorized"})
                 return
@@ -562,7 +667,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path == "/v1/sessions/clear":
             # Remove synced cookies from Lightpanda: one origin or all.
-            # Requires the shared token (state-changing).
+            # Requires valid extension or CLI caller and the shared token (state-changing).
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
             if not self._authorized():
                 self.send_json(401, {"ok": False, "error": "unauthorized"})
                 return
@@ -586,6 +694,9 @@ class Handler(BaseHTTPRequestHandler):
             # connection (the ONLY connection that holds the synced sessions).
             # Local-only tooling: no Origin means no web page can call it.
             # State-changing CDP requires the shared token like /import.
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
             if not self._authorized():
                 self.send_json(401, {"ok": False, "error": "unauthorized"})
                 return
@@ -666,6 +777,12 @@ def self_test() -> int:
     assert c.get("secure") is True
     c2 = cookie_for_cdp({"name": "x", "value": "y", "sameSite": "no_restriction", "domain": "a6api.com"}, "https://a6api.com")
     assert c2.get("secure") is True and c2.get("sameSite") == "None"
+    # Extension ID extraction and validation
+    assert extract_extension_id("chrome-extension://fcigkjkchglchhohedljlenopbkgnino") == "fcigkjkchglchhohedljlenopbkgnino"
+    assert extract_extension_id("chrome-extension://fcigkjkchglchhohedljlenopbkgnino/") == "fcigkjkchglchhohedljlenopbkgnino"
+    assert extract_extension_id("chrome-extension://invalid-id") is None
+    assert extract_extension_id("https://example.com") is None
+    assert extract_extension_id("") is None
     print("security self-test: ok")
     return 0
 
