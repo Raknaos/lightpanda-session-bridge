@@ -17,6 +17,7 @@ import tarfile
 import tempfile
 import unittest
 import unittest.mock
+import urllib.error
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -529,7 +530,33 @@ class TestCheckUpdate(UpdateTestCase):
         status = updater.check_update(force=True)
         self.assertFalse(status["ok"])
         self.assertFalse(status["update_available"])
-        self.assertIn("unreachable", status["error"])
+        # the cause is carried through, whatever it says - a class name in the
+        # popup told the user nothing ("GitHub unreachable (RuntimeError)")
+        self.assertIn("network down", status["error"])
+        self.assertEqual(status.get("error_kind"), "unreachable")
+
+    def _rate_limited_urlopen(self, url, timeout=None):
+        raise urllib.error.HTTPError(
+            url, 403, "Forbidden", {},
+            io.BytesIO(b'{"message": "API rate limit exceeded for 203.0.113.7."}'))
+
+    def test_a_rate_limited_api_is_named_as_such(self):
+        """GitHub writes the quota message in the BODY, so a check on the reason
+        phrase alone misses it and the user only sees a generic failure."""
+        with unittest.mock.patch.object(updater.urllib.request, "urlopen", self._rate_limited_urlopen):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch_json("https://api.github.com/repos/x/y/releases/latest")
+        self.assertIn("60/hour", str(caught.exception))
+
+    def test_a_rate_limited_check_says_what_to_do(self):
+        def limited(repo=updater.REPO):
+            raise RuntimeError(updater._RATE_HINT)
+        updater.latest_release = limited
+        status = updater.check_update(force=True)
+        self.assertFalse(status["ok"])
+        self.assertFalse(status["update_available"])
+        self.assertEqual(status.get("error_kind"), "rate_limit")
+        self.assertIn("60/hour", status["error"])
 
     def test_missing_extension_dir_is_reported(self):
         os.environ["LP_BRIDGE_EXTENSION_DIR"] = os.path.join(self.ext, "nope")
@@ -642,6 +669,39 @@ class TestPopupLayout(unittest.TestCase):
         self.assertIn("/v1/update/check", worker)
         self.assertIn("chrome.alarms", worker)
 
+
+
+class TestPopupTranslations(unittest.TestCase):
+    """zh, ja and ar were each missing `clearConfirm` and `clearedToast`, so the
+    confirm tooltip and the toast after clearing rendered the string
+    "undefined" in three languages. Nothing checked parity, only the presence of
+    a hand-picked key list - so the check is now the whole key set."""
+
+    LANGS = ["en", "fr", "es", "de", "zh", "ja", "it", "pt", "ar", "ru"]
+
+    def _blocks(self):
+        js = (REPO_ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
+        block = js[js.index("const I18N"):js.index("function t(")]
+        found = {}
+        for lang in self.LANGS:
+            m = re.search(r"\n  %s: \{(.*?)\n  \},?\n" % lang, block, re.S)
+            self.assertIsNotNone(m, "langue %s absente" % lang)
+            found[lang] = (m.group(1), set(re.findall(r"^\s{4}(\w+):", m.group(1), re.M)))
+        return js, found
+
+    def test_every_language_defines_exactly_the_same_keys(self):
+        _, blocks = self._blocks()
+        base = blocks["en"][1]
+        for lang, (_, keys) in blocks.items():
+            self.assertEqual(sorted(base - keys), [], "%s: cles manquantes" % lang)
+            self.assertEqual(sorted(keys - base), [], "%s: cles en trop" % lang)
+
+    def test_every_t_call_resolves_in_every_language(self):
+        js, blocks = self._blocks()
+        used = set(re.findall(r"\bt\(['\"]([A-Za-z0-9_]+)['\"]", js))
+        self.assertTrue(used, "aucun appel t('...') trouve")
+        for lang, (_, keys) in blocks.items():
+            self.assertEqual(sorted(used - keys), [], "%s: t() sans traduction" % lang)
 
 
 class TestGitHubAcceptHeader(unittest.TestCase):

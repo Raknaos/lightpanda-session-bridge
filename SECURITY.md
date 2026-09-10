@@ -90,3 +90,17 @@ metadata only.
 | A8 | Cookie jar only in memory: any restart silently downgraded the session to unauthenticated calls | Medium (availability/integrity) | Fixed — owner-only persisted state, replayed with retry |
 | R1 | A local same-user process can spoof `Origin: chrome-extension://<pinned-id>` and read the token through `/v1/bootstrap` | Low | Accepted — documented in the threat model; the token only grants loopback access as the same user |
 | R2 | TOFU pinning is first-caller-wins if `LP_BRIDGE_TOFU=1` is set on a shared machine | Low | Accepted — the official extension id is pinned by default; set `LP_BRIDGE_ALLOWED_EXTENSION_IDS` instead of enabling TOFU |
+
+## Optional: a GitHub token for the update check
+
+The relay asks GitHub anonymously, which allows 60 requests/hour per IP. The
+badge, the popup and any tooling share that budget, and the check is cached for
+5 minutes to stay inside it. If you want headroom - or if you run the acceptance
+gate often - place a token where the relay can read it, and nothing else changes:
+
+    gh auth token > ~/.config/lightpanda-bridge/github_token
+
+The token is only ever sent to `api.github.com` (every download host is
+allow-listed), it is never logged, and it is never printed by any script here.
+The environment variable `LP_BRIDGE_GITHUB_TOKEN` takes precedence if you would
+rather keep the credential out of the filesystem.

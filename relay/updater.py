@@ -54,7 +54,10 @@ MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 BUILD_INFO = ".build-info.json"
 BACKUP_DIRNAME = "extension-backup"
 AUDIT_FILE = "update.log"
-CACHE_TTL = 60.0
+# 5 minutes, not 60 seconds: every check is up to three anonymous API calls and
+# the quota is 60/hour for the whole IP. A run of popup opens could exhaust it
+# and the relay would then answer "rate limit" for everything.
+CACHE_TTL = 300.0
 USER_AGENT = "lightpanda-session-bridge-updater"
 # api.github.com refuses a media type it cannot *produce*: asking for
 # `application/octet-stream` on /repos/.../tarball or /commits/main is answered
@@ -67,6 +70,15 @@ USER_AGENT = "lightpanda-session-bridge-updater"
 # so no caller can reintroduce it by asking for bytes from the API host.
 API_MEDIA_TYPE = "application/vnd.github+json"
 API_HOSTS = {"api.github.com"}
+# Anonymous GitHub is 60 requests/hour per IP and the badge, the popup and the
+# acceptance gate all call the API: a run of checks is enough to exhaust it and
+# the relay then reports "rate limit exceeded" for everything. A token raises it
+# to 5000/h. Read from the environment or a file next to the config, never
+# logged, never sent anywhere but github.com (every download host is
+# allow-listed above).
+TOKEN_ENV = "LP_BRIDGE_GITHUB_TOKEN"
+TOKEN_FILE = "github_token"
+_RATE_HINT = "GitHub API rate limit reached (anonymous is 60/hour per IP)"
 
 _CACHE: dict = {"at": 0.0, "data": None}
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]([0-9A-Za-z.\-]+))?$")
@@ -212,6 +224,17 @@ def read_backup_meta() -> dict:
 # GitHub
 # --------------------------------------------------------------------------
 
+def github_token() -> str:
+    token = (os.environ.get(TOKEN_ENV) or "").strip()
+    if token:
+        return token
+    try:
+        with open(os.path.join(config_dir(), TOKEN_FILE), "r", encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
 def _fetch(url: str, limit: int = MAX_ARCHIVE_BYTES, accept: str = API_MEDIA_TYPE):
     """GET over https, from an allow-listed host only, capped in size.
 
@@ -228,6 +251,9 @@ def _fetch(url: str, limit: int = MAX_ARCHIVE_BYTES, accept: str = API_MEDIA_TYP
     headers = {"User-Agent": USER_AGENT}
     if accept:
         headers["Accept"] = accept
+    token = github_token()
+    if token:
+        headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         final = urllib.parse.urlparse(response.geturl())
@@ -248,6 +274,18 @@ def _fetch_json(url: str):
     except urllib.error.HTTPError as err:
         if err.code == 404:
             return None
+        # GitHub writes the quota message in the BODY ("API rate limit
+        # exceeded for ..."), not in the reason phrase, so read it before
+        # deciding. 403 and 429 are both used.
+        body = ""
+        try:
+            body = err.read().decode("utf-8", "replace")[:400]
+        except Exception:
+            pass
+        haystack = " ".join([str(getattr(err, "reason", "")),
+                             str(getattr(err, "headers", "") or ""), body]).lower()
+        if err.code in (403, 429) and "rate limit" in haystack:
+            raise RuntimeError(_RATE_HINT) from err
         raise
 
 
@@ -334,7 +372,15 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
     try:
         release = latest_release(repo)
     except Exception as err:  # network down, rate limited, ...
-        result.update({"ok": False, "error": f"GitHub unreachable ({type(err).__name__})"})
+        # An actionable message beats a class name: "GitHub API rate limit
+        # reached (anonymous is 60/hour per IP)" tells the user what to do,
+        # "GitHub unreachable (RuntimeError)" does not.
+        detail = str(err) if str(err) else ""
+        result.update({
+            "ok": False,
+            "error": detail or f"GitHub unreachable ({type(err).__name__})",
+            "error_kind": "rate_limit" if "rate limit" in detail.lower() else "unreachable",
+        })
         _CACHE.update({"at": now, "data": result})
         return result
 
@@ -554,7 +600,9 @@ def _write_build_info(ext_dir: str, payload: dict) -> None:
     payload = dict(payload)
     payload["installed_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     payload["repo"] = REPO
-    with open(os.path.join(ext_dir, BUILD_INFO), "w", encoding="utf-8") as fh:
+    # newline="\n": the shipped tree is LF everywhere (.gitattributes), and a
+    # CRLF provenance file made the acceptance check fail on a fresh install.
+    with open(os.path.join(ext_dir, BUILD_INFO), "w", encoding="utf-8", newline="\n") as fh:
         json.dump(payload, fh, indent=2)
 
 

@@ -242,6 +242,8 @@ const I18N = {
     sessionsEmpty: "Lightpanda 中没有已同步的会话。",
     sessionsClear: (n) => `清除全部（${n}）`,
     sessionsClearShort: "全部清除",
+    clearConfirm: "再次点击以清除全部",
+    clearedToast: "所有会话已清除",
     clearConfirmShort: "确认？",
     sessionRemove: "移除此会话"
   },
@@ -289,6 +291,8 @@ const I18N = {
     sessionsEmpty: "Lightpandaに同期されたセッションはありません。",
     sessionsClear: (n) => `すべて削除（${n}）`,
     sessionsClearShort: "すべて削除",
+    clearConfirm: "もう一度クリックで全て削除",
+    clearedToast: "すべてのセッションを削除しました",
     clearConfirmShort: "確認？",
     sessionRemove: "このセッションを削除"
   },
@@ -434,6 +438,8 @@ const I18N = {
     sessionsEmpty: "لا توجد جلسات متزامنة في Lightpanda.",
     sessionsClear: (n) => `إزالة الكل (${n})`,
     sessionsClearShort: "إزالة الكل",
+    clearConfirm: "انقر مرة أخرى لمسح الكل",
+    clearedToast: "تم مسح جميع الجلسات",
     clearConfirmShort: "تأكيد؟",
     sessionRemove: "إزالة هذه الجلسة"
   },

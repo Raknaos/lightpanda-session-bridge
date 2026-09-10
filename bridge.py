@@ -59,26 +59,45 @@ def relay_up() -> bool:
     return bool(h and h.get("ok"))
 
 
+def _cli_text(raw) -> str:
+    """Decode what a Windows command actually wrote.
+
+    `wsl.exe -l -q` writes UTF-16LE, `netstat` writes cp850 on a French install,
+    and the obvious `capture_output=True, text=True` (which means utf-8) either
+    garbles the result or kills the reader thread and returns None - the failure
+    that made an acceptance check die with "'NoneType' object has no attribute
+    'splitlines'". Decode the bytes here, tolerantly, once.
+    """
+    if not raw:
+        return ""
+    if b"\x00" in raw[:64]:
+        return raw.decode("utf-16-le", errors="replace")
+    return raw.decode("utf-8", errors="replace")
+
+
+def _run_text(*cmd, timeout=30):
+    """(returncode, decoded stdout) for a local command; None if it could not run."""
+    try:
+        proc = subprocess.run(list(cmd), capture_output=True, timeout=timeout)
+    except Exception:
+        return None, ""
+    return proc.returncode, _cli_text(proc.stdout)
+
+
 def _wsl_available() -> bool:
     if not IS_WINDOWS:
         return False
-    try:
-        r = subprocess.run(["wsl.exe", "-l", "-q"], capture_output=True, text=True, timeout=20)
-        return r.returncode == 0 and bool(r.stdout.strip())
-    except Exception:
-        return False
+    code, out = _run_text("wsl.exe", "-l", "-q", timeout=20)
+    return code == 0 and bool(out.strip())
 
 
 def _lightpanda_in_wsl() -> bool:
     if not IS_WINDOWS:
         return shutil.which(os.path.expanduser("~/lightpanda")) is not None or os.path.exists(os.path.expanduser("~/lightpanda"))
-    try:
-        r = subprocess.run(
-            ["wsl.exe", "-d", "Ubuntu", "--", "bash", "-lc", "test -x $HOME/lightpanda && echo YES || echo NO"],
-            capture_output=True, text=True, timeout=30)
-        return "YES" in r.stdout
-    except Exception:
-        return False
+    code, out = _run_text(
+        "wsl.exe", "-d", "Ubuntu", "--", "bash", "-lc",
+        "test -x $HOME/lightpanda && echo YES || echo NO", timeout=30)
+    return "YES" in out
 
 
 def _pip_install(*pkgs: str) -> bool:
