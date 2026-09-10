@@ -263,6 +263,9 @@ class TestApplyAndRollback(UpdateTestCase):
         saved = (updater.latest_release, updater.latest_commit, updater._fetch)
         updater.latest_release = lambda repo=updater.REPO: release
         updater.latest_commit = lambda repo=updater.REPO, branch=updater.BRANCH, tag=None: head
+        # Unless a test says otherwise, the shipped tip is the commit itself:
+        # these tests are about the channel, not about the subtree filter.
+        updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: head
         updater._fetch = fake_fetch
         self.addCleanup(lambda: (setattr(updater, "latest_release", saved[0]),
                                  setattr(updater, "latest_commit", saved[1]),
@@ -472,6 +475,9 @@ class TestCheckUpdate(UpdateTestCase):
         head = {"sha": commit, "short": commit[:7], "message": "m", "date": "d", "html_url": "u"}
         updater.latest_release = lambda repo=updater.REPO: release
         updater.latest_commit = lambda repo=updater.REPO, branch=updater.BRANCH, tag=None: head
+        # Unless a test says otherwise, the shipped tip is the commit itself:
+        # these tests are about the channel, not about the subtree filter.
+        updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: head
         self.addCleanup(updater.clear_cache)
 
     def test_newer_release_wins(self):
@@ -522,6 +528,42 @@ class TestCheckUpdate(UpdateTestCase):
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertEqual(status["source"], "main")
+
+    def _shipped(self, sha):
+        return {"sha": sha, "short": sha[:7], "message": "m", "date": "d", "html_url": "u"}
+
+    def test_a_commit_that_shipped_nothing_is_not_offered(self):
+        """v0.5.6 shipped scripts and tests only: the installed extension/ tree
+        was identical, and the chip still asked for an update."""
+        self._stub("0.4.3", "b" * 40, installed_commit="a" * 40)
+        updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: \
+            self._shipped("a" * 40)
+        status = updater.check_update(force=True)
+        self.assertFalse(status["update_available"])
+        self.assertIsNone(status["source"])
+        self.assertIn("nothing shipped changed", status.get("note") or "")
+
+    def test_a_commit_that_shipped_something_is_offered_at_that_commit(self):
+        self._stub("0.4.3", "c" * 40, installed_commit="a" * 40)
+        updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: \
+            self._shipped("b" * 40)
+        status = updater.check_update(force=True)
+        self.assertTrue(status["update_available"])
+        self.assertEqual(status["source"], "main")
+        self.assertEqual(status["to"], "b" * 7)
+
+    def test_an_unanswerable_shipped_lookup_still_offers_the_commit(self):
+        # Fail-open: a needless update beats a missed one.
+        self._stub("0.4.3", "b" * 40, installed_commit="a" * 40)
+
+        def boom(repo=updater.REPO, branch=updater.BRANCH):
+            raise RuntimeError("rate limit reached")
+
+        updater.shipped_commit = boom
+        status = updater.check_update(force=True)
+        self.assertTrue(status["update_available"])
+        self.assertEqual(status["source"], "main")
+        self.assertEqual(status["to"], "b" * 7)
 
     def test_github_unreachable_is_not_reported_as_up_to_date(self):
         def boom(repo=updater.REPO):

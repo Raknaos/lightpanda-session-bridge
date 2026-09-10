@@ -328,6 +328,33 @@ def latest_commit(repo: str = REPO, branch: str = BRANCH, tag: str | None = None
     }
 
 
+def shipped_commit(repo: str = REPO, branch: str = BRANCH):
+    """The newest commit that changed the shipped subtree (extension/).
+
+    The commit channel installs `extension/` and nothing else - the mirror only
+    ever writes that subtree - so a commit touching scripts/, tests/ or docs
+    has nothing to deliver. Offering it asked the user to install an identical
+    tree: the update chip that cried wolf. GitHub answers the question directly
+    (one request, only ever made when the tip already differs).
+    """
+    query = ("%s/repos/%s/commits?path=extension&sha=%s&per_page=1"
+             % (API, repo, urllib.parse.quote(branch)))
+    data = _fetch_json(query)
+    if not isinstance(data, list) or not data:
+        return None
+    sha = (data[0] or {}).get("sha")
+    if not sha:
+        return None
+    commit = (data[0].get("commit") or {})
+    return {
+        "sha": sha,
+        "short": sha[:8],
+        "date": (commit.get("committer") or {}).get("date"),
+        "message": (commit.get("message") or "").splitlines()[0][:120],
+        "html_url": data[0].get("html_url"),
+    }
+
+
 # --------------------------------------------------------------------------
 # check
 # --------------------------------------------------------------------------
@@ -406,11 +433,24 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
         result.update({"update_available": True, "source": "release",
                        "from": current["version"], "to": release["version_text"]})
     elif head and current["commit"] and head["sha"] != current["commit"]:
-        # Same release, but main moved on: offer the newest commit (dev channel).
-        result.update({
-            "update_available": True, "source": "main",
-            "from": current["commit"][:8], "to": head["short"],
-        })
+        # Same release, main moved on - but only a commit that changed the
+        # shipped subtree is worth installing. Fail-open: if GitHub will not
+        # say, offer the tip, because a needless update beats a missed one.
+        try:
+            shipped = shipped_commit(repo)
+        except Exception:
+            shipped = None
+        target = shipped or head
+        if shipped and shipped["sha"] == current["commit"]:
+            result.update({
+                "update_available": False,
+                "note": "main moved to %s, but nothing shipped changed" % head["short"],
+            })
+        else:
+            result.update({
+                "update_available": True, "source": "main",
+                "from": current["commit"][:8], "to": target["short"],
+            })
     elif not current["commit"] and release:
         # No provenance (hand-installed, or an installer older than 0.5.0), so
         # the deployed tree *is* the release only by assumption. Offer the
@@ -670,10 +710,14 @@ def apply_update(source: str = "auto", repo: str = REPO) -> dict:
         head = latest_commit(repo)
         if not head:
             raise RuntimeError("main branch not found")
-        commit = head["sha"]
+        try:
+            target = shipped_commit(repo) or head
+        except Exception:
+            target = head
+        commit = target["sha"]
         tag = None  # main-channel install: no tag to claim
-        archive_name = f"source-{head['short']}.tar.gz"
-        archive_url = f"{API}/repos/{repo}/tarball/{head['sha']}"
+        archive_name = f"source-{target['short']}.tar.gz"
+        archive_url = f"{API}/repos/{repo}/tarball/{target['sha']}"
 
     raw = _fetch(archive_url, accept=accept)
     digest = hashlib.sha256(raw).hexdigest()
