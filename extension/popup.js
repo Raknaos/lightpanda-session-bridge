@@ -3,6 +3,8 @@ const RELAY = "http://127.0.0.1:8765";
 // Multilingual Dictionary (Default English + French, Spanish, German, Chinese, Japanese, Italian, Portuguese, Arabic, Russian)
 const I18N = {
   en: {
+    clearConfirm: "Click again to clear all",
+    clearedToast: "All sessions cleared",
     code: "EN",
     relayChecking: "Checking…",
     relayOnline: "Relay Online",
@@ -14,10 +16,13 @@ const I18N = {
     consent: "I authorize the explicit transfer of this tab's authenticated session to Lightpanda.",
     btnSync: "Sync to Lightpanda",
     syncing: "Transferring & verifying session…",
-    success: (count) => `✓ Session synchronized (${count} cookies injected).`,
+    success: (count, keys) => `✓ Session synchronized (${count} cookies, ${keys} localStorage keys).`,
+    errStorageExtract: 'Could not read localStorage on this page (missing permission, or the page is not injectable). Reload the tab and try again.',
+    errPartialStorage: (got, want) => `Incomplete transfer: ${got}/${want} localStorage keys reached Lightpanda. Sync again.`,
     errNeedHttps: "Please open a public HTTPS website (e.g. Gmail, A6API).",
     errNoRelay: "Local relay (port 8765) is not running.",
     errNoCookies: "No cookies found for this page.",
+    errCookiesOutOfScope: "These cookies are outside the extension's permission scope. Reload the extension (chrome://extensions) and try again.",
     errRefused: "Transfer refused by local relay.",
     footerTag: "Isolated Profile · Localhost CDP",
     sessionsLabel: "Active sessions in Lightpanda",
@@ -26,6 +31,8 @@ const I18N = {
     sessionRemove: "Remove this session"
   },
   fr: {
+    clearConfirm: "Cliquez encore pour tout effacer",
+    clearedToast: "Toutes les sessions effacées",
     code: "FR",
     relayChecking: "Vérification…",
     relayOnline: "Relais en ligne",
@@ -37,10 +44,13 @@ const I18N = {
     consent: "J'autorise le transfert explicite de la session de cet onglet vers Lightpanda.",
     btnSync: "Synchroniser vers Lightpanda",
     syncing: "Transfert et vérification en cours…",
-    success: (count) => `✓ Session synchronisée (${count} cookies injectés).`,
+    success: (count, keys) => `✓ Session synchronisée (${count} cookies, ${keys} clés localStorage).`,
+    errStorageExtract: 'Lecture du localStorage impossible sur cette page (permission manquante ou page non injectable). Rechargez l\'onglet et réessayez.',
+    errPartialStorage: (got, want) => `Transfert incomplet : ${got}/${want} clés localStorage reçues par Lightpanda. Resynchronisez.`,
     errNeedHttps: "Ouvrez un site HTTPS public (ex: Gmail, A6API).",
     errNoRelay: "Le relais local (port 8765) n’est pas démarré.",
     errNoCookies: "Aucun cookie trouvé pour cette page.",
+    errCookiesOutOfScope: "Ces cookies sont hors du périmètre d'autorisation de l'extension. Rechargez l'extension (chrome://extensions) puis réessayez.",
     errRefused: "Transfert refusé par le relais local.",
     footerTag: "Profil isolé · Localhost CDP",
     sessionsLabel: "Sessions actives dans Lightpanda",
@@ -49,6 +59,8 @@ const I18N = {
     sessionRemove: "Retirer cette session"
   },
   es: {
+    clearConfirm: "Pulsa de nuevo para borrar todo",
+    clearedToast: "Todas las sesiones borradas",
     code: "ES",
     relayChecking: "Comprobando…",
     relayOnline: "Relé en línea",
@@ -60,10 +72,13 @@ const I18N = {
     consent: "Autorizo la transferencia explícita de la sesión autenticada a Lightpanda.",
     btnSync: "Sincronizar con Lightpanda",
     syncing: "Transfiriendo y verificando sesión…",
-    success: (count) => `✓ Sesión sincronizada (${count} cookies inyectadas).`,
+    success: (count, keys) => `✓ Sesión sincronizada (${count} cookies, ${keys} claves de localStorage).`,
+    errStorageExtract: 'No se pudo leer localStorage en esta página (falta permiso o la página no es inyectable). Recarga la pestaña y reintenta.',
+    errPartialStorage: (got, want) => `Transferencia incompleta: ${got}/${want} claves de localStorage llegaron a Lightpanda. Sincroniza de nuevo.`,
     errNeedHttps: "Abre un sitio web HTTPS público (ej. Gmail, A6API).",
     errNoRelay: "El relé local (puerto 8765) no está en ejecución.",
     errNoCookies: "No se encontraron cookies para esta página.",
+    errCookiesOutOfScope: "Estas cookies están fuera de los permisos de la extensión. Recarga la extensión (chrome://extensions) e inténtalo de nuevo.",
     errRefused: "Transferencia rechazada por el relé local.",
     footerTag: "Perfil aislado · Localhost CDP",
     sessionsLabel: "Sesiones activas en Lightpanda",
@@ -72,6 +87,8 @@ const I18N = {
     sessionRemove: "Eliminar esta sesión"
   },
   de: {
+    clearConfirm: "Erneut klicken, um alles zu löschen",
+    clearedToast: "Alle Sitzungen gelöscht",
     code: "DE",
     relayChecking: "Prüfe…",
     relayOnline: "Relais online",
@@ -83,10 +100,13 @@ const I18N = {
     consent: "Ich autorisiere die Übertragung der authentifizierten Sitzung an Lightpanda.",
     btnSync: "Mit Lightpanda synchronisieren",
     syncing: "Sitzung wird übertragen & geprüft…",
-    success: (count) => `✓ Sitzung synchronisiert (${count} Cookies injiziert).`,
+    success: (count, keys) => `✓ Sitzung synchronisiert (${count} Cookies, ${keys} localStorage-Schlüssel).`,
+    errStorageExtract: 'localStorage konnte auf dieser Seite nicht gelesen werden (fehlende Berechtigung oder Seite nicht injizierbar). Tab neu laden und erneut versuchen.',
+    errPartialStorage: (got, want) => `Unvollständige Übertragung: ${got}/${want} localStorage-Schlüssel sind bei Lightpanda angekommen. Erneut synchronisieren.`,
     errNeedHttps: "Bitte öffnen Sie eine öffentliche HTTPS-Website.",
     errNoRelay: "Lokales Relais (Port 8765) läuft nicht.",
     errNoCookies: "Keine Cookies für diese Seite gefunden.",
+    errCookiesOutOfScope: "Diese Cookies liegen außerhalb der Berechtigungen der Erweiterung. Lade die Erweiterung neu (chrome://extensions) und versuche es erneut.",
     errRefused: "Übertragung vom lokalen Relais abgelehnt.",
     footerTag: "Isoliertes Profil · Localhost CDP",
     sessionsLabel: "Aktive Sitzungen in Lightpanda",
@@ -106,10 +126,13 @@ const I18N = {
     consent: "我授权将此标签页的认证会话显式传输至 Lightpanda。",
     btnSync: "同步至 Lightpanda",
     syncing: "正在传输并验证会话…",
-    success: (count) => `✓ 会话已同步（注入 ${count} 个 Cookie）。`,
+    success: (count, keys) => `✓ 会话已同步（${count} 个 Cookie，${keys} 个 localStorage 键）。`,
+    errStorageExtract: '无法在此页面读取 localStorage（缺少权限或页面不可注入）。请重新加载标签页后重试。',
+    errPartialStorage: (got, want) => `传输不完整：${got}/${want} 个 localStorage 键到达 Lightpanda。请重新同步。`,
     errNeedHttps: "请打开公开的 HTTPS 网站（例如 Gmail、A6API）。",
     errNoRelay: "本地中继（端口 8765）未启动。",
     errNoCookies: "未找到此页面的 Cookie。",
+    errCookiesOutOfScope: "这些 Cookie 超出扩展程序的权限范围。请重新加载扩展程序（chrome://extensions）后重试。",
     errRefused: "本地中继拒绝了传输。",
     footerTag: "隔离配置文件 · 本地 CDP",
     sessionsLabel: "Lightpanda 中的活动会话",
@@ -129,10 +152,13 @@ const I18N = {
     consent: "このタブの認証済みセッションをLightpandaに転送することを承認します。",
     btnSync: "Lightpandaに同期",
     syncing: "セッションの転送と検証中…",
-    success: (count) => `✓ セッションが同期されました（${count}個のCookieを挿入）。`,
+    success: (count, keys) => `✓ セッションを同期しました（Cookie ${count} 個、localStorage ${keys} 件）。`,
+    errStorageExtract: 'このページで localStorage を読み取れません（権限不足、または注入できないページ）。タブを再読み込みして再試行してください。',
+    errPartialStorage: (got, want) => `転送が不完全です：localStorage ${got}/${want} 件のみ Lightpanda に到達しました。再同期してください。`,
     errNeedHttps: "公開HTTPSサイト（Gmail、A6APIなど）を開いてください。",
     errNoRelay: "ローカルリレー（ポート8765）が起動していません。",
     errNoCookies: "このページのCookieが見つかりません。",
+    errCookiesOutOfScope: "これらのCookieは拡張機能の権限範囲外です。拡張機能を再読み込み（chrome://extensions）して再試行してください。",
     errRefused: "ローカルリレーによって転送が拒否されました。",
     footerTag: "分離プロファイル · Localhost CDP",
     sessionsLabel: "Lightpanda内のアクティブなセッション",
@@ -141,6 +167,8 @@ const I18N = {
     sessionRemove: "このセッションを削除"
   },
   it: {
+    clearConfirm: "Clicca di nuovo per cancellare tutto",
+    clearedToast: "Tutte le sessioni cancellate",
     code: "IT",
     relayChecking: "Verifica…",
     relayOnline: "Relè Online",
@@ -152,10 +180,13 @@ const I18N = {
     consent: "Autorizzo il trasferimento esplicito della sessione a Lightpanda.",
     btnSync: "Sincronizza con Lightpanda",
     syncing: "Trasferimento e verifica in corso…",
-    success: (count) => `✓ Sessione sincronizzata (${count} cookie inseriti).`,
+    success: (count, keys) => `✓ Sessione sincronizzata (${count} cookie, ${keys} chiavi localStorage).`,
+    errStorageExtract: 'Impossibile leggere localStorage su questa pagina (permesso mancante o pagina non iniettabile). Ricarica la scheda e riprova.',
+    errPartialStorage: (got, want) => `Trasferimento incompleto: ${got}/${want} chiavi localStorage arrivate a Lightpanda. Sincronizza di nuovo.`,
     errNeedHttps: "Apri un sito HTTPS pubblico (es. Gmail, A6API).",
     errNoRelay: "Il relè locale (porta 8765) non è attivo.",
     errNoCookies: "Nessun cookie trovato per questa pagina.",
+    errCookiesOutOfScope: "Questi cookie sono fuori dai permessi dell'estensione. Ricarica l'estensione (chrome://extensions) e riprova.",
     errRefused: "Trasferimento rifiutato dal relè locale.",
     footerTag: "Profilo isolato · Localhost CDP",
     sessionsLabel: "Sessioni attive in Lightpanda",
@@ -164,6 +195,8 @@ const I18N = {
     sessionRemove: "Rimuovi questa sessione"
   },
   pt: {
+    clearConfirm: "Clique novamente para limpar tudo",
+    clearedToast: "Todas as sessões apagadas",
     code: "PT",
     relayChecking: "Verificando…",
     relayOnline: "Relé Online",
@@ -175,10 +208,13 @@ const I18N = {
     consent: "Autorizo a transferência explícita da sessão autenticada para o Lightpanda.",
     btnSync: "Sincronizar para Lightpanda",
     syncing: "Transferindo e verificando sessão…",
-    success: (count) => `✓ Sessão sincronizada (${count} cookies injetados).`,
+    success: (count, keys) => `✓ Sessão sincronizada (${count} cookies, ${keys} chaves de localStorage).`,
+    errStorageExtract: 'Não foi possível ler o localStorage nesta página (permissão ausente ou página não injetável). Recarregue a aba e tente novamente.',
+    errPartialStorage: (got, want) => `Transferência incompleta: ${got}/${want} chaves de localStorage chegaram ao Lightpanda. Sincronize novamente.`,
     errNeedHttps: "Abra um site HTTPS público (ex: Gmail, A6API).",
     errNoRelay: "O relé local (porta 8765) não está em execução.",
     errNoCookies: "Nenhum cookie encontrado para esta página.",
+    errCookiesOutOfScope: "Estes cookies estão fora das permissões da extensão. Recarregue a extensão (chrome://extensions) e tente novamente.",
     errRefused: "Transferência recusada pelo relé local.",
     footerTag: "Perfil isolado · Localhost CDP",
     sessionsLabel: "Sessões ativas no Lightpanda",
@@ -198,10 +234,13 @@ const I18N = {
     consent: "أوافق على نقل جلسة المصادقة صراحةً إلى Lightpanda.",
     btnSync: "مزامنة إلى Lightpanda",
     syncing: "جاري النقل والتحقق…",
-    success: (count) => `✓ تمت مزامنة الجلسة (تم حقن ${count} ملف تعريف).`,
+    success: (count, keys) => `✓ تمت مزامنة الجلسة (${count} ملف تعريف، ${keys} مفتاح localStorage).`,
+    errStorageExtract: 'تعذر قراءة localStorage في هذه الصفحة (صلاحية ناقصة أو صفحة غير قابلة للحقن). أعد تحميل التبويب وحاول مرة أخرى.',
+    errPartialStorage: (got, want) => `النقل غير مكتمل: ${got}/${want} مفتاح localStorage وصل إلى Lightpanda. أعد المزامنة.`,
     errNeedHttps: "يرجى فتح موقع HTTPS عام.",
     errNoRelay: "المرحل المحلي (المنفذ 8765) لا يعمل.",
     errNoCookies: "لم يتم العثور على ملفات تعريف الارتباط.",
+    errCookiesOutOfScope: "ملفات تعريف الارتباط هذه خارج نطاق أذونات الإضافة. أعد تحميل الإضافة (chrome://extensions) ثم أعد المحاولة.",
     errRefused: "تم رفض النقل بواسطة المرحل المحلي.",
     footerTag: "ملف تعريف معزول · Localhost CDP",
     sessionsLabel: "الجلسات النشطة في Lightpanda",
@@ -210,6 +249,8 @@ const I18N = {
     sessionRemove: "إزالة هذه الجلسة"
   },
   ru: {
+    clearConfirm: "Нажмите ещё раз, чтобы очистить всё",
+    clearedToast: "Все сессии удалены",
     code: "RU",
     relayChecking: "Проверка…",
     relayOnline: "Реле онлайн",
@@ -221,10 +262,13 @@ const I18N = {
     consent: "Я разрешаю явную передачу аутентифицированного сеанса в Lightpanda.",
     btnSync: "Синхронизировать с Lightpanda",
     syncing: "Перенос и проверка сеанса…",
-    success: (count) => `✓ Сеанс синхронизирован (внедрено ${count} cookie).`,
+    success: (count, keys) => `✓ Сеанс синхронизирован (${count} cookie, ${keys} ключей localStorage).`,
+    errStorageExtract: 'Не удалось прочитать localStorage на этой странице (нет разрешения или страница не поддерживает внедрение). Перезагрузите вкладку и повторите.',
+    errPartialStorage: (got, want) => `Перенос неполный: ${got}/${want} ключей localStorage достигли Lightpanda. Синхронизируйте снова.`,
     errNeedHttps: "Откройте общедоступный сайт HTTPS (например, Gmail, A6API).",
     errNoRelay: "Локальное реле (порт 8765) не запущено.",
     errNoCookies: "Файлы cookie для этой страницы не найдены.",
+    errCookiesOutOfScope: "Эти файлы cookie вне разрешений расширения. Перезагрузите расширение (chrome://extensions) и повторите попытку.",
     errRefused: "Перенос отклонен локальным реле.",
     footerTag: "Изолированный профиль · Localhost CDP",
     sessionsLabel: "Активные сеансы в Lightpanda",
@@ -259,6 +303,17 @@ const sessionsList = document.querySelector('#sessions-list');
 const sessionsClear = document.querySelector('#sessions-clear');
 const labelSessions = document.querySelector('#label-sessions');
 const clearText = document.querySelector('#clear-text');
+const clearTextBase = clearText ? clearText.textContent : '';
+const toastEl = document.querySelector('#toast');
+
+let toastTimer = null;
+function showToast(msg) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
 
 let currentTab = null;
 let currentLanguage = localStorage.getItem('lightpanda-lang') || 'en'; // Default English
@@ -473,11 +528,34 @@ sessionsToggle.addEventListener('click', () => {
 });
 
 sessionsClear.addEventListener('click', async () => {
+  // Two-step confirmation so a mis-click never wipes every synced session.
+  if (!sessionsClear.dataset.armed) {
+    sessionsClear.dataset.armed = '1';
+    sessionsClear.textContent = t('clearConfirm');
+    setTimeout(() => {
+      if (sessionsClear.dataset.armed) {
+        delete sessionsClear.dataset.armed;
+        sessionsClear.textContent = clearTextBase;
+      }
+    }, 3500);
+    return;
+  }
+  delete sessionsClear.dataset.armed;
+  sessionsClear.textContent = clearTextBase;
   sessionsClear.disabled = true;
   await clearSessionsOnRelay(null);
   await refreshSessions();
+  showToast(t('clearedToast'));
   sessionsClear.disabled = false;
 });
+
+// Keep the counter honest while the popup stays open (30s cadence, only when
+// the tab is still visible to avoid pointless relay hits).
+setInterval(() => {
+  if (document.visibilityState === 'visible' && bridgeToken) {
+    refreshSessions();
+  }
+}, 30000);
 
 async function init() {
   applyTranslations();
@@ -551,30 +629,65 @@ transferEl.addEventListener('click', async () => {
     const url = currentTab?.url || '';
     const origin = new URL(url).origin;
 
-    // 1. Fetch Cookies
-    const cookies = await chrome.cookies.getAll({ url });
+    // 1. Fetch Cookies.
+    // chrome.cookies.getAll({url}) silently hides cookies whose `secure` flag
+    // does not match the URL scheme, and returns nothing at all when the
+    // extension holds no host permission for that scheme. Falling back to a
+    // domain query - and telling a scope problem apart from a genuinely empty
+    // jar - is what stops a live session from being reported as "no cookies".
+    let cookies = await chrome.cookies.getAll({ url });
     if (!cookies || cookies.length === 0) {
-      throw new Error(t('errNoCookies'));
+      const host = new URL(url).hostname;
+      const byDomain = await chrome.cookies.getAll({ domain: host });
+      if (byDomain && byDomain.length) {
+        cookies = byDomain;
+      } else {
+        let inScope = true;
+        try {
+          inScope = await chrome.permissions.contains({
+            origins: [`https://${host}/*`, `http://${host}/*`]
+          });
+        } catch (_) {}
+        throw new Error(t(inScope ? 'errNoCookies' : 'errCookiesOutOfScope'));
+      }
     }
 
-    // 2. Extract localStorage
+    // 2. Extract localStorage.
+    //    Retried once, and its failure is REPORTED instead of swallowed: a
+    //    snapshot that silently comes back empty (or half-built while the SPA
+    //    is still booting) is what makes the next authenticated call fail with
+    //    a 401/407 - a6api builds its New-Api-User header from
+    //    localStorage["user"], so one missing key breaks the whole session.
     let storage = null;
-    try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: currentTab.id },
-        func: () => {
-          const data = {};
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            data[k] = localStorage.getItem(k);
+    let storageError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          func: () => {
+            const data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              data[k] = localStorage.getItem(k);
+            }
+            return data;
           }
-          return data;
+        });
+        const got = results && results[0] ? results[0].result : null;
+        if (got && typeof got === 'object') {
+          storage = got;
+          storageError = null;
+          if (Object.keys(got).length) break;
         }
-      });
-      if (results && results[0]?.result) {
-        storage = results[0].result;
+      } catch (err) {
+        storageError = err;
       }
-    } catch (_) {}
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (storageError && !storage) {
+      throw new Error(t('errStorageExtract'));
+    }
+    const storageKeys = storage ? Object.keys(storage).length : 0;
 
     // 3. Send payload to Relay (authenticated with shared token)
     const payload = { origin, cookies, storage };
@@ -589,7 +702,15 @@ transferEl.addEventListener('click', async () => {
       throw new Error(result.error || t('errRefused'));
     }
 
-    setStatus(t('success', result.cookie_count), 'success');
+    // The relay verifies EVERY key it was sent, so a short count means a
+    // partial snapshot reached Lightpanda. It must never read as success here
+    // either: that is a session that looks synced and answers 401/407.
+    if (typeof result.storage_count === 'number' && storageKeys &&
+        result.storage_count < storageKeys) {
+      throw new Error(t('errPartialStorage', result.storage_count, storageKeys));
+    }
+
+    setStatus(t('success', result.cookie_count, result.storage_count ?? storageKeys), 'success');
     // Refresh the sessions panel immediately so the counter and the list
     // reflect the sync that just happened (no extra click needed).
     sessionsCard.classList.add('open');

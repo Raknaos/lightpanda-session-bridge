@@ -433,6 +433,25 @@
     }
     .sessions-clear:hover { background: rgba(225, 29, 72, 0.14); }
     .sessions-empty { font-size: 11.5px; color: var(--muted); font-weight: 600; padding: 2px 0; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: rgba(20, 24, 34, 0.92);
+      color: #e8ecf5;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease, transform .25s ease;
+      border: 1px solid rgba(120, 140, 180, .25);
+      z-index: 50;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
@@ -512,10 +531,11 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         <span id="footer-secure-tag">Isolated Profile · Localhost CDP</span>
       </div>
-      <span>v0.4.2</span>
+      <span>v0.4.3</span>
     </footer>
   </div>
 
   <script src="popup.js"></script>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

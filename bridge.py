@@ -23,6 +23,16 @@ import sys
 import time
 import urllib.request
 
+# Windows consoles (and Task Scheduler / pythonw, which default to cp1252 or
+# cp850) cannot encode the Unicode check marks printed below: the resulting
+# UnicodeEncodeError killed `bridge.py start` *before* it ever reached the relay
+# launch step, so scheduled/watchdog runs silently never brought the relay up.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 LP_PORT = 9222
 RELAY_PORT = 8765
@@ -160,22 +170,62 @@ def _start_lightpanda() -> bool:
     return False
 
 
+def _interpreter_has_deps(python_exe: str) -> bool:
+    """True if `python_exe` can import the relay's dependencies."""
+    try:
+        r = subprocess.run([python_exe, "-c", "import websocket"],
+                           capture_output=True, timeout=30)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _pick_interpreter() -> str:
+    """Pick an interpreter that can actually run the relay.
+
+    The relay needs websocket-client. A system Python may not have it, and
+    spawning the relay with such an interpreter fails instantly and silently —
+    which is exactly how "the relay never comes back up" looked for hours.
+    Prefer the project-local venv when present, then the current interpreter.
+    """
+    candidates = []
+    if IS_WINDOWS:
+        candidates.append(os.path.join(ROOT, ".venv", "Scripts", "python.exe"))
+    else:
+        candidates.append(os.path.join(ROOT, ".venv", "bin", "python"))
+    candidates.append(sys.executable)
+    for exe in candidates:
+        if os.path.exists(exe) and _interpreter_has_deps(exe):
+            return exe
+    return sys.executable
+
+
 def _start_relay() -> bool:
     if relay_up():
         return True
+    python_exe = _pick_interpreter()
+    log_path = os.path.join(ROOT, "logs", "relay.log")
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8", errors="replace")
+    except Exception:
+        log_file = subprocess.DEVNULL
+    cmd = [python_exe, os.path.join(ROOT, "relay", "server.py"), "--port", str(RELAY_PORT)]
     if IS_WINDOWS:
-        subprocess.Popen(
-            [sys.executable, os.path.join(ROOT, "relay", "server.py"), "--port", str(RELAY_PORT)],
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        subprocess.Popen(cmd, cwd=ROOT, stdout=log_file, stderr=subprocess.STDOUT,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     else:
-        subprocess.Popen([sys.executable, os.path.join(ROOT, "relay", "server.py"),
-                          "--port", str(RELAY_PORT)],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        subprocess.Popen(cmd, cwd=ROOT, stdout=log_file, stderr=subprocess.STDOUT,
                          start_new_session=True)
+    if not _interpreter_has_deps(python_exe):
+        print(f"   ⚠ {python_exe} cannot import websocket-client.")
+        print("     Run: python bridge.py setup   (creates .venv and installs deps)")
+        return False
     for _ in range(15):
         time.sleep(1)
         if relay_up():
             return True
+    print(f"   ⚠ relay did not answer on port {RELAY_PORT}; see {log_path}")
     return False
 
 

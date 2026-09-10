@@ -32,8 +32,11 @@ _CDP_ORIGIN = None
 _DNS_CACHE: dict = {}
 _DNS_CACHE_TTL = 60.0
 BLOCKED_IDP_HOSTS = {
+    # Actual identity-provider LOGIN endpoints only. Regular sites users log
+    # into (github.com, gitlab.com, x.com, ...) are legitimate sync targets —
+    # the whole point of the bridge is handing SITE sessions to agents.
     "accounts.google.com", "login.microsoftonline.com", "appleid.apple.com",
-    "login.live.com", "auth0.com", "github.com",
+    "login.live.com", "auth0.com",
 }
 # Suffixes that must never be treated as registrable parent domains (cookie domain)
 PUBLIC_SUFFIXES = {
@@ -55,20 +58,23 @@ def _load_secret() -> str:
         with open(path, "r", encoding="utf-8") as fh:
             value = fh.read().strip()
             if value:
+                if os.name != "nt":
+                    try:
+                        if (os.stat(path).st_mode & 0o077) != 0:
+                            _harden_path(path)
+                    except OSError:
+                        pass
                 return value
     except FileNotFoundError:
         pass
-    # Generate a fresh random secret and persist it
+    # Generate a fresh random secret and persist it owner-only from creation
+    # (write-then-chmod leaves a window where the file is world-readable).
     import secrets
     value = secrets.token_urlsafe(32)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(value)
-        try:
-            os.chmod(path, 0o600)
-        except OSError:
-            pass
+        _harden_path(os.path.dirname(path), directory=True)
+        _write_owner_only(path, value)
     except OSError:
         pass
     return value
@@ -83,6 +89,77 @@ def _config_dir() -> str:
 
 def _secret_path() -> str:
     return os.path.join(_config_dir(), "secret")
+
+
+def _session_state_path() -> str:
+    return os.path.join(_config_dir(), "session.json")
+
+
+def _harden_path(path: str, directory: bool = False) -> None:
+    """Best-effort owner-only permissions for a secret-bearing path.
+
+    POSIX: 0700/0600. Windows: NTFS ACL (chmod is mostly cosmetic there), so
+    the file is re-ACL'd to the current user only. Never raises."""
+    mode = 0o700 if directory else 0o600
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+    if os.name != "nt":
+        return
+    try:
+        import subprocess
+        user = os.environ.get("USERNAME") or ""
+        if not user:
+            return
+        grant = f"{user}:(F)"
+        if directory:
+            grant = f"{user}:(OI)(CI)(F)"
+        subprocess.run(["icacls", path, "/inheritance:r", "/grant:r", grant],
+                       capture_output=True, timeout=10,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception:
+        pass
+
+
+def _write_owner_only(path: str, text: str) -> None:
+    """Create/replace a file readable only by its owner (no chmod race)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    _harden_path(path)
+
+
+def _persist_session(state: dict | None) -> None:
+    """Remember the last synced session on disk so a relay restart, a reboot
+    or a crashed watchdog cannot silently drop the user's authentication.
+
+    Cookie values are written to a 0600 owner-only file outside the repo and
+    are never logged. Passing None erases the file."""
+    path = _session_state_path()
+    try:
+        if state is None:
+            if os.path.exists(path):
+                os.remove(path)
+            return
+        os.makedirs(_config_dir(), exist_ok=True)
+        _harden_path(_config_dir(), directory=True)
+        _write_owner_only(path, json.dumps(state))
+    except OSError:
+        pass
+
+
+def _load_persisted_session() -> dict | None:
+    """Read back a session persisted by a previous relay process."""
+    try:
+        with open(_session_state_path(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return None
+    if (isinstance(data, dict) and isinstance(data.get("origin"), str)
+            and isinstance(data.get("cookies"), list) and data["cookies"]):
+        return data
+    return None
 
 
 def _pinned_extension_path() -> str:
@@ -132,12 +209,8 @@ def _save_pinned_extension_id(ext_id: str) -> None:
     path = _pinned_extension_path()
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(ext_id)
-        try:
-            os.chmod(path, 0o600)
-        except OSError:
-            pass
+        _harden_path(os.path.dirname(path), directory=True)
+        _write_owner_only(path, ext_id)
     except OSError:
         pass
 
@@ -169,10 +242,13 @@ def is_valid_extension_origin(origin: str, auto_pin: bool = False) -> bool:
         return False
     pinned = _load_pinned_extension_id()
     if not pinned:
+        # Only the bootstrap handshake (auto_pin=True) may admit an unknown
+        # extension: with LP_BRIDGE_TOFU=1 the previous code returned True for
+        # ANY chrome-extension:// origin on non-pinning endpoints too.
         if auto_pin:
             _save_pinned_extension_id(ext_id)
             return True
-        return True
+        return False
     allowed = _get_allowed_extension_ids()
     return ext_id == pinned or ext_id in allowed
 
@@ -397,12 +473,131 @@ def _connection_resync() -> None:
         _CDP_TARGET_ID = None
         _ensure_connection(origin)
         if _LAST_SESSION:
-            cookies = _LAST_SESSION["cookies"]
+            # Cookies AND localStorage must both be replayed: with cookies only,
+            # every console call comes back 407 (the SPA builds its
+            # New-Api-User header from localStorage["user"]).
+            _apply_session(origin, _LAST_SESSION["cookies"],
+                           _LAST_SESSION.get("storage"))
+
+
+def _storage_entries(storage: dict) -> dict:
+    """Sanitize a localStorage snapshot: bounded key/value sizes only."""
+    if not isinstance(storage, dict):
+        return {}
+    return {str(k): str(v) for k, v in storage.items()
+            if len(str(k)) < 128 and len(str(v)) < 16384}
+
+
+def _register_storage_restore(storage: dict) -> bool:
+    """Make localStorage survive EVERY later navigation of this target.
+
+    Lightpanda keeps localStorage in the page context, so injecting it and then
+    navigating wipes it (the 'user' key vanished -> every authenticated call
+    came back 407 "New-Api-User header not provided"). Re-registering a
+    document-start restore is the durable fix: the snapshot is re-applied on
+    each new document instead of relying on one lucky injection.
+    """
+    entries = _storage_entries(storage)
+    if not entries:
+        return False
+    source = ("(function(){try{var d=" + json.dumps(entries) +
+              ";for(var k in d){try{localStorage.setItem(k,d[k]);}catch(e){}}"
+              "}catch(e){}})();")
+    try:
+        _CDP_TRANSPORT.request(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": source},
+            session_id=_CDP_SESSION_ID,
+        )
+        return True
+    except Exception:
+        return False
+
+
+# Delay allowed for the page context to settle after a navigation before
+# localStorage is written (tests set it to 0).
+_NAV_SETTLE_SECONDS = 1.5
+
+
+def _apply_session(origin: str, cookies: list[dict], storage: dict | None = None) -> int:
+    """Push a session onto the live Lightpanda page: cookies, then storage.
+
+    Order is load-bearing: navigate FIRST, inject localStorage AFTER (a
+    navigation after the injection wipes it), then register the document-start
+    restore so no later navigation can lose it either."""
+    _ensure_connection(origin)
+    _CDP_TRANSPORT.request(
+        "Network.setCookies", {"cookies": cookies}, session_id=_CDP_SESSION_ID
+    )
+    try:
+        _CDP_TRANSPORT.request(
+            "Page.navigate", {"url": origin + "/"}, session_id=_CDP_SESSION_ID
+        )
+        time.sleep(_NAV_SETTLE_SECONDS)
+    except Exception:
+        pass
+    if isinstance(storage, dict) and storage:
+        count = _inject_storage(origin, storage)
+        _register_storage_restore(storage)
+        return count
+    return 0
+
+
+def _inject_storage(origin: str, storage: dict) -> int:
+    """Set localStorage keys on the live page and return how many were VERIFIED.
+
+    Must run AFTER the page is on the target origin (see _apply_session).
+
+    Verification is per key on purpose. "Some keys landed" is not success: a
+    SPA that rebuilds an auth header from localStorage (a6api reads
+    localStorage["user"] to send New-Api-User) answers 401/407 the moment ONE
+    key is missing. That was the real shape of the bug reported as "the session
+    only works after a second sync": 17 of 29 keys landed, `user` was among the
+    dropped ones, and the write still reported success. Returns -1 when the
+    snapshot is still incomplete after the retries.
+    """
+    entries = _storage_entries(storage)
+    if not entries:
+        return 0
+    entries_json = json.dumps(entries)
+    keys_json = json.dumps(sorted(entries))
+    write_expr = ("(() => { try { const data = " + entries_json + "; "
+                  "for (const k of Object.keys(data)) { try { "
+                  "localStorage.setItem(k, data[k]); } catch (e) {} } "
+                  "return Object.keys(data).length; } catch (e) { return -1; } })()")
+    # Keys the snapshot still needs: 0 means the transfer is complete.
+    verify_expr = ("(() => { try { const want = " + keys_json + "; let missing = 0; "
+                   "for (const k of want) { if (localStorage.getItem(k) === null) "
+                   "missing++; } return missing; } catch (e) { return -1; } })()")
+    for attempt in range(4):
+        try:
             _CDP_TRANSPORT.request(
-                "Network.setCookies",
-                {"cookies": cookies},
+                "Runtime.evaluate",
+                {"expression": write_expr, "returnByValue": True},
                 session_id=_CDP_SESSION_ID,
             )
+            res = _CDP_TRANSPORT.request(
+                "Runtime.evaluate",
+                {"expression": verify_expr, "returnByValue": True},
+                session_id=_CDP_SESSION_ID,
+            )
+            missing = res.get("result", {}).get("value", -1)
+            if missing == 0:
+                return len(entries)
+        except Exception:
+            pass
+        # A navigation replays a previously registered document-start restore
+        # and gives the page a fresh, clean context to write into.
+        if attempt == 0:
+            try:
+                _CDP_TRANSPORT.request(
+                    "Page.navigate", {"url": origin + "/"}, session_id=_CDP_SESSION_ID
+                )
+                time.sleep(_NAV_SETTLE_SECONDS)
+            except Exception:
+                pass
+        time.sleep(0.5)
+    return -1
 
 
 def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -> tuple[int, int]:
@@ -419,48 +614,7 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
     with CDP_LOCK:
         _ensure_connection(origin)
 
-        # Inject cookies via Network.setCookies
-        _CDP_TRANSPORT.request(
-            "Network.setCookies",
-            {"cookies": converted},
-            session_id=_CDP_SESSION_ID,
-        )
-
-        # Inject localStorage if provided
-        if isinstance(storage, dict) and storage:
-            # Build safe js injection script
-            entries_json = json.dumps({str(k): str(v) for k, v in storage.items() if len(str(k)) < 128 and len(str(v)) < 16384})
-            expr = f"""(() => {{
-                try {{
-                    const data = {entries_json};
-                    for (const [k, v] of Object.entries(data)) {{
-                        localStorage.setItem(k, v);
-                    }}
-                    return Object.keys(data).length;
-                }} catch (e) {{
-                    return -1;
-                }}
-            }})()"""
-            try:
-                res = _CDP_TRANSPORT.request(
-                    "Runtime.evaluate",
-                    {"expression": expr, "returnByValue": True},
-                    session_id=_CDP_SESSION_ID
-                )
-                val = res.get("result", {}).get("value", 0)
-                if val > 0:
-                    storage_count = val
-            except Exception:
-                pass
-
-        # Navigate the live target onto the origin so the authenticated page
-        # is immediately usable by agents (Lightpanda exposes a single page).
-        try:
-            _CDP_TRANSPORT.request(
-                "Page.navigate", {"url": origin + "/"}, session_id=_CDP_SESSION_ID
-            )
-        except Exception:
-            pass
+        storage_count = _apply_session(origin, converted, storage)
 
         # Verification via Network.getCookies
         result = _CDP_TRANSPORT.request(
@@ -476,11 +630,60 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         if not any(str(item["name"]) in names for item in converted):
             raise RuntimeError("Lightpanda cookie verification failed: no cookies found")
 
-        # Remember in memory for automatic resync after a Lightpanda restart.
-        _LAST_SESSION = {"origin": origin, "cookies": converted}
+        # Remember the session for automatic resync after a Lightpanda restart
+        # AND persist it, so a relay restart / reboot / watchdog restart no
+        # longer forces the user to click "Synchroniser" again.
+        safe_storage = _storage_entries(storage or {})
+        _LAST_SESSION = {"origin": origin, "cookies": converted, "storage": safe_storage}
         _SYNCED_SESSIONS[origin] = converted
+        _persist_session(_LAST_SESSION)
+
+        # A half-transferred localStorage snapshot is worse than a visible
+        # failure: cookies + some keys look "synced" while every authenticated
+        # call returns 401/407. Bookkeeping is done (a resync can finish the
+        # job), but the caller is told the truth.
+        expected_storage = len(safe_storage)
+        if expected_storage and storage_count != expected_storage:
+            raise RuntimeError(
+                "localStorage transfer incomplete: %d/%d keys verified"
+                % (max(storage_count, 0), expected_storage)
+            )
 
         return len(converted), storage_count
+
+
+_PERSISTED_LOADED = False
+_PERSISTED_APPLIED = False
+
+
+def _restore_persisted_session() -> bool:
+    """Bring back the session saved by a previous relay process.
+
+    Two separate steps on purpose: the state is LOADED once (so /v1/sessions
+    reports it immediately) and APPLIED whenever Lightpanda is reachable, with
+    a retry on every call until it succeeds. Before this, a relay restart left
+    a "healthy" relay (attached: false) with an empty cookie jar, and agent
+    calls silently ran unauthenticated - the exact failure users saw as
+    "the session disappeared between two runs".
+    """
+    global _LAST_SESSION, _PERSISTED_LOADED, _PERSISTED_APPLIED
+    if not _PERSISTED_LOADED:
+        _PERSISTED_LOADED = True
+        if not _LAST_SESSION:
+            state = _load_persisted_session()
+            if state:
+                _LAST_SESSION = state
+                _SYNCED_SESSIONS.setdefault(state["origin"], state["cookies"])
+    if _PERSISTED_APPLIED or not _LAST_SESSION:
+        return False
+    try:
+        with CDP_LOCK:
+            _apply_session(_LAST_SESSION["origin"], _LAST_SESSION["cookies"],
+                           _LAST_SESSION.get("storage"))
+        _PERSISTED_APPLIED = True
+        return True
+    except Exception:
+        return False
 
 
 def proxy_cdp(method: str, params: dict | None = None) -> dict:
@@ -499,6 +702,7 @@ def proxy_cdp(method: str, params: dict | None = None) -> dict:
     with CDP_LOCK:
         try:
             _ensure_connection("https://example.com")
+            _restore_persisted_session()
             return _CDP_TRANSPORT.request(method, params, session_id=_CDP_SESSION_ID)
         except (websocket.WebSocketException, OSError, RuntimeError):
             # Connection lost (Lightpanda restarted?) -> resync + one retry
@@ -509,6 +713,10 @@ def proxy_cdp(method: str, params: dict | None = None) -> dict:
 def list_sessions() -> list[dict]:
     """Sanitized view of synced sessions: origin, cookie count, expiry metadata.
     Never returns cookie values."""
+    try:
+        _restore_persisted_session()
+    except Exception:
+        pass
     out = []
     for origin, cookies in _SYNCED_SESSIONS.items():
         host = origin_hostname(origin)
@@ -561,11 +769,16 @@ def clear_sessions(origin: str | None = None) -> int:
                     removed += 1
                 except Exception:
                     pass
+            was_synced = org in _SYNCED_SESSIONS
             _SYNCED_SESSIONS.pop(org, None)
             if _LAST_SESSION and _LAST_SESSION.get("origin") == org:
                 globals()["_LAST_SESSION"] = None
-            if removed or org in _SYNCED_SESSIONS:
+            if removed or was_synced:
                 cleared += 1
+        # Erase the persisted copy too: "Tout retirer" must mean it is gone,
+        # not that it comes back at the next restart.
+        if globals().get("_LAST_SESSION") is None:
+            _persist_session(None)
         return cleared
 
 
@@ -575,7 +788,10 @@ def re_fullmatch_method(method: str) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LightpandaSessionBridge/0.2"
+    # Neutral banner: the enum response is readable by any local process, so it
+    # carries no product name or version.
+    server_version = "loopback-relay"
+    sys_version = ""
 
     def log_message(self, _format: str, *_args) -> None:
         return
@@ -591,9 +807,11 @@ class Handler(BaseHTTPRequestHandler):
         if request_origin.startswith("chrome-extension://") and is_valid_extension_origin(request_origin):
             self.send_header("Access-Control-Allow-Origin", request_origin)
             self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+            # Private Network Access opt-in: only ever advertised to the pinned
+            # extension, never to a web page probing 127.0.0.1.
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
         self.wfile.write(body)
 
@@ -676,6 +894,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
+                if length > 10_000:
+                    raise ValueError("body refused")
                 origin = None
                 if length > 0:
                     self.connection.settimeout(10)
@@ -783,8 +1003,37 @@ def self_test() -> int:
     assert extract_extension_id("chrome-extension://invalid-id") is None
     assert extract_extension_id("https://example.com") is None
     assert extract_extension_id("") is None
+    # Unknown extension is only admitted by the bootstrap handshake.
+    # Sandbox the config dir: auto_pin writes the pin, and a self-test must
+    # never overwrite the user's real pinned extension id.
+    import tempfile
+    sandbox = tempfile.mkdtemp(prefix="lp-bridge-selftest-")
+    prev_cfg = os.environ.get("LP_BRIDGE_CONFIG_DIR")
+    os.environ["LP_BRIDGE_CONFIG_DIR"] = sandbox
+    os.environ["LP_BRIDGE_TOFU"] = "1"
+    _clear_pinned_extension_cache()
+    try:
+        assert not is_valid_extension_origin("chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh", auto_pin=False)
+        assert is_valid_extension_origin("chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh", auto_pin=True)
+    finally:
+        os.environ.pop("LP_BRIDGE_TOFU", None)
+        if prev_cfg is None:
+            os.environ.pop("LP_BRIDGE_CONFIG_DIR", None)
+        else:
+            os.environ["LP_BRIDGE_CONFIG_DIR"] = prev_cfg
+        _clear_pinned_extension_cache()
+        import shutil as _shutil
+        _shutil.rmtree(sandbox, ignore_errors=True)
     print("security self-test: ok")
     return 0
+
+
+class RelayServer(ThreadingHTTPServer):
+    daemon_threads = True
+    # On Windows SO_REUSEADDR lets a SECOND process bind an already-listening
+    # port, which silently produced two relays: one owning the synced sessions,
+    # the other answering "attached: false" to every agent. Keep it exclusive.
+    allow_reuse_address = False
 
 
 def main() -> int:
@@ -794,7 +1043,21 @@ def main() -> int:
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    ThreadingHTTPServer((HOST, args.port), Handler).serve_forever()
+    try:
+        server = RelayServer((HOST, args.port), Handler)
+    except OSError as err:
+        # Address already in use: a relay is already serving this port (the
+        # watchdog and the scheduled task can race). Exiting 0 keeps Task
+        # Scheduler from restart-looping the task forever.
+        if getattr(err, "errno", None) in (48, 98, 10048) or "in use" in str(err).lower():
+            print(f"[relay] port {args.port} already served by another relay; nothing to do")
+            return 0
+        raise
+    print(f"[relay] listening on http://{HOST}:{args.port}")  # ASCII only: cp1252 consoles
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
