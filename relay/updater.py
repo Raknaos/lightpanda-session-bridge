@@ -55,6 +55,17 @@ BUILD_INFO = ".build-info.json"
 BACKUP_DIRNAME = "extension-backup"
 CACHE_TTL = 60.0
 USER_AGENT = "lightpanda-session-bridge-updater"
+# api.github.com refuses a media type it cannot *produce*: asking for
+# `application/octet-stream` on /repos/.../tarball or /commits/main is answered
+# with `415 Unsupported Media Type`. That is how "install the latest commit"
+# failed on 2026-09-10 (v0.5.4): the main channel reused the octet-stream
+# Accept meant for the CDN and the API rejected it before a single byte of the
+# archive was sent. Measured: the same tarball URL returns 200 with
+# `application/vnd.github+json` and 200 with no Accept header at all.
+# The guard sits in _fetch, the one place every update request goes through,
+# so no caller can reintroduce it by asking for bytes from the API host.
+API_MEDIA_TYPE = "application/vnd.github+json"
+API_HOSTS = {"api.github.com"}
 
 _CACHE: dict = {"at": 0.0, "data": None}
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]([0-9A-Za-z.\-]+))?$")
@@ -177,19 +188,23 @@ def read_backup_meta() -> dict:
 # GitHub
 # --------------------------------------------------------------------------
 
-def _fetch(url: str, limit: int = MAX_ARCHIVE_BYTES, accept: str = "application/vnd.github+json"):
+def _fetch(url: str, limit: int = MAX_ARCHIVE_BYTES, accept: str = API_MEDIA_TYPE):
     """GET over https, from an allow-listed host only, capped in size.
 
     The allow-list is re-checked on the *final* URL so a redirect cannot walk
-    the download onto an arbitrary origin.
+    the download onto an arbitrary origin. The API host always gets the GitHub
+    media type: it answers 415 to an Accept it cannot produce, whatever the
+    caller asked for (see API_HOSTS).
     """
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS:
         raise RuntimeError("update source refused")
-    request = urllib.request.Request(url, headers={
-        "User-Agent": USER_AGENT,
-        "Accept": accept,
-    })
+    if parsed.hostname in API_HOSTS:
+        accept = API_MEDIA_TYPE
+    headers = {"User-Agent": USER_AGENT}
+    if accept:
+        headers["Accept"] = accept
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         final = urllib.parse.urlparse(response.geturl())
         if final.scheme != "https" or final.hostname not in ALLOWED_HOSTS:

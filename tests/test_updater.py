@@ -626,5 +626,69 @@ class TestPopupLayout(unittest.TestCase):
         self.assertIn("chrome.alarms", worker)
 
 
+
+class TestGitHubAcceptHeader(unittest.TestCase):
+    """v0.5.4 shipped a real bug: the main channel asked api.github.com for
+    `application/octet-stream` and GitHub answered `415 Unsupported Media Type`
+    before sending a single byte. Measured on 2026-09-10, for
+    /repos/.../tarball/<sha>: octet-stream -> 415, vnd.github+json -> 200,
+    no Accept header at all -> 200. The CDN that serves release assets does
+    serve octet-stream, so the fix belongs in the choke point, not in a caller.
+    """
+
+    class _FakeResponse:
+        status = 200
+        headers = {"Content-Length": "2"}
+
+        def __init__(self, url):
+            self._url = url
+
+        def geturl(self):
+            return self._url
+
+        def read(self, size=-1):
+            return b"ok"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def _capture(self, url, accept):
+        seen = {}
+
+        def fake_urlopen(request, timeout=None):
+            seen["url"] = request.full_url
+            seen["accept"] = request.get_header("Accept")
+            return self._FakeResponse(request.full_url)
+
+        with unittest.mock.patch.object(updater.urllib.request, "urlopen", fake_urlopen):
+            updater._fetch(url, accept=accept)
+        return seen
+
+    def test_the_api_host_never_receives_a_binary_accept(self):
+        api = "https://api.github.com/repos/Raknaos/lightpanda-session-bridge/tarball/main"
+        seen = self._capture(api, "application/octet-stream")
+        self.assertEqual(seen["accept"], updater.API_MEDIA_TYPE)
+
+    def test_a_download_host_keeps_the_accept_the_caller_asked_for(self):
+        cdn = "https://release-assets.githubusercontent.com/github-production-release-asset/x.zip"
+        seen = self._capture(cdn, "application/octet-stream")
+        self.assertEqual(seen["accept"], "application/octet-stream")
+
+    def test_the_guard_lives_in_the_single_choke_point(self):
+        src = (REPO_ROOT / "relay" / "updater.py").read_text(encoding="utf-8")
+        body = src[src.index("def _fetch("):src.index("def _fetch_json(")]
+        self.assertIn("if parsed.hostname in API_HOSTS:", body)
+        self.assertIn("accept = API_MEDIA_TYPE", body)
+        # and the main channel still asks for bytes: the guard upgrades it, so
+        # no caller has to know which host an archive will come from.
+        apply_body = src[src.index("def apply_update("):src.index("def rollback_update(")]
+        self.assertIn('archive_name, archive_url, accept, checksum, tag, commit', apply_body)
+        self.assertIn('"application/octet-stream"', apply_body)
+        self.assertIn("_fetch(archive_url, accept=accept)", apply_body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

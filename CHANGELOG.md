@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.5] - 2026-09-10
+### Fixed
+- **"Install the latest commit" failed with `HTTP Error 415: Unsupported Media Type`.** The main channel reused the `Accept: application/octet-stream` header that was written for the CDN that serves release assets, but the archive comes from `api.github.com/repos/.../tarball/<sha>` - and the API refuses a media type it cannot produce. GitHub answered 415 before sending a single byte, so the button did nothing. Measured on the same URL: octet-stream -> **415**, `application/vnd.github+json` -> **200**, no Accept header at all -> **200**.
+- The guard now lives in `_fetch` - the one place every update request goes through - so the API host always receives the GitHub media type and no caller can reintroduce the bug by asking for bytes. Download hosts keep the caller's Accept, because the CDN does serve octet-stream. The release channel worked all along; only the main channel was broken.
+- 3 new tests pin it, including a behavioural one that captures the real header on a stubbed socket: **95 tests, 1 skipped**.
+
 ## [0.5.4] - 2026-09-10
 ### Fixed
 - **The update card's buttons were cut off - the button existed, but it was past the fold.** Chrome caps a popup at 600px tall. The body was pinned to `max-height: 580px` with `overflow: hidden`, and the real content needed ~590px: the button row landed below the cap and was sliced in half. The body now scrolls instead of hiding, and the vertical density was trimmed so the whole popup fits in **563px** in its default state, footer included.
