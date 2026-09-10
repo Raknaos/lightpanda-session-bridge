@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.4] - 2026-09-10
+### Fixed
+- **The update card's buttons were cut off - the button existed, but it was past the fold.** Chrome caps a popup at 600px tall. The body was pinned to `max-height: 580px` with `overflow: hidden`, and the real content needed ~590px: the button row landed below the cap and was sliced in half. The body now scrolls instead of hiding, and the vertical density was trimmed so the whole popup fits in **563px** in its default state, footer included.
+- **The full-width red "Clear all" bar is gone.** It sat alone on its own row at the bottom of the sessions card, where it read as a misplaced primary action. It is now a compact danger pill in the card header, next to the count badge, and it turns solid red once armed.
+- **The "clear all" button lost its inner `<span>` on the first click.** The handler wrote `textContent` on the `<button>` itself, which replaced its markup and detached the label node. The label is now always written to the span; the full sentence ("click again to clear all") moves to the tooltip.
+- **The commit hash was printed twice** - once in the blue chip, once in the line below. The chip now carries the STATE only (`Update` / `Up to date`) and the line below carries the target (`-> commit a478b90`), so no information repeats.
+- **Two long labels no longer fight over one 430px row**: the rollback action is a 38px icon button, with the sentence as its tooltip and `aria-label`.
+- The collapsible sessions card moved to the end of the popup, so opening the list only grows the tail; the list scrolls inside a capped area (132px) instead of pushing the layout.
+### Added
+- `scripts/diagnostics/preview_popup.py` - renders the popup in headless Chrome against a stubbed `chrome` API, prints the measured height of every block, and **exits 1** when the default state does not fit under the cap. The layout is now verifiable without a live browser.
+- 6 layout regression tests pin the fix (hidden overflow behind a fixed cap, compact pill in the header, collapsible card last, no chip/meta duplication): **92 tests, 1 skipped**.
+
 ## [0.5.3] - 2026-09-10
 ### Fixed
 - **x.com could never sync - "5/7 localStorage keys" that no re-sync could clear.** x.com keeps two of its entries under 194-character names (`rweb.sessionBinding.hashClaim:<base64>`). The snapshot filter dropped every key name longer than 128 characters **silently**, so those two were removed before the first write attempt: Lightpanda received 5 of 7, the popup honestly said so, and syncing again could never help because the missing keys never left the relay. Key names up to 1024 characters and values up to 256 KiB are now carried, with the whole snapshot bounded at 1.5 MB so it still fits the import body cap.

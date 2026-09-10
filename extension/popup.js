@@ -27,6 +27,10 @@ const I18N = {
     errCookiesOutOfScope: "These cookies are outside the extension's permission scope. Reload the extension (chrome://extensions) and try again.",
     errRefused: "Transfer refused by local relay.",
     updateLabel: "Bridge update",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Update",
+    updateChipOk: "Up to date",
     updateChecking: "Checking for updates…",
     updateUpToDate: (x) => `Up to date · v${x}`,
     updateAvailable: (x) => `Update available: v${x}`,
@@ -43,6 +47,8 @@ const I18N = {
     sessionsLabel: "Active sessions in Lightpanda",
     sessionsEmpty: "No sessions synced into Lightpanda.",
     sessionsClear: (n) => `Clear all (${n})`,
+    sessionsClearShort: "Clear all",
+    clearConfirmShort: "Confirm?",
     sessionRemove: "Remove this session"
   },
   fr: {
@@ -70,6 +76,10 @@ const I18N = {
     errCookiesOutOfScope: "Ces cookies sont hors du périmètre d'autorisation de l'extension. Rechargez l'extension (chrome://extensions) puis réessayez.",
     errRefused: "Transfert refusé par le relais local.",
     updateLabel: "Mise à jour du Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Mise à jour",
+    updateChipOk: "À jour",
     updateChecking: "Recherche de mise à jour…",
     updateUpToDate: (x) => `À jour · v${x}`,
     updateAvailable: (x) => `Mise à jour disponible : v${x}`,
@@ -86,6 +96,8 @@ const I18N = {
     sessionsLabel: "Sessions actives dans Lightpanda",
     sessionsEmpty: "Aucune session synchronisée dans Lightpanda.",
     sessionsClear: (n) => `Tout retirer (${n})`,
+    sessionsClearShort: "Tout retirer",
+    clearConfirmShort: "Confirmer ?",
     sessionRemove: "Retirer cette session"
   },
   es: {
@@ -113,6 +125,10 @@ const I18N = {
     errCookiesOutOfScope: "Estas cookies están fuera de los permisos de la extensión. Recarga la extensión (chrome://extensions) e inténtalo de nuevo.",
     errRefused: "Transferencia rechazada por el relé local.",
     updateLabel: "Actualización del Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Actualización",
+    updateChipOk: "Al día",
     updateChecking: "Buscando actualizaciones…",
     updateUpToDate: (x) => `Al día · v${x}`,
     updateAvailable: (x) => `Actualización disponible: v${x}`,
@@ -129,6 +145,8 @@ const I18N = {
     sessionsLabel: "Sesiones activas en Lightpanda",
     sessionsEmpty: "No hay sesiones sincronizadas en Lightpanda.",
     sessionsClear: (n) => `Borrar todas (${n})`,
+    sessionsClearShort: "Borrar todo",
+    clearConfirmShort: "¿Confirmar?",
     sessionRemove: "Eliminar esta sesión"
   },
   de: {
@@ -156,6 +174,10 @@ const I18N = {
     errCookiesOutOfScope: "Diese Cookies liegen außerhalb der Berechtigungen der Erweiterung. Lade die Erweiterung neu (chrome://extensions) und versuche es erneut.",
     errRefused: "Übertragung vom lokalen Relais abgelehnt.",
     updateLabel: "Bridge-Aktualisierung",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Aktualisierung",
+    updateChipOk: "Aktuell",
     updateChecking: "Suche nach Updates…",
     updateUpToDate: (x) => `Aktuell · v${x}`,
     updateAvailable: (x) => `Update verfügbar: v${x}`,
@@ -172,6 +194,8 @@ const I18N = {
     sessionsLabel: "Aktive Sitzungen in Lightpanda",
     sessionsEmpty: "Keine Sitzungen in Lightpanda synchronisiert.",
     sessionsClear: (n) => `Alle löschen (${n})`,
+    sessionsClearShort: "Alle entfernen",
+    clearConfirmShort: "Bestätigen?",
     sessionRemove: "Diese Sitzung entfernen"
   },
   zh: {
@@ -197,6 +221,10 @@ const I18N = {
     errCookiesOutOfScope: "这些 Cookie 超出扩展程序的权限范围。请重新加载扩展程序（chrome://extensions）后重试。",
     errRefused: "本地中继拒绝了传输。",
     updateLabel: "Bridge 更新",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "有更新",
+    updateChipOk: "已是最新",
     updateChecking: "正在检查更新…",
     updateUpToDate: (x) => `已是最新 · v${x}`,
     updateAvailable: (x) => `有可用更新：v${x}`,
@@ -213,6 +241,8 @@ const I18N = {
     sessionsLabel: "Lightpanda 中的活动会话",
     sessionsEmpty: "Lightpanda 中没有已同步的会话。",
     sessionsClear: (n) => `清除全部（${n}）`,
+    sessionsClearShort: "全部清除",
+    clearConfirmShort: "确认？",
     sessionRemove: "移除此会话"
   },
   ja: {
@@ -238,6 +268,10 @@ const I18N = {
     errCookiesOutOfScope: "これらのCookieは拡張機能の権限範囲外です。拡張機能を再読み込み（chrome://extensions）して再試行してください。",
     errRefused: "ローカルリレーによって転送が拒否されました。",
     updateLabel: "Bridge の更新",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "更新あり",
+    updateChipOk: "最新",
     updateChecking: "更新を確認中…",
     updateUpToDate: (x) => `最新です · v${x}`,
     updateAvailable: (x) => `更新があります: v${x}`,
@@ -254,6 +288,8 @@ const I18N = {
     sessionsLabel: "Lightpanda内のアクティブなセッション",
     sessionsEmpty: "Lightpandaに同期されたセッションはありません。",
     sessionsClear: (n) => `すべて削除（${n}）`,
+    sessionsClearShort: "すべて削除",
+    clearConfirmShort: "確認？",
     sessionRemove: "このセッションを削除"
   },
   it: {
@@ -281,6 +317,10 @@ const I18N = {
     errCookiesOutOfScope: "Questi cookie sono fuori dai permessi dell'estensione. Ricarica l'estensione (chrome://extensions) e riprova.",
     errRefused: "Trasferimento rifiutato dal relè locale.",
     updateLabel: "Aggiornamento Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Aggiornamento",
+    updateChipOk: "Aggiornato",
     updateChecking: "Ricerca aggiornamenti…",
     updateUpToDate: (x) => `Aggiornato · v${x}`,
     updateAvailable: (x) => `Aggiornamento disponibile: v${x}`,
@@ -297,6 +337,8 @@ const I18N = {
     sessionsLabel: "Sessioni attive in Lightpanda",
     sessionsEmpty: "Nessuna sessione sincronizzata in Lightpanda.",
     sessionsClear: (n) => `Rimuovi tutte (${n})`,
+    sessionsClearShort: "Rimuovi tutto",
+    clearConfirmShort: "Confermare?",
     sessionRemove: "Rimuovi questa sessione"
   },
   pt: {
@@ -324,6 +366,10 @@ const I18N = {
     errCookiesOutOfScope: "Estes cookies estão fora das permissões da extensão. Recarregue a extensão (chrome://extensions) e tente novamente.",
     errRefused: "Transferência recusada pelo relé local.",
     updateLabel: "Atualização do Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Atualização",
+    updateChipOk: "Atualizado",
     updateChecking: "Verificando atualizações…",
     updateUpToDate: (x) => `Atualizado · v${x}`,
     updateAvailable: (x) => `Atualização disponível: v${x}`,
@@ -340,6 +386,8 @@ const I18N = {
     sessionsLabel: "Sessões ativas no Lightpanda",
     sessionsEmpty: "Nenhuma sessão sincronizada no Lightpanda.",
     sessionsClear: (n) => `Limpar todas (${n})`,
+    sessionsClearShort: "Remover tudo",
+    clearConfirmShort: "Confirmar?",
     sessionRemove: "Remover esta sessão"
   },
   ar: {
@@ -365,6 +413,10 @@ const I18N = {
     errCookiesOutOfScope: "ملفات تعريف الارتباط هذه خارج نطاق أذونات الإضافة. أعد تحميل الإضافة (chrome://extensions) ثم أعد المحاولة.",
     errRefused: "تم رفض النقل بواسطة المرحل المحلي.",
     updateLabel: "تحديث Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "تحديث",
+    updateChipOk: "محدّث",
     updateChecking: "جارٍ التحقق من التحديثات…",
     updateUpToDate: (x) => `محدَّث · v${x}`,
     updateAvailable: (x) => `يتوفر تحديث: v${x}`,
@@ -381,6 +433,8 @@ const I18N = {
     sessionsLabel: "الجلسات النشطة في Lightpanda",
     sessionsEmpty: "لا توجد جلسات متزامنة في Lightpanda.",
     sessionsClear: (n) => `إزالة الكل (${n})`,
+    sessionsClearShort: "إزالة الكل",
+    clearConfirmShort: "تأكيد؟",
     sessionRemove: "إزالة هذه الجلسة"
   },
   ru: {
@@ -408,6 +462,10 @@ const I18N = {
     errCookiesOutOfScope: "Эти файлы cookie вне разрешений расширения. Перезагрузите расширение (chrome://extensions) и повторите попытку.",
     errRefused: "Перенос отклонен локальным реле.",
     updateLabel: "Обновление Bridge",
+    // Puce = etat court. La version/le hash vit sur la ligne du dessous :
+    // afficher les deux repetait la meme info dans une carte etroite.
+    updateChipNew: "Обновление",
+    updateChipOk: "Актуально",
     updateChecking: "Проверка обновлений…",
     updateUpToDate: (x) => `Актуально · v${x}`,
     updateAvailable: (x) => `Доступно обновление: v${x}`,
@@ -424,6 +482,8 @@ const I18N = {
     sessionsLabel: "Активные сеансы в Lightpanda",
     sessionsEmpty: "Нет сеансов, синхронизированных с Lightpanda.",
     sessionsClear: (n) => `Удалить все (${n})`,
+    sessionsClearShort: "Удалить все",
+    clearConfirmShort: "Подтвердить?",
     sessionRemove: "Удалить этот сеанс"
   }
 };
@@ -453,7 +513,9 @@ const sessionsList = document.querySelector('#sessions-list');
 const sessionsClear = document.querySelector('#sessions-clear');
 const labelSessions = document.querySelector('#label-sessions');
 const clearText = document.querySelector('#clear-text');
-const clearTextBase = clearText ? clearText.textContent : '';
+// Le libelle est TOUJOURS ecrit dans le <span> interne : ecrire sur le bouton
+// lui-meme remplacait son contenu et detachait le span au premier clic.
+const labelClear = () => t('sessionsClearShort');
 // Bridge update UI (the relay does the download; this is only the button)
 const updateChip = document.querySelector('#update-chip');
 const updateVersion = document.querySelector('#update-version');
@@ -539,6 +601,10 @@ function applyTranslations() {
   footerSecureTag.textContent = t('footerTag');
   labelSessions.textContent = t('sessionsLabel');
   if (labelUpdate) labelUpdate.textContent = t('updateLabel');
+  // Libelles poses par le rendu (pas par le HTML) : sans ca, un changement
+  // de langue les laissait dans l'ancienne langue.
+  if (clearText && !sessionsClear.dataset.armed) clearText.textContent = labelClear();
+  renderUpdateCard();
 
   // Update dropdown active item
   document.querySelectorAll('.lang-item').forEach(item => {
@@ -659,8 +725,10 @@ function renderSessions(data) {
     sessionsList.appendChild(row);
   });
 
-  sessionsClear.style.display = 'block';
-  clearText.textContent = t('sessionsClear', sessions.length);
+  sessionsClear.style.display = 'inline-flex';
+  delete sessionsClear.dataset.armed;
+  sessionsClear.removeAttribute('title');
+  clearText.textContent = labelClear();
 }
 
 async function clearSessionsOnRelay(origin = null) {
@@ -685,25 +753,29 @@ async function refreshSessions() {
 }
 
 sessionsToggle.addEventListener('click', () => {
-  sessionsCard.classList.toggle('open');
-  if (sessionsCard.classList.contains('open')) refreshSessions();
+  const open = sessionsCard.classList.toggle('open');
+  sessionsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) refreshSessions();
 });
 
 sessionsClear.addEventListener('click', async () => {
   // Two-step confirmation so a mis-click never wipes every synced session.
   if (!sessionsClear.dataset.armed) {
     sessionsClear.dataset.armed = '1';
-    sessionsClear.textContent = t('clearConfirm');
+    clearText.textContent = t('clearConfirmShort');
+    sessionsClear.title = t('clearConfirm');
     setTimeout(() => {
       if (sessionsClear.dataset.armed) {
         delete sessionsClear.dataset.armed;
-        sessionsClear.textContent = clearTextBase;
+        clearText.textContent = labelClear();
+        sessionsClear.removeAttribute('title');
       }
     }, 3500);
     return;
   }
   delete sessionsClear.dataset.armed;
-  sessionsClear.textContent = clearTextBase;
+  clearText.textContent = labelClear();
+  sessionsClear.removeAttribute('title');
   sessionsClear.disabled = true;
   await clearSessionsOnRelay(null);
   await refreshSessions();
@@ -738,7 +810,7 @@ function renderUpdateCard() {
 
   if (updateBusy) {
     updateChip.className = 'update-chip';
-    updateChip.textContent = t('updateApplying');
+    updateChip.textContent = '…';
     updateMeta.textContent = '';
     return;
   }
@@ -753,29 +825,33 @@ function renderUpdateCard() {
     return;
   }
 
-  rollbackBtn.textContent = t('updateRollback');
-  rollbackBtn.style.display = updateInfo.backup_available ? '' : 'none';
+  // Icone seule : le libelle complet passe en infobulle.
+  rollbackBtn.title = t('updateRollback');
+  rollbackBtn.setAttribute('aria-label', t('updateRollback'));
+  rollbackBtn.style.display = (updateInfo.backup_available && !updateInfo.update_available) ? '' : 'none';
 
+  // La puce dit l'ETAT ; la ligne du dessous dit CE QU'ON GAGNE.
+  // Avant, la puce ET la meta affichaient le meme hash : du bruit dans 430px.
   if (updateInfo.update_available) {
     const fromRelease = updateInfo.source === 'release';
     updateChip.className = 'update-chip new';
-    updateChip.textContent = fromRelease
-      ? 'v' + updateInfo.latest_version
-      : shortCommit(updateInfo.latest_commit);
+    updateChip.textContent = t('updateChipNew');
     updateMeta.textContent = fromRelease
-      ? t('updateAvailable', updateInfo.latest_version)
-      : t('updateMainAvailable', shortCommit(updateInfo.latest_commit));
+      ? '\u2192 v' + updateInfo.latest_version
+      : '\u2192 commit ' + shortCommit(updateInfo.latest_commit);
     updateBtn.textContent = fromRelease
       ? t('updateBtn', updateInfo.latest_version)
       : t('updateBtnMain');
     updateBtn.style.display = '';
+    rollbackBtn.style.display = updateInfo.backup_available ? '' : 'none';
   } else {
     updateChip.className = 'update-chip ok';
-    updateChip.textContent = t('updateUpToDate', deployed);
+    updateChip.textContent = t('updateChipOk');
     updateMeta.textContent = updateInfo.current_commit
-      ? shortCommit(updateInfo.current_commit)
+      ? 'commit ' + shortCommit(updateInfo.current_commit)
       : t('updateBaseline');
     updateBtn.style.display = 'none';
+    rollbackBtn.style.display = 'none';
   }
 }
 

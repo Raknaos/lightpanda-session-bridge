@@ -40,14 +40,19 @@
       max-width: 430px;
       min-width: 430px;
       min-height: 400px;
-      max-height: 580px;
+      /* Chrome caps a popup at 600px: scrolling is the safety net, but the
+         layout is trimmed to fit well under it. The old hard 580px + overflow
+         hidden CLIPPED the update buttons - a control you cannot click is
+         worse than one that requires a scroll. */
+      max-height: 600px;
       margin: 0;
       color: var(--ink);
       font: 13.5px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: linear-gradient(140deg, rgba(235, 246, 255, var(--glass-alpha)) 0%, rgba(243, 236, 255, var(--glass-alpha)) 55%, rgba(230, 244, 255, var(--glass-alpha)) 100%);
       position: relative;
       isolation: isolate;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       user-select: none;
     }
 
@@ -82,7 +87,7 @@
     }
 
     .app-shell {
-      padding: 22px 24px;
+      padding: 14px 18px;
       min-height: 400px;
       display: flex;
       flex-direction: column;
@@ -244,8 +249,8 @@
       background: var(--glass-card);
       border: 1px solid var(--edge);
       border-radius: 16px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
+      padding: 11px 13px;
+      margin-bottom: 9px;
       box-shadow: var(--shadow-sm);
       position: relative;
     }
@@ -285,7 +290,7 @@
       font-size: 12px;
       color: var(--soft);
       line-height: 1.45;
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       padding: 0 2px;
     }
 
@@ -297,8 +302,8 @@
       background: var(--glass-surface);
       border: 1px solid var(--edge);
       border-radius: 13px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
+      padding: 10px 12px;
+      margin-bottom: 11px;
       cursor: pointer;
       transition: all 0.15s ease;
       box-shadow: var(--shadow-sm);
@@ -361,10 +366,10 @@
 
     /* Status Notification Box */
     #status {
-      margin-top: 13px;
+      margin-top: 9px;
       font-size: 12px;
       font-weight: 600;
-      min-height: 18px;
+      min-height: 15px;
       line-height: 1.4;
       word-break: break-word;
       transition: all 0.15s ease;
@@ -373,7 +378,7 @@
     /* Footer */
     .app-footer {
       margin-top: auto;
-      padding-top: 16px;
+      padding-top: 11px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -394,11 +399,9 @@
 
     /* ---- Update card (the relay pulls it from GitHub) ---- */
     .update-card {
-      margin-top: 14px;
-      padding: 14px 14px 13px;
       display: flex;
       flex-direction: column;
-      gap: 9px;
+      gap: 8px;
     }
     .update-head {
       display: flex;
@@ -430,13 +433,16 @@
       gap: 10px;
       font-size: 12px;
       color: var(--soft);
+      min-height: 16px;
     }
     .update-version { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--ink); font-size: 12.5px; }
-    .update-meta { text-align: right; font-size: 11px; line-height: 1.3; }
+    .update-meta { text-align: right; font-size: 11px; line-height: 1.3; word-break: break-word; }
     .update-actions { display: flex; gap: 8px; }
+    .update-actions:empty { display: none; }
     .btn-update {
       flex: 1;
-      padding: 10px 14px;
+      padding: 9px 14px;
+      white-space: nowrap;
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.75);
       background: linear-gradient(135deg, var(--blue) 0%, var(--violet) 100%);
@@ -450,8 +456,14 @@
     }
     .btn-update:hover:not(:disabled) { transform: translateY(-1px); }
     .btn-update:disabled { opacity: 0.6; cursor: progress; }
+    /* Icone seule : deux libelles longs ne tiennent pas cote a cote sur 430px. */
     .btn-rollback {
-      padding: 10px 12px;
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
       border-radius: 12px;
       border: 1px solid var(--edge);
       background: rgba(255, 255, 255, 0.6);
@@ -466,18 +478,28 @@
     .btn-rollback:disabled { opacity: 0.6; cursor: progress; }
 
     /* ---- Active sessions (Lightpanda side) ---- */
-    .sessions-card { margin-top: 14px; }
-    .sessions-toggle {
-      display: flex; align-items: center; justify-content: space-between;
-      width: 100%; border: none; background: transparent; cursor: pointer;
-      padding: 0; font: inherit;
+    .sessions-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
+    .sessions-head-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .sessions-toggle {
+      display: flex; align-items: center; gap: 6px;
+      min-width: 0; border: none; background: transparent; cursor: pointer;
+      padding: 0; font: inherit; text-align: left;
+    }
+    .sessions-toggle .card-label { white-space: nowrap; }
     .sessions-toggle:hover .card-label { color: var(--violet); }
+    .sessions-caret {
+      flex-shrink: 0; color: var(--muted);
+      transition: transform 0.18s ease;
+    }
+    .sessions-card.open .sessions-caret { transform: rotate(180deg); }
     .sessions-count {
       font-size: 10.5px; font-weight: 700; color: var(--ink-secondary);
-      background: rgba(84, 104, 255, 0.12); border-radius: 99px; padding: 2px 8px;
+      background: rgba(84, 104, 255, 0.12); border-radius: 99px; padding: 3px 8px;
+      min-width: 22px; text-align: center;
     }
-    .sessions-list { margin-top: 10px; display: none; flex-direction: column; gap: 6px; }
+    .sessions-list { margin-top: 9px; max-height: 132px; overflow-y: auto; display: none; flex-direction: column; gap: 6px; }
     .sessions-card.open .sessions-list { display: flex; }
     .session-row {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -498,13 +520,17 @@
     }
     .session-remove:hover { background: rgba(225, 29, 72, 0.2); }
     .sessions-clear {
-      margin-top: 8px; width: 100%;
+      display: inline-flex; align-items: center; gap: 5px;
       border: 1px solid rgba(225, 29, 72, 0.3); background: rgba(225, 29, 72, 0.06);
-      color: var(--danger); border-radius: 10px; padding: 8px 10px;
-      font-family: 'Space Grotesk', sans-serif; font-size: 11.5px; font-weight: 700;
-      cursor: pointer; transition: background 0.12s ease;
+      color: var(--danger); border-radius: 99px; padding: 4px 10px;
+      font-family: 'Space Grotesk', sans-serif; font-size: 10.5px; font-weight: 700;
+      cursor: pointer; transition: background 0.12s ease, color 0.12s ease;
+      white-space: nowrap;
     }
     .sessions-clear:hover { background: rgba(225, 29, 72, 0.14); }
+    .sessions-clear[data-armed] {
+      background: var(--danger); border-color: var(--danger); color: #ffffff;
+    }
     .sessions-empty { font-size: 11.5px; color: var(--muted); font-weight: 600; padding: 2px 0; }
 
     /* Toast */
@@ -587,19 +613,7 @@
 
     <div id="status"></div>
 
-    <!-- Active sessions inside Lightpanda -->
-    <div id="sessions-card" class="glass-card sessions-card">
-      <button id="sessions-toggle" class="sessions-toggle" type="button">
-        <div class="card-label" id="label-sessions">Active sessions in Lightpanda</div>
-        <div class="sessions-count" id="sessions-count">…</div>
-      </button>
-      <div id="sessions-list" class="sessions-list"></div>
-      <button id="sessions-clear" class="sessions-clear" type="button" style="display:none">
-        <span id="clear-text">Clear all sessions</span>
-      </button>
-    </div>
-
-    <!-- Bridge update: the relay downloads it, this is only the button -->
+    <!-- Bridge update: the relay does the download, this is only the button/state -->
     <div id="update-card" class="glass-card update-card">
       <div class="update-head">
         <div class="card-label" id="label-update">Bridge update</div>
@@ -611,9 +625,29 @@
       </div>
       <div class="update-actions">
         <button id="update-btn" class="btn-update" type="button" style="display:none"></button>
-        <button id="rollback-btn" class="btn-rollback" type="button" style="display:none"></button>
+        <button id="rollback-btn" class="btn-rollback" type="button" style="display:none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M3.5 13a9 9 0 1 0 2.6-8.1L3 8"></path></svg>
+        </button>
       </div>
     </div>
+
+    <!-- Active sessions inside Lightpanda (collapsible: last, so opening it only grows the tail) -->
+    <div id="sessions-card" class="glass-card sessions-card">
+      <div class="sessions-head">
+        <button id="sessions-toggle" class="sessions-toggle" type="button" aria-expanded="false">
+          <span class="card-label" id="label-sessions">Active sessions in Lightpanda</span>
+          <svg class="sessions-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div class="sessions-head-right">
+          <div class="sessions-count" id="sessions-count">…</div>
+          <button id="sessions-clear" class="sessions-clear" type="button" style="display:none">
+            <span id="clear-text">Clear all</span>
+          </button>
+        </div>
+      </div>
+      <div id="sessions-list" class="sessions-list"></div>
+    </div>
+
 
     <footer class="app-footer">
       <div class="footer-badge">

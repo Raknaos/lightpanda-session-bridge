@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import sys
 import tarfile
@@ -546,9 +547,61 @@ class TestWiring(unittest.TestCase):
         keys = ["updateLabel", "updateChecking", "updateUpToDate", "updateAvailable",
                 "updateMainAvailable", "updateBtn", "updateBtnMain", "updateApplying",
                 "updateApplied", "updateFailed", "updateRollback", "updateRolledBack",
-                "updateBaseline"]
+                "updateBaseline", "updateChipNew", "updateChipOk", "sessionsClearShort",
+                "clearConfirmShort"]
         for key in keys:
             self.assertEqual(js.count("\n    %s: " % key), 10, "%s is not in all 10 languages" % key)
+
+
+class TestPopupLayout(unittest.TestCase):
+    """Chrome caps a popup at 600px tall.
+
+    The previous layout used `max-height: 580px` + `overflow: hidden` on the
+    body, so the update card at the bottom was sliced in half and its buttons
+    were unreachable. These tests pin the shape of the fix: a regression here
+    is invisible in unit output and only shows up as an unusable button.
+    """
+
+    def setUp(self):
+        self.html = (REPO_ROOT / "extension" / "popup.html").read_text(encoding="utf-8")
+        self.js = (REPO_ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
+
+    def test_body_never_hides_overflow_behind_a_fixed_cap(self):
+        block = re.search(r"html, body \{(.*?)\}",
+                          self.html, re.S).group(1)
+        self.assertNotIn("overflow: hidden", block,
+                         "a hidden body plus a max-height is what clipped the buttons")
+        self.assertIn("overflow-y: auto", block, "the body must be able to scroll")
+
+    def test_collapsible_card_is_last(self):
+        """Opening the session list must only grow the tail of the popup."""
+        body = self.html[self.html.index('<div class="app-shell"'):]
+        self.assertLess(body.index('id="update-card"'), body.index('id="sessions-card"'))
+
+    def test_session_list_is_its_own_scroll_area(self):
+        block = re.search(r"\.sessions-list \{(.*?)\}", self.html, re.S).group(1)
+        self.assertIn("max-height", block)
+        self.assertIn("overflow-y: auto", block)
+
+    def test_clear_button_is_a_compact_pill_in_the_header(self):
+        head = re.search(r'<div class="sessions-head">(.*?)</div>\n      </div>',
+                         self.html, re.S).group(1)
+        self.assertIn('id="sessions-clear"', head, "the clear button belongs in the header row")
+        block = re.search(r"\.sessions-clear \{(.*?)\}", self.html, re.S).group(1)
+        self.assertNotIn("width: 100%", block, "a full-width red bar on its own row was the ugly part")
+
+    def test_clear_button_keeps_its_inner_span(self):
+        """Writing textContent on the button replaced its <span> and detached it."""
+        self.assertNotIn("sessionsClear.textContent =", self.js)
+        self.assertIn("clearText.textContent = labelClear()", self.js)
+
+    def test_update_card_shows_state_and_target_once(self):
+        """The chip used to show the hash and the meta line repeated it."""
+        card = self.js[self.js.index("function renderUpdateCard"):self.js.index("async function refreshUpdateStatus")]
+        self.assertIn("updateChip.textContent = t('updateChipNew')", card)
+        self.assertIn("updateChip.textContent = t('updateChipOk')", card)
+        self.assertNotIn("t('updateUpToDate', deployed)", card,
+                         "the chip must not repeat the version shown on the line below")
 
     def test_manifest_has_alarms_and_matching_versions(self):
         manifest = json.loads((REPO_ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
