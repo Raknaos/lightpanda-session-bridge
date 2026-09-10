@@ -458,7 +458,37 @@ def _release_asset(updater):
     published = updater._fetch(sha_asset["url"], accept="application/octet-stream").decode().split()[0]
     if digest != published:
         return "FAIL", "sha256 %s != published %s" % (digest[:12], published[:12])
-    return "ok", "%s %d KiB, sha256 matches the sidecar" % (release["tag"], len(blob) // 1024)
+
+    # The sidecar proves the bytes survived the trip; it says nothing about
+    # what they are. What must hold - and did not for v0.5.6, which shipped a
+    # gitignored extension/.build-info.json holding this machine's install
+    # history - is that the archive *is* the committed tree.
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            inside = {}
+            for name in archive.namelist():
+                if name.endswith("/"):
+                    continue
+                key = name.split("/", 1)[1] if name.startswith("extension/") else name
+                inside[key] = archive.read(name)
+    except zipfile.BadZipFile as err:
+        return "FAIL", "the asset is not a readable zip: %s" % err
+    expected = {}
+    for rel in git("ls-files", "extension").split():
+        expected[rel.split("/", 1)[1]] = subprocess.run(
+            ["git", "-C", str(REPO), "show", "HEAD:%s" % rel],
+            capture_output=True, check=True).stdout
+    if set(inside) != set(expected):
+        extra = sorted(set(inside) - set(expected))[:3]
+        missing = sorted(set(expected) - set(inside))[:3]
+        return "FAIL", "the zip is not the committed tree - extra %s, missing %s" % (extra, missing)
+    drifted = sorted(k for k in expected if inside[k] != expected[k])[:3]
+    if drifted:
+        return "FAIL", "bytes differ from HEAD: %s" % drifted
+    return "ok", ("%s %d KiB, sha256 matches and the %d shipped files are HEAD's"
+                  % (release["tag"], len(blob) // 1024, len(expected)))
 
 
 @check("the main channel can fetch its tarball")
