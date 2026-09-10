@@ -26,24 +26,47 @@ except ImportError:  # pragma: no cover - environment, not logic
         "  (.venv/Scripts/pip install -r requirements.txt)"
         % __import__("os").path.basename(__import__("sys").argv[0]))
 
-FALLBACK_EXT_ID = "fcigkjkchglchhohedljlenopbkgnigno"
-PIN = pathlib.Path(os.path.expanduser("~"), ".config", "lightpanda-bridge",
-                   "pinned_extension_id")
 COMET_CDP = "http://127.0.0.1:9223"
 ID_RE = re.compile(r"^[a-p]{32}$")
+PIN = pathlib.Path(os.path.expanduser("~"), ".config", "lightpanda-bridge",
+                   "pinned_extension_id")
+
+
+UPDATES_XML = pathlib.Path(__file__).resolve().parent.parent / "updates.xml"
+
+
+def declared_extension_id() -> str:
+    """The id the repository declares, read from updates.xml.
+
+    No id is ever typed into a script: a hand-copied one carried 33 characters
+    and made two scripts lie. updates.xml is the single place the id belongs
+    (it is Chrome's update manifest), so everything else derives from it.
+    """
+    try:
+        xml = UPDATES_XML.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    import re as _re
+    found = _re.search(r"appid='([^']+)'", xml)
+    return (found.group(1) if found else "").strip()
 
 
 def extension_id(strict: bool = True) -> str:
-    """The pinned extension id, validated. 32 chars, a-p only, no exceptions."""
+    """The extension id: the pin the relay wrote, else what the repo declares.
+
+    Validated either way - 32 characters, a-p only - because a wrong id opens an
+    error page and Chrome says nothing about it.
+    """
     try:
         pinned = PIN.read_text(encoding="utf-8").strip()
     except OSError:
         pinned = ""
-    for candidate in (pinned, FALLBACK_EXT_ID):
+    for candidate in (pinned, declared_extension_id()):
         if ID_RE.match(candidate):
             return candidate
     if strict:
-        sys.exit("refused: no valid 32-char extension id (pin=%r)" % pinned)
+        sys.exit("refused: no valid 32-char extension id (pin=%r, updates.xml=%r)"
+                 % (pinned, declared_extension_id()))
     return ""
 
 

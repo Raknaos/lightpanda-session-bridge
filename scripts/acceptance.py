@@ -577,6 +577,24 @@ def audit_log():
     return "ok", "%d install(s), last v%s at %s" % (len(lines), last.get("version"), last.get("at"))
 
 
+@check("the pinned id matches the declared one")
+def pin_matches_declaration():
+    """The relay pins whatever extension paired first; updates.xml declares the
+    id Chrome's auto-update uses. If they drift, one of the two copied ids is
+    wrong - which is exactly how a 33-character id survived in two scripts."""
+    import cdp_utils
+    declared = cdp_utils.declared_extension_id()
+    if not re.match(r"^[a-p]{32}$", declared):
+        return "FAIL", "updates.xml declares %r" % declared
+    try:
+        pinned = pinned_id()
+    except OSError:
+        return "SKIP", "no pin on this machine yet"
+    if pinned != declared:
+        return "FAIL", "pin %d car vs updates.xml %d car" % (len(pinned), len(declared))
+    return "ok", "pin and updates.xml agree (%s...%s)" % (pinned[:4], pinned[-4:])
+
+
 @check("the auto-update manifest points at a live asset")
 def updates_xml_live():
     """v0.3.3 shipped a security patch that the auto-update channel never
@@ -591,11 +609,24 @@ def updates_xml_live():
                         % (manifest()["version"], _TAG_CACHE.get("detail", "")))
     request = urllib.request.Request(url, method="GET",
                                      headers={"User-Agent": "lightpanda-session-bridge-acceptance"})
-    with urllib.request.urlopen(request, timeout=60) as resp:
-        size = int(resp.headers.get("Content-Length") or 0)
-        resp.read(2048)
-    if resp.status != 200 or size < 50_000:
-        return "FAIL", "HTTP %s, %d bytes" % (resp.status, size)
+    # /releases/latest/download/ can answer 404 for a minute right after the
+    # release is published, so retry before calling it broken - a permanent 404
+    # still fails.
+    import time
+    last = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as resp:
+                size = int(resp.headers.get("Content-Length") or 0)
+                resp.read(2048)
+            if resp.status == 200 and size >= 50_000:
+                return "ok", "%s resolves, %d KiB" % (url.rsplit("/", 1)[-1], size // 1024)
+            last = "HTTP %s, %d bytes" % (resp.status, size)
+        except urllib.error.HTTPError as err:
+            last = "HTTP %s %s" % (err.code, err.reason)
+        if attempt < 2:
+            time.sleep(6)
+    return "FAIL", "%s (three attempts)" % last
     return "ok", "%s resolves, %d KiB" % (url.rsplit("/", 1)[-1], size // 1024)
 
 
@@ -632,6 +663,7 @@ def double_check_pin():
 
 
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
+         pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits]
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
