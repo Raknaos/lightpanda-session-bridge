@@ -6,6 +6,8 @@
 - The guard now lives in `_fetch` - the one place every update request goes through - so the API host always receives the GitHub media type and no caller can reintroduce the bug by asking for bytes. Download hosts keep the caller's Accept, because the CDN does serve octet-stream. The release channel worked all along; only the main channel was broken.
 - 3 new tests pin it, including a behavioural one that captures the real header on a stubbed socket: **95 tests, 1 skipped**.
 - **Hygiene:** `.gitattributes` pins LF for `extension/**`, so a Windows checkout, the release zip and an update install are byte-for-byte the same tree. Before this, a successful update rewrote every file (content identical, line endings not) and `git status` reported the whole extension as modified.
+- **Tooling:** `scripts/reload_extension.py` now reads the extension id from the relay's pin (a hardcoded 33-char id made it reload nothing while printing success) and reloads through `chrome.developerPrivate.reload()` - `chrome.runtime.reload()` from inside the popup does not pick up a new manifest.
+- **Traceability:** every install appends one JSON line to `update.log` (version, commit shas, artifact, file counts, timestamp; never a cookie, a token or a URL).
 
 ## [0.5.4] - 2026-09-10
 ### Fixed

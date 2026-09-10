@@ -268,6 +268,23 @@ class TestApplyAndRollback(UpdateTestCase):
                                  setattr(updater, "_fetch", saved[2])))
         return release, head, digest
 
+    def test_every_install_leaves_one_audit_line_without_secrets(self):
+        self._stub(release_zip())
+        updater.apply_update()
+        log = pathlib.Path(self.config) / updater.AUDIT_FILE
+        lines = [json.loads(row) for row in log.read_text(encoding="utf-8").splitlines() if row.strip()]
+        self.assertEqual(len(lines), 1)
+        entry = lines[0]
+        self.assertEqual(entry["event"], "install")
+        self.assertEqual(entry["version"], VERSION)
+        self.assertEqual(entry["source"], "release")
+        self.assertTrue(entry["commit"])
+        self.assertTrue(entry["artifact"])
+        self.assertTrue(entry["at"])
+        # the line says what changed, never anything about a session
+        for forbidden in ("cookie", "token", "secret", "url", "origin", "headers"):
+            self.assertNotIn(forbidden, entry)
+
     def test_release_install_writes_files_and_provenance(self):
         release, head, digest = self._stub(release_zip())
         result = updater.apply_update()

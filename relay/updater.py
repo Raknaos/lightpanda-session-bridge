@@ -53,6 +53,7 @@ ALLOWED_HOSTS = {
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 BUILD_INFO = ".build-info.json"
 BACKUP_DIRNAME = "extension-backup"
+AUDIT_FILE = "update.log"
 CACHE_TTL = 60.0
 USER_AGENT = "lightpanda-session-bridge-updater"
 # api.github.com refuses a media type it cannot *produce*: asking for
@@ -170,6 +171,29 @@ def installed_info(ext_dir: str = "") -> dict:
     except (OSError, ValueError):
         pass
     return info
+
+
+def audit_path() -> str:
+    return os.path.join(config_dir(), AUDIT_FILE)
+
+
+def audit(record: dict) -> None:
+    """Append one JSON line per install to update.log.
+
+    On 2026-09-10 a new copy appeared in the live extension directory and the
+    only way to date it was to diff two timestamps by hand; the run itself left
+    no trace of what it installed or what it replaced. One append-only line per
+    install (no cookie, no token, no page URL - version, commit shas, artifact
+    name, file counts, timestamp) answers that without archaeology.
+    """
+    line = dict(record)
+    line["at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    try:
+        os.makedirs(config_dir(), exist_ok=True)
+        with open(audit_path(), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(line, ensure_ascii=True, sort_keys=True) + "\n")
+    except OSError:
+        pass  # never let bookkeeping break an install that already succeeded
 
 
 def backup_meta_path() -> str:
@@ -637,6 +661,10 @@ def apply_update(source: str = "auto", repo: str = REPO) -> dict:
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
+    audit({"event": "install", "source": source, "version": manifest.get("version"),
+           "previous_version": previous.get("version"), "previous_commit": (previous.get("commit") or "")[:8],
+           "commit": (commit or "")[:8], "tag": tag, "artifact": archive_name,
+           "sha256": digest, "files_written": len(copy), "files_removed": len(remove)})
     clear_cache()
     return {
         "ok": True,
