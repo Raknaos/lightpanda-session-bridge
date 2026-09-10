@@ -52,7 +52,9 @@ class _FakeTransport:
             # Verification par cle (celle du correctif) : le nombre de cles
             # encore absentes de la page.
             if "localStorage.getItem" in expr:
-                return {"result": {"value": self.missing_keys}}
+                # Le vrai transport renvoie la liste des cles absentes (noms).
+                names = ["k%d" % i for i in range(self.missing_keys)]
+                return {"result": {"value": json.dumps({"missing": names})}}
             if "localStorage.setItem" in expr:
                 self.storage_writes += 1
                 try:
@@ -423,12 +425,74 @@ class StorageVerificationTests(unittest.TestCase):
         # a chaque navigation (relance de la page entre deux tentatives).
         self.assertGreaterEqual(self._fake.storage_writes, 3)
 
+    def test_oversized_key_is_refused_by_name_not_dropped(self):
+        cookie = {"name": "session", "value": "v", "domain": ".x.com",
+                  "httpOnly": True, "secure": True}
+        with self.assertRaises(RuntimeError) as ctx:
+            server.set_session("https://x.com", [cookie],
+                               {"ok": "1", "huge": "x" * (server.MAX_VALUE_CHARS + 1)})
+        msg = str(ctx.exception)
+        self.assertIn("refused", msg)
+        self.assertIn("huge", msg)
+        self.assertIn("value too large", msg)
+        # la cle fautive est nommee, pas remplacee par un ratio trompeur
+        self.assertNotIn("incomplete", msg)
+
+    def test_partial_failure_names_the_missing_keys(self):
+        self._fake.missing_keys = 2
+        with self.assertRaises(RuntimeError) as ctx:
+            self._sync()
+        msg = str(ctx.exception)
+        self.assertIn("0/2", msg)
+        self.assertIn("missing:", msg)
+        self.assertIn("k0", msg)
+
     def test_partial_snapshot_still_persists_so_a_resync_can_finish(self):
         self._fake.missing_keys = 1
         with self.assertRaises(RuntimeError):
             self._sync()
         self.assertTrue((Path(self._tmp) / "session.json").exists())
         self.assertEqual(server.list_sessions()[0]["host"], "a6api.com")
+
+
+class StoragePlanTests(unittest.TestCase):
+    """Le filtre de taille ne doit plus jamais supprimer une cle en silence.
+
+    Bug rapporte : x.com stocke des cles de 194 caracteres
+    (rweb.sessionBinding.hashClaim:<base64>). L'ancienne limite (128) les
+    retirait avant la moindre ecriture -> le popup affichait « 5/7 cles »
+    pour toujours et resynchroniser ne pouvait rien y changer.
+    """
+
+    def test_long_key_names_are_transferred_not_dropped(self):
+        prefix = "rweb.sessionBinding.hashClaim:"
+        key = prefix + "A" * (194 - len(prefix))
+        self.assertEqual(len(key), 194)
+        plan, refused = server._storage_plan({key: "v", "volume": "4"})
+        self.assertEqual(refused, [])
+        self.assertEqual(sorted(plan), sorted([key, "volume"]))
+
+    def test_refused_entries_carry_name_size_and_reason(self):
+        plan, refused = server._storage_plan({"huge": "x" * (server.MAX_VALUE_CHARS + 1)})
+        self.assertEqual(plan, {})
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(refused[0][0], "huge")
+        self.assertEqual(refused[0][2], "value too large")
+        self.assertEqual(refused[0][1], server.MAX_VALUE_CHARS + 1)
+
+    def test_snapshot_total_stays_under_the_body_cap(self):
+        chunk = "y" * server.MAX_VALUE_CHARS
+        plan, refused = server._storage_plan({("k%d" % i): chunk for i in range(7)})
+        self.assertTrue(refused)
+        self.assertEqual(refused[-1][2], "snapshot too large")
+        self.assertLessEqual(sum(len(v) for v in plan.values()), server.MAX_TOTAL_CHARS)
+        self.assertLess(server.MAX_TOTAL_CHARS, 2_000_000)
+
+    def test_legacy_integer_verify_result_still_accepted(self):
+        self.assertEqual(server._missing_from_verify(0), [])
+        self.assertEqual(len(server._missing_from_verify(3)), 3)
+        self.assertEqual(server._missing_from_verify(json.dumps({"missing": []})), [])
+        self.assertEqual(server._missing_from_verify(json.dumps({"missing": ["a"]})), ["a"])
 
 
 class PopupStorageReportingTests(unittest.TestCase):
@@ -448,7 +512,11 @@ class PopupStorageReportingTests(unittest.TestCase):
     def test_extraction_is_retried_and_its_error_is_not_swallowed(self):
         self.assertIn("for (let attempt = 0; attempt < 2; attempt++)", self.js)
         self.assertIn("if (storageError && !storage)", self.js)
-        self.assertIn("result.storage_count < storageKeys", self.js)
+        self.assertIn("result.storage_count < expectedKeys", self.js)
+        self.assertIn("result.storage_missing", self.js)
+        self.assertIn("result.storage_refused", self.js)
+        self.assertGreaterEqual(self.js.count("missingKeys:"), 10)
+        self.assertGreaterEqual(self.js.count("errStorageRefused:"), 10)
 
 
 if __name__ == "__main__":

@@ -18,7 +18,9 @@ const I18N = {
     syncing: "Transferring & verifying session…",
     success: (count, keys) => `✓ Session synchronized (${count} cookies, ${keys} localStorage keys).`,
     errStorageExtract: 'Could not read localStorage on this page (missing permission, or the page is not injectable). Reload the tab and try again.',
-    errPartialStorage: (got, want) => `Incomplete transfer: ${got}/${want} localStorage keys reached Lightpanda. Sync again.`,
+    errPartialStorage: (got, want, names) => `Incomplete transfer: ${got}/${want} localStorage keys reached Lightpanda${names}. Sync again.`,
+    missingKeys: (list) => ` (missing: ${list})`,
+    errStorageRefused: (detail) => `Some localStorage keys could not be transferred: ${detail}`,
     errNeedHttps: "Please open a public HTTPS website (e.g. Gmail, A6API).",
     errNoRelay: "Local relay (port 8765) is not running.",
     errNoCookies: "No cookies found for this page.",
@@ -59,7 +61,9 @@ const I18N = {
     syncing: "Transfert et vérification en cours…",
     success: (count, keys) => `✓ Session synchronisée (${count} cookies, ${keys} clés localStorage).`,
     errStorageExtract: 'Lecture du localStorage impossible sur cette page (permission manquante ou page non injectable). Rechargez l\'onglet et réessayez.',
-    errPartialStorage: (got, want) => `Transfert incomplet : ${got}/${want} clés localStorage reçues par Lightpanda. Resynchronisez.`,
+    errPartialStorage: (got, want, names) => `Transfert incomplet : ${got}/${want} clés localStorage reçues par Lightpanda${names}. Resynchronisez.`,
+    missingKeys: (list) => ` (manquantes: ${list})`,
+    errStorageRefused: (detail) => `Certaines clés localStorage n'ont pas pu être transférées : ${detail}`,
     errNeedHttps: "Ouvrez un site HTTPS public (ex: Gmail, A6API).",
     errNoRelay: "Le relais local (port 8765) n’est pas démarré.",
     errNoCookies: "Aucun cookie trouvé pour cette page.",
@@ -100,7 +104,9 @@ const I18N = {
     syncing: "Transfiriendo y verificando sesión…",
     success: (count, keys) => `✓ Sesión sincronizada (${count} cookies, ${keys} claves de localStorage).`,
     errStorageExtract: 'No se pudo leer localStorage en esta página (falta permiso o la página no es inyectable). Recarga la pestaña y reintenta.',
-    errPartialStorage: (got, want) => `Transferencia incompleta: ${got}/${want} claves de localStorage llegaron a Lightpanda. Sincroniza de nuevo.`,
+    errPartialStorage: (got, want, names) => `Transferencia incompleta: ${got}/${want} claves de localStorage llegaron a Lightpanda${names}. Sincroniza de nuevo.`,
+    missingKeys: (list) => ` (faltan: ${list})`,
+    errStorageRefused: (detail) => `No se pudieron transferir algunas claves de localStorage: ${detail}`,
     errNeedHttps: "Abre un sitio web HTTPS público (ej. Gmail, A6API).",
     errNoRelay: "El relé local (puerto 8765) no está en ejecución.",
     errNoCookies: "No se encontraron cookies para esta página.",
@@ -141,7 +147,9 @@ const I18N = {
     syncing: "Sitzung wird übertragen & geprüft…",
     success: (count, keys) => `✓ Sitzung synchronisiert (${count} Cookies, ${keys} localStorage-Schlüssel).`,
     errStorageExtract: 'localStorage konnte auf dieser Seite nicht gelesen werden (fehlende Berechtigung oder Seite nicht injizierbar). Tab neu laden und erneut versuchen.',
-    errPartialStorage: (got, want) => `Unvollständige Übertragung: ${got}/${want} localStorage-Schlüssel sind bei Lightpanda angekommen. Erneut synchronisieren.`,
+    errPartialStorage: (got, want, names) => `Unvollständige Übertragung: ${got}/${want} localStorage-Schlüssel sind bei Lightpanda angekommen${names}. Erneut synchronisieren.`,
+    missingKeys: (list) => ` (fehlen: ${list})`,
+    errStorageRefused: (detail) => `Einige localStorage-Schlüssel konnten nicht übertragen werden: ${detail}`,
     errNeedHttps: "Bitte öffnen Sie eine öffentliche HTTPS-Website.",
     errNoRelay: "Lokales Relais (Port 8765) läuft nicht.",
     errNoCookies: "Keine Cookies für diese Seite gefunden.",
@@ -180,7 +188,9 @@ const I18N = {
     syncing: "正在传输并验证会话…",
     success: (count, keys) => `✓ 会话已同步（${count} 个 Cookie，${keys} 个 localStorage 键）。`,
     errStorageExtract: '无法在此页面读取 localStorage（缺少权限或页面不可注入）。请重新加载标签页后重试。',
-    errPartialStorage: (got, want) => `传输不完整：${got}/${want} 个 localStorage 键到达 Lightpanda。请重新同步。`,
+    errPartialStorage: (got, want, names) => `传输不完整：${got}/${want} 个 localStorage 键到达 Lightpanda${names}。请重新同步。`,
+    missingKeys: (list) => ` (缺失: ${list})`,
+    errStorageRefused: (detail) => `部分 localStorage 键无法传输：${detail}`,
     errNeedHttps: "请打开公开的 HTTPS 网站（例如 Gmail、A6API）。",
     errNoRelay: "本地中继（端口 8765）未启动。",
     errNoCookies: "未找到此页面的 Cookie。",
@@ -219,7 +229,9 @@ const I18N = {
     syncing: "セッションの転送と検証中…",
     success: (count, keys) => `✓ セッションを同期しました（Cookie ${count} 個、localStorage ${keys} 件）。`,
     errStorageExtract: 'このページで localStorage を読み取れません（権限不足、または注入できないページ）。タブを再読み込みして再試行してください。',
-    errPartialStorage: (got, want) => `転送が不完全です：localStorage ${got}/${want} 件のみ Lightpanda に到達しました。再同期してください。`,
+    errPartialStorage: (got, want, names) => `転送が不完全です：localStorage ${got}/${want} 件のみ Lightpanda に到達しました${names}。再同期してください。`,
+    missingKeys: (list) => ` (欠落: ${list})`,
+    errStorageRefused: (detail) => `一部の localStorage キーを転送できませんでした：${detail}`,
     errNeedHttps: "公開HTTPSサイト（Gmail、A6APIなど）を開いてください。",
     errNoRelay: "ローカルリレー（ポート8765）が起動していません。",
     errNoCookies: "このページのCookieが見つかりません。",
@@ -260,7 +272,9 @@ const I18N = {
     syncing: "Trasferimento e verifica in corso…",
     success: (count, keys) => `✓ Sessione sincronizzata (${count} cookie, ${keys} chiavi localStorage).`,
     errStorageExtract: 'Impossibile leggere localStorage su questa pagina (permesso mancante o pagina non iniettabile). Ricarica la scheda e riprova.',
-    errPartialStorage: (got, want) => `Trasferimento incompleto: ${got}/${want} chiavi localStorage arrivate a Lightpanda. Sincronizza di nuovo.`,
+    errPartialStorage: (got, want, names) => `Trasferimento incompleto: ${got}/${want} chiavi localStorage arrivate a Lightpanda${names}. Sincronizza di nuovo.`,
+    missingKeys: (list) => ` (mancanti: ${list})`,
+    errStorageRefused: (detail) => `Alcune chiavi localStorage non sono state trasferite: ${detail}`,
     errNeedHttps: "Apri un sito HTTPS pubblico (es. Gmail, A6API).",
     errNoRelay: "Il relè locale (porta 8765) non è attivo.",
     errNoCookies: "Nessun cookie trovato per questa pagina.",
@@ -301,7 +315,9 @@ const I18N = {
     syncing: "Transferindo e verificando sessão…",
     success: (count, keys) => `✓ Sessão sincronizada (${count} cookies, ${keys} chaves de localStorage).`,
     errStorageExtract: 'Não foi possível ler o localStorage nesta página (permissão ausente ou página não injetável). Recarregue a aba e tente novamente.',
-    errPartialStorage: (got, want) => `Transferência incompleta: ${got}/${want} chaves de localStorage chegaram ao Lightpanda. Sincronize novamente.`,
+    errPartialStorage: (got, want, names) => `Transferência incompleta: ${got}/${want} chaves de localStorage chegaram ao Lightpanda${names}. Sincronize novamente.`,
+    missingKeys: (list) => ` (faltando: ${list})`,
+    errStorageRefused: (detail) => `Algumas chaves de localStorage não puderam ser transferidas: ${detail}`,
     errNeedHttps: "Abra um site HTTPS público (ex: Gmail, A6API).",
     errNoRelay: "O relé local (porta 8765) não está em execução.",
     errNoCookies: "Nenhum cookie encontrado para esta página.",
@@ -340,7 +356,9 @@ const I18N = {
     syncing: "جاري النقل والتحقق…",
     success: (count, keys) => `✓ تمت مزامنة الجلسة (${count} ملف تعريف، ${keys} مفتاح localStorage).`,
     errStorageExtract: 'تعذر قراءة localStorage في هذه الصفحة (صلاحية ناقصة أو صفحة غير قابلة للحقن). أعد تحميل التبويب وحاول مرة أخرى.',
-    errPartialStorage: (got, want) => `النقل غير مكتمل: ${got}/${want} مفتاح localStorage وصل إلى Lightpanda. أعد المزامنة.`,
+    errPartialStorage: (got, want, names) => `النقل غير مكتمل: ${got}/${want} مفتاح localStorage وصل إلى Lightpanda${names}. أعد المزامنة.`,
+    missingKeys: (list) => ` (المفقودة: ${list})`,
+    errStorageRefused: (detail) => `تعذّر نقل بعض مفاتيح localStorage: ${detail}`,
     errNeedHttps: "يرجى فتح موقع HTTPS عام.",
     errNoRelay: "المرحل المحلي (المنفذ 8765) لا يعمل.",
     errNoCookies: "لم يتم العثور على ملفات تعريف الارتباط.",
@@ -381,7 +399,9 @@ const I18N = {
     syncing: "Перенос и проверка сеанса…",
     success: (count, keys) => `✓ Сеанс синхронизирован (${count} cookie, ${keys} ключей localStorage).`,
     errStorageExtract: 'Не удалось прочитать localStorage на этой странице (нет разрешения или страница не поддерживает внедрение). Перезагрузите вкладку и повторите.',
-    errPartialStorage: (got, want) => `Перенос неполный: ${got}/${want} ключей localStorage достигли Lightpanda. Синхронизируйте снова.`,
+    errPartialStorage: (got, want, names) => `Перенос неполный: ${got}/${want} ключей localStorage достигли Lightpanda${names}. Синхронизируйте снова.`,
+    missingKeys: (list) => ` (отсутствуют: ${list})`,
+    errStorageRefused: (detail) => `Некоторые ключи localStorage не удалось перенести: ${detail}`,
     errNeedHttps: "Откройте общедоступный сайт HTTPS (например, Gmail, A6API).",
     errNoRelay: "Локальное реле (порт 8765) не запущено.",
     errNoCookies: "Файлы cookie для этой страницы не найдены.",
@@ -952,16 +972,29 @@ transferEl.addEventListener('click', async () => {
     });
 
     const result = await response.json();
-    if (!response.ok || !result.ok) {
-      throw new Error(result.error || t('errRefused'));
-    }
 
     // The relay verifies EVERY key it was sent, so a short count means a
     // partial snapshot reached Lightpanda. It must never read as success here
-    // either: that is a session that looks synced and answers 401/407.
-    if (typeof result.storage_count === 'number' && storageKeys &&
-        result.storage_count < storageKeys) {
-      throw new Error(t('errPartialStorage', result.storage_count, storageKeys));
+    // either: that is a session that looks synced and answers 401/407. Since
+    // v0.5.3 the relay also names the keys it could not carry, so the message
+    // says WHAT is missing - a bare ratio is what made "sync again" useless.
+    const expectedKeys = (typeof result.storage_expected === 'number' && result.storage_expected)
+      ? result.storage_expected : storageKeys;
+    if (typeof result.storage_count === 'number' && expectedKeys &&
+        result.storage_count < expectedKeys) {
+      const missing = Array.isArray(result.storage_missing) ? result.storage_missing : [];
+      const names = missing.length ? t('missingKeys', missing.join(', ')) : '';
+      throw new Error(t('errPartialStorage', result.storage_count, expectedKeys, names));
+    }
+
+    // Keys the relay refuses to carry (name or value past its size bounds) are
+    // reported BY NAME, never silently dropped.
+    if (Array.isArray(result.storage_refused) && result.storage_refused.length) {
+      throw new Error(t('errStorageRefused', result.storage_refused.join('; ')));
+    }
+
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || t('errRefused'));
     }
 
     setStatus(t('success', result.cookie_count, result.storage_count ?? storageKeys), 'success');

@@ -488,12 +488,58 @@ def _connection_resync() -> None:
                            _LAST_SESSION.get("storage"))
 
 
+# Bounds that protect the relay from an abusive payload - NOT a statement about
+# what a real application may store. The old "key < 128 chars, value < 16384"
+# pair looked generous until x.com showed up with 194-character keys
+# (rweb.sessionBinding.hashClaim:<base64>): the filter dropped them in SILENCE,
+# Lightpanda received 5 of the 7 keys, and the popup's honest counter read
+# "5/7 keys" forever - re-syncing could never fix it, because the two keys were
+# removed before the very first write attempt.
+MAX_KEY_CHARS = 1024        # real keys are namespaced and long, not 128 chars
+MAX_VALUE_CHARS = 262144    # 256 KiB per value: SPAs cache whole blobs
+MAX_TOTAL_CHARS = 1500000   # stays under the 2 MB /v1/session/import body cap
+
+
+def _short_key(name: str, limit: int = 60) -> str:
+    """Truncate a key NAME for reporting.
+
+    Key names are metadata - as safe to report as a cookie name. VALUES are
+    session secrets: they are never logged, returned or written to disk.
+    """
+    name = str(name)
+    return name if len(name) <= limit else name[:limit] + "..."
+
+
+def _storage_plan(storage: dict) -> tuple[dict, list]:
+    """Split a snapshot into (entries to transfer, entries refused + reason).
+
+    Nothing is ever dropped in silence. A refused entry comes back BY NAME with
+    its size and the reason, so the caller can report what is missing instead of
+    a ratio that can never reach 100%.
+    """
+    if not isinstance(storage, dict):
+        return {}, []
+    entries: dict = {}
+    refused: list = []
+    total = 0
+    for key, value in storage.items():
+        name = str(key)
+        text = str(value)
+        if len(name) > MAX_KEY_CHARS:
+            refused.append((_short_key(name), len(name), "key name too long"))
+        elif len(text) > MAX_VALUE_CHARS:
+            refused.append((_short_key(name), len(text), "value too large"))
+        elif total + len(text) > MAX_TOTAL_CHARS:
+            refused.append((_short_key(name), len(text), "snapshot too large"))
+        else:
+            entries[name] = text
+            total += len(text)
+    return entries, refused
+
+
 def _storage_entries(storage: dict) -> dict:
     """Sanitize a localStorage snapshot: bounded key/value sizes only."""
-    if not isinstance(storage, dict):
-        return {}
-    return {str(k): str(v) for k, v in storage.items()
-            if len(str(k)) < 128 and len(str(v)) < 16384}
+    return _storage_plan(storage)[0]
 
 
 def _register_storage_restore(storage: dict) -> bool:
@@ -525,6 +571,44 @@ def _register_storage_restore(storage: dict) -> bool:
 # Delay allowed for the page context to settle after a navigation before
 # localStorage is written (tests set it to 0).
 _NAV_SETTLE_SECONDS = 1.5
+
+# Keys the snapshot still expected / the page still lacked after the last
+# injection. NAMES only - values are session secrets and are never kept here.
+_LAST_STORAGE_EXPECTED = 0
+_LAST_STORAGE_MISSING: list = []
+_LAST_STORAGE_APPLIED_COUNT = 0
+# [name, size, reason] for every key the size bounds refused (reported, never
+# dropped in silence). Names only.
+_LAST_STORAGE_REFUSED: list = []
+
+
+def _missing_from_verify(raw) -> list:
+    """Normalize the page's verification result into a list of missing NAMES.
+
+    Accepts the legacy integer form too (0 = complete), so an older or simpler
+    transport can never turn a complete transfer into a false failure.
+    """
+    if isinstance(raw, bool):
+        return []
+    if isinstance(raw, int):
+        return [] if raw == 0 else ["<unknown>"] * max(raw, 1)
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return ["<unreadable>"]
+    if isinstance(data, dict):
+        miss = data.get("missing")
+        if isinstance(miss, list):
+            return [str(x) for x in miss if str(x)]
+        count = data.get("missing_count")
+        if isinstance(count, int):
+            return [] if count == 0 else ["<unknown>"] * count
+        return ["<unreadable>"]
+    if isinstance(data, list):
+        return [str(x) for x in data if str(x)]
+    if isinstance(data, int):
+        return [] if data == 0 else ["<unknown>"] * max(data, 1)
+    return ["<unreadable>"]
 
 
 def _apply_session(origin: str, cookies: list[dict], storage: dict | None = None) -> int:
@@ -564,6 +648,7 @@ def _inject_storage(origin: str, storage: dict) -> int:
     dropped ones, and the write still reported success. Returns -1 when the
     snapshot is still incomplete after the retries.
     """
+    global _LAST_STORAGE_MISSING
     entries = _storage_entries(storage)
     if not entries:
         return 0
@@ -573,10 +658,13 @@ def _inject_storage(origin: str, storage: dict) -> int:
                   "for (const k of Object.keys(data)) { try { "
                   "localStorage.setItem(k, data[k]); } catch (e) {} } "
                   "return Object.keys(data).length; } catch (e) { return -1; } })()")
-    # Keys the snapshot still needs: 0 means the transfer is complete.
-    verify_expr = ("(() => { try { const want = " + keys_json + "; let missing = 0; "
+    # Keys the snapshot still needs: an empty list means the transfer is
+    # complete. The NAMES come back (never the values) so a failure can say
+    # exactly which key is missing instead of a bare ratio.
+    verify_expr = ("(() => { try { const want = " + keys_json + "; const miss = []; "
                    "for (const k of want) { if (localStorage.getItem(k) === null) "
-                   "missing++; } return missing; } catch (e) { return -1; } })()")
+                   "miss.push(k); } return JSON.stringify({ missing: miss }); } "
+                   "catch (e) { return JSON.stringify({ missing: want }); } })()")
     for attempt in range(4):
         try:
             _CDP_TRANSPORT.request(
@@ -589,10 +677,13 @@ def _inject_storage(origin: str, storage: dict) -> int:
                 {"expression": verify_expr, "returnByValue": True},
                 session_id=_CDP_SESSION_ID,
             )
-            missing = res.get("result", {}).get("value", -1)
-            if missing == 0:
+            missing = _missing_from_verify(res.get("result", {}).get("value", -1))
+            if not missing:
+                _LAST_STORAGE_MISSING = []
                 return len(entries)
-        except Exception:
+            _LAST_STORAGE_MISSING = missing
+        except Exception as err:
+            _LAST_STORAGE_MISSING = ["<verify failed: %s>" % err]
             pass
         # A navigation replays a previously registered document-start restore
         # and gives the page a fresh, clean context to write into.
@@ -619,10 +710,26 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         raise ValueError("no valid cookies")
 
     storage_count = 0
+    global _LAST_STORAGE_APPLIED_COUNT
+    global _LAST_STORAGE_REFUSED
+    _LAST_STORAGE_APPLIED_COUNT = 0
+
+    # Sanitize BEFORE the live page is touched. A key the relay cannot carry has
+    # to fail fast AND by name: the x.com bug was a silent removal here, which
+    # showed up as a permanent "5/7 keys" that no re-sync could ever clear.
+    safe_storage, refused_storage = _storage_plan(storage or {})
+    _LAST_STORAGE_REFUSED = ["%s [%s, %d chars]" % (n, w, sz)
+                             for n, sz, w in refused_storage]
+    if refused_storage:
+        detail = ", ".join("%s [%s, %d chars]" % (n, w, sz)
+                           for n, sz, w in refused_storage[:5])
+        raise RuntimeError("localStorage key(s) refused by relay: " + detail)
+
     with CDP_LOCK:
         _ensure_connection(origin)
 
-        storage_count = _apply_session(origin, converted, storage)
+        storage_count = _apply_session(origin, converted, safe_storage)
+        _LAST_STORAGE_APPLIED_COUNT = max(storage_count, 0)
 
         # Verification via Network.getCookies
         result = _CDP_TRANSPORT.request(
@@ -641,7 +748,6 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         # Remember the session for automatic resync after a Lightpanda restart
         # AND persist it, so a relay restart / reboot / watchdog restart no
         # longer forces the user to click "Synchroniser" again.
-        safe_storage = _storage_entries(storage or {})
         _LAST_SESSION = {"origin": origin, "cookies": converted, "storage": safe_storage}
         _SYNCED_SESSIONS[origin] = converted
         _persist_session(_LAST_SESSION)
@@ -651,10 +757,20 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         # call returns 401/407. Bookkeeping is done (a resync can finish the
         # job), but the caller is told the truth.
         expected_storage = len(safe_storage)
+        global _LAST_STORAGE_EXPECTED
+        _LAST_STORAGE_EXPECTED = expected_storage
         if expected_storage and storage_count != expected_storage:
+            # ``x/y keys verified (missing: <names>)``: the names are what makes
+            # this actionable. Without them the same mystery ratio came back on
+            # every single sync.
+            missing_detail = ""
+            if _LAST_STORAGE_MISSING:
+                missing_detail = " (missing: %s)" % ", ".join(
+                    _short_key(k, 40) for k in _LAST_STORAGE_MISSING[:5]
+                )
             raise RuntimeError(
-                "localStorage transfer incomplete: %d/%d keys verified"
-                % (max(storage_count, 0), expected_storage)
+                "localStorage transfer incomplete: %d/%d keys verified%s"
+                % (max(storage_count, 0), expected_storage, missing_detail)
             )
 
         return len(converted), storage_count
@@ -1015,10 +1131,22 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "cookie_count": cookie_count,
                 "storage_count": storage_count,
+                "storage_expected": _LAST_STORAGE_EXPECTED,
+                "storage_refused": list(_LAST_STORAGE_REFUSED),
                 "origin": origin
             })
         except Exception as err:
-            self.send_json(400, {"ok": False, "error": str(err) or "session import refused"})
+            # The counts and the missing NAMES ride along with the failure, so
+            # the popup can build a translated, specific message instead of
+            # showing the relay's raw text.
+            self.send_json(400, {
+                "ok": False,
+                "error": str(err) or "session import refused",
+                "storage_count": _LAST_STORAGE_APPLIED_COUNT,
+                "storage_expected": _LAST_STORAGE_EXPECTED,
+                "storage_missing": list(_LAST_STORAGE_MISSING[:5]),
+                "storage_refused": list(_LAST_STORAGE_REFUSED),
+            })
 
 
 def self_test() -> int:

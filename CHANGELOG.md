@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.3] - 2026-09-10
+### Fixed
+- **x.com could never sync - "5/7 localStorage keys" that no re-sync could clear.** x.com keeps two of its entries under 194-character names (`rweb.sessionBinding.hashClaim:<base64>`). The snapshot filter dropped every key name longer than 128 characters **silently**, so those two were removed before the first write attempt: Lightpanda received 5 of 7, the popup honestly said so, and syncing again could never help because the missing keys never left the relay. Key names up to 1024 characters and values up to 256 KiB are now carried, with the whole snapshot bounded at 1.5 MB so it still fits the import body cap.
+- **Nothing is dropped in silence any more.** A key the relay cannot carry - name or value past the bounds, or a snapshot past the total - is reported BY NAME with its size and the reason, on both the HTTP and CLI paths, instead of turning into a ratio that never reaches 100%. The incomplete-transfer message names the missing keys as well, and the popup has a translated message for a refusal.
+### Added
+- `storage_expected`, `storage_missing` and `storage_refused` in the import response (success *and* failure), so the popup builds a specific, translated message instead of showing the relay's raw text.
+- Tests: `StoragePlanTests` plus named-refusal, named-partial and legacy-integer-verify cases - 86 tests, 1 skipped.
+- Proven end to end on x.com: the live tab's session was imported through the real `/v1/session/import`, then checked **inside** Lightpanda - 7/7 keys present including the two 194-character names, zero extras, `x.com/home` loaded as the logged-in account, and the session survived two further navigations. Key names and sizes only, never a value.
+
 ## [0.5.2] - 2026-09-10
 ### Fixed
 - **"Échec de la mise à jour : update redirect refused" — the update could never install.** GitHub answers a release-asset request with a 302 to a signed CDN URL, and it now redirects to `release-assets.githubusercontent.com`. That host was missing from the download allow-list, so the guard added in 0.5.0 rejected GitHub's own redirect and every install aborted. The current CDN host plus the two historical ones are now allow-listed; the check still runs on the **final** URL, so a redirect still cannot walk the download off GitHub, and a lookalike host (`release-assets.githubusercontent.com.evil.example`) is still refused.
