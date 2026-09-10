@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lightpanda-session-bridge"
-version = "0.5.0"
+version = "0.5.1"
 description = "The Authenticated Session Bridge for Machines and Autonomous AI Agents — transfer real browser sessions into Lightpanda headless runtime via CDP"
 readme = "README.md"
 requires-python = ">=3.10"

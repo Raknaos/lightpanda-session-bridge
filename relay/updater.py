@@ -317,10 +317,26 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             "update_available": True, "source": "main",
             "from": current["commit"][:8], "to": head["short"],
         })
+    elif not current["commit"] and release:
+        # No provenance (hand-installed, or an installer older than 0.5.0), so
+        # the deployed tree *is* the release only by assumption. Offer the
+        # tagged artifact - the immutable, checksum-verified one - never a
+        # downgrade, and never a silent guess about what is on disk.
+        installed = parse_version(current["version"] or "")
+        published = parse_version(release["version_text"])
+        if installed and published and installed[:3] <= published[:3]:
+            result.update({
+                "update_available": True, "source": "release",
+                "baseline_unknown": True,
+                "from": current["version"], "to": release["version_text"],
+            })
+        else:
+            result.update({"update_available": True, "source": "main",
+                           "baseline_unknown": True, "from": None,
+                           "to": (head or {}).get("short")})
     elif head and not current["commit"]:
-        # Nothing to compare against (hand-installed / older installer): say so
-        # once instead of guessing or nagging forever - installing writes the
-        # provenance that makes the next checks exact.
+        # No release to fall back on: install main and record the commit so the
+        # next check is exact.
         result.update({"update_available": True, "source": "main",
                        "baseline_unknown": True, "from": None, "to": head["short"]})
 

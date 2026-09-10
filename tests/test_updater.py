@@ -335,6 +335,11 @@ class TestApplyAndRollback(UpdateTestCase):
             return payload
 
         updater._fetch = fake_fetch
+        # Provenance says the deployed copy came from a, main is now c: that is
+        # what makes this the main channel and not the equal-version release.
+        with open(os.path.join(self.ext, updater.BUILD_INFO), "w", encoding="utf-8") as fh:
+            json.dump({"commit": "a" * 40, "tag": "v0.4.3"}, fh)
+        updater.clear_cache()
         result = updater.apply_update()
         self.assertEqual(result["source"], "main")
         self.assertIsNone(result["tag"])  # never claim a tag the code is not from
@@ -383,10 +388,32 @@ class TestCheckUpdate(UpdateTestCase):
         self.assertEqual(status["source"], "main")
 
     def test_unknown_baseline_is_flagged(self):
-        self._stub("0.4.3", "b" * 40)
+        # Nothing published yet: the only honest thing to offer is the commit.
+        self._stub(None, "b" * 40)
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertTrue(status["baseline_unknown"])
+        self.assertEqual(status["source"], "main")
+        self.assertEqual(status["to"], "bbbbbbb")
+
+    def test_unknown_baseline_prefers_the_verified_release(self):
+        # Deployed 0.5.0 with no provenance, and the release is also 0.5.0:
+        # offer the tagged zip (checksum-verifiable), not the main tarball.
+        extension_tree(self.ext, version="0.5.0", popup_marker="deployed")
+        self._stub("0.5.0", "b" * 40)
+        status = updater.check_update(force=True)
+        self.assertTrue(status["update_available"])
+        self.assertEqual(status["source"], "release")
+        self.assertTrue(status["baseline_unknown"])
+
+    def test_unknown_baseline_never_offers_a_downgrade(self):
+        # A dev checkout ahead of the last release: main channel, not the older
+        # tagged artifact.
+        extension_tree(self.ext, version="9.0.0", popup_marker="deployed")
+        self._stub("0.5.0", "b" * 40)
+        status = updater.check_update(force=True)
+        self.assertTrue(status["update_available"])
+        self.assertEqual(status["source"], "main")
 
     def test_github_unreachable_is_not_reported_as_up_to_date(self):
         def boom(repo=updater.REPO):

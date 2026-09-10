@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] - 2026-09-10
+### Changed
+- When the deployed copy carries no provenance (installed by hand, or by an installer older than 0.5.0) and the release is not older, the button now installs the **tagged release artifact** — the immutable one with a published `sha256` — instead of the `main` snapshot. The `main` channel is still used when the checkout is ahead of the last release, so an update can never silently downgrade content.
+### Added
+- Tests: the unknown-baseline choice (release vs main), and the no-downgrade rule.
+
 ## [0.5.0] - 2026-09-10
 ### Added
 - **An update button, and a badge that makes an update impossible to miss.** The popup compares the deployed version with GitHub and shows a *Update to vX.Y.Z* button when a release is ahead, or *Install the latest commit* when `main` has moved on. The toolbar badge appears on its own (checked every 3 h, on install and on browser start).
