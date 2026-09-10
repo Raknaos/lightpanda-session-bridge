@@ -238,9 +238,18 @@ def ids_agree():
     script that opened an error page and reported success). Only tracked text
     files are judged, and an obvious fixture - four identical characters in a
     row, like the aaaa... ids the tests use - is not a wrong id."""
-    pin = pinned_id()
+    try:
+        pin = pinned_id()
+        origin = "the pin"
+    except OSError:
+        # No pin on this machine (a CI runner, a fresh clone): updates.xml is
+        # the id the repository declares, and comparing against it still
+        # catches a literal that drifted from the rest of the repo.
+        import cdp_utils
+        pin = cdp_utils.declared_extension_id()
+        origin = "updates.xml (no pin here)"
     if not re.match(r"^[a-p]{32}$", pin):
-        return "FAIL", "the pin itself is not 32 chars: %d" % len(pin)
+        return "FAIL", "the reference id is not 32 chars: %d car (%s)" % (len(pin), origin)
     tracked = git("ls-files").split()
     binary = (".png", ".woff2", ".ico", ".zip", ".pdf", ".lock")
     offenders = []
@@ -258,12 +267,16 @@ def ids_agree():
             offenders.append("%s:%s car" % (rel, len(found)))
     if offenders:
         return "FAIL", "id literal that is not the pin - %s" % ", ".join(sorted(set(offenders))[:4])
-    return "ok", "every id literal in %d tracked files is the pinned 32-char id" % len(tracked)
+    return "ok", ("every id literal in %d tracked files is the declared 32-char id (%s)"
+                  % (len(tracked), origin))
 
 
 @check("the shared secret is absent from the repo")
 def secret_absent():
-    secret = bridge_token()
+    try:
+        secret = bridge_token()
+    except OSError:
+        return "SKIP", "no shared secret on this machine (nothing to search for)"
     if len(secret) < 8:
         return "SKIP", "no shared secret on this machine"
     leaked = []

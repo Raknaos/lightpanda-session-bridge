@@ -82,7 +82,7 @@ class ExtensionIdTests(unittest.TestCase):
         """The copy-paste is what broke: every script must go through cdp_utils."""
         for name in ("reload_extension.py", "verify_extension.py"):
             text = (REPO_ROOT / "scripts" / name).read_text(encoding="utf-8")
-            # the shared fallback constant lives in cdp_utils only
+            # no script carries an id: it is resolved from the pin, else from updates.xml
             self.assertNotRegex(text, r"\b[a-p]{31,36}\b", "%s porte un id en dur" % name)
             self.assertIn("cdp_utils", text)
 
