@@ -1,0 +1,10 @@
+# The updater mirrors files out of GitHub's tarball/zip into the live unpacked
+# extension directory, and GitHub serves LF. With core.autocrlf=true a Windows
+# checkout writes CRLF instead, so every successful update rewrote every file
+# (content identical, bytes not) and `git status` reported the whole extension
+# as modified. Pinning LF for the shipped tree makes a checkout, a release zip
+# and an update install byte-for-byte the same thing.
+extension/** text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+updates.xml text eol=lf

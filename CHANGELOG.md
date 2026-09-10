@@ -5,6 +5,7 @@
 - **"Install the latest commit" failed with `HTTP Error 415: Unsupported Media Type`.** The main channel reused the `Accept: application/octet-stream` header that was written for the CDN that serves release assets, but the archive comes from `api.github.com/repos/.../tarball/<sha>` - and the API refuses a media type it cannot produce. GitHub answered 415 before sending a single byte, so the button did nothing. Measured on the same URL: octet-stream -> **415**, `application/vnd.github+json` -> **200**, no Accept header at all -> **200**.
 - The guard now lives in `_fetch` - the one place every update request goes through - so the API host always receives the GitHub media type and no caller can reintroduce the bug by asking for bytes. Download hosts keep the caller's Accept, because the CDN does serve octet-stream. The release channel worked all along; only the main channel was broken.
 - 3 new tests pin it, including a behavioural one that captures the real header on a stubbed socket: **95 tests, 1 skipped**.
+- **Hygiene:** `.gitattributes` pins LF for `extension/**`, so a Windows checkout, the release zip and an update install are byte-for-byte the same tree. Before this, a successful update rewrote every file (content identical, line endings not) and `git status` reported the whole extension as modified.
 
 ## [0.5.4] - 2026-09-10
 ### Fixed
