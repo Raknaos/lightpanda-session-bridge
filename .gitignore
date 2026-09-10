@@ -17,3 +17,4 @@ popup_current.png
 dist/
 build/
 *.egg-info/
+extension/.build-info.json

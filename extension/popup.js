@@ -24,6 +24,19 @@ const I18N = {
     errNoCookies: "No cookies found for this page.",
     errCookiesOutOfScope: "These cookies are outside the extension's permission scope. Reload the extension (chrome://extensions) and try again.",
     errRefused: "Transfer refused by local relay.",
+    updateLabel: "Bridge update",
+    updateChecking: "Checking for updates…",
+    updateUpToDate: (x) => `Up to date · v${x}`,
+    updateAvailable: (x) => `Update available: v${x}`,
+    updateMainAvailable: (x) => `New commit on ${x}`,
+    updateBtn: (x) => `Update to v${x}`,
+    updateBtnMain: "Install the latest commit",
+    updateApplying: "Downloading and installing from GitHub…",
+    updateApplied: (x) => `Installed v${x} — reloading…`,
+    updateFailed: (x) => `Update failed: ${x}`,
+    updateRollback: "Undo the last update",
+    updateRolledBack: (x) => `Restored v${x} — reloading…`,
+    updateBaseline: "Exact commit tracking is off: install once so the deployed commit is recorded.",
     footerTag: "Isolated Profile · Localhost CDP",
     sessionsLabel: "Active sessions in Lightpanda",
     sessionsEmpty: "No sessions synced into Lightpanda.",
@@ -52,6 +65,19 @@ const I18N = {
     errNoCookies: "Aucun cookie trouvé pour cette page.",
     errCookiesOutOfScope: "Ces cookies sont hors du périmètre d'autorisation de l'extension. Rechargez l'extension (chrome://extensions) puis réessayez.",
     errRefused: "Transfert refusé par le relais local.",
+    updateLabel: "Mise à jour du Bridge",
+    updateChecking: "Recherche de mise à jour…",
+    updateUpToDate: (x) => `À jour · v${x}`,
+    updateAvailable: (x) => `Mise à jour disponible : v${x}`,
+    updateMainAvailable: (x) => `Nouveau commit ${x}`,
+    updateBtn: (x) => `Mettre à jour vers v${x}`,
+    updateBtnMain: "Installer le dernier commit",
+    updateApplying: "Téléchargement et installation depuis GitHub…",
+    updateApplied: (x) => `v${x} installée — rechargement…`,
+    updateFailed: (x) => `Échec de la mise à jour : ${x}`,
+    updateRollback: "Annuler la dernière mise à jour",
+    updateRolledBack: (x) => `v${x} restaurée — rechargement…`,
+    updateBaseline: "Suivi exact désactivé : lancez une installation pour enregistrer le commit déployé.",
     footerTag: "Profil isolé · Localhost CDP",
     sessionsLabel: "Sessions actives dans Lightpanda",
     sessionsEmpty: "Aucune session synchronisée dans Lightpanda.",
@@ -80,6 +106,19 @@ const I18N = {
     errNoCookies: "No se encontraron cookies para esta página.",
     errCookiesOutOfScope: "Estas cookies están fuera de los permisos de la extensión. Recarga la extensión (chrome://extensions) e inténtalo de nuevo.",
     errRefused: "Transferencia rechazada por el relé local.",
+    updateLabel: "Actualización del Bridge",
+    updateChecking: "Buscando actualizaciones…",
+    updateUpToDate: (x) => `Al día · v${x}`,
+    updateAvailable: (x) => `Actualización disponible: v${x}`,
+    updateMainAvailable: (x) => `Nuevo commit ${x}`,
+    updateBtn: (x) => `Actualizar a v${x}`,
+    updateBtnMain: "Instalar el último commit",
+    updateApplying: "Descargando e instalando desde GitHub…",
+    updateApplied: (x) => `v${x} instalada — recargando…`,
+    updateFailed: (x) => `Error de actualización: ${x}`,
+    updateRollback: "Deshacer la última actualización",
+    updateRolledBack: (x) => `v${x} restaurada — recargando…`,
+    updateBaseline: "El seguimiento exacto está desactivado: instala una vez para registrar el commit desplegado.",
     footerTag: "Perfil aislado · Localhost CDP",
     sessionsLabel: "Sesiones activas en Lightpanda",
     sessionsEmpty: "No hay sesiones sincronizadas en Lightpanda.",
@@ -108,6 +147,19 @@ const I18N = {
     errNoCookies: "Keine Cookies für diese Seite gefunden.",
     errCookiesOutOfScope: "Diese Cookies liegen außerhalb der Berechtigungen der Erweiterung. Lade die Erweiterung neu (chrome://extensions) und versuche es erneut.",
     errRefused: "Übertragung vom lokalen Relais abgelehnt.",
+    updateLabel: "Bridge-Aktualisierung",
+    updateChecking: "Suche nach Updates…",
+    updateUpToDate: (x) => `Aktuell · v${x}`,
+    updateAvailable: (x) => `Update verfügbar: v${x}`,
+    updateMainAvailable: (x) => `Neuer Commit ${x}`,
+    updateBtn: (x) => `Auf v${x} aktualisieren`,
+    updateBtnMain: "Neuesten Commit installieren",
+    updateApplying: "Wird von GitHub geladen und installiert…",
+    updateApplied: (x) => `v${x} installiert — Neuladen…`,
+    updateFailed: (x) => `Update fehlgeschlagen: ${x}`,
+    updateRollback: "Letztes Update rückgängig machen",
+    updateRolledBack: (x) => `v${x} wiederhergestellt — Neuladen…`,
+    updateBaseline: "Genaue Commit-Verfolgung ist aus: einmal installieren, um den Commit zu erfassen.",
     footerTag: "Isoliertes Profil · Localhost CDP",
     sessionsLabel: "Aktive Sitzungen in Lightpanda",
     sessionsEmpty: "Keine Sitzungen in Lightpanda synchronisiert.",
@@ -134,6 +186,19 @@ const I18N = {
     errNoCookies: "未找到此页面的 Cookie。",
     errCookiesOutOfScope: "这些 Cookie 超出扩展程序的权限范围。请重新加载扩展程序（chrome://extensions）后重试。",
     errRefused: "本地中继拒绝了传输。",
+    updateLabel: "Bridge 更新",
+    updateChecking: "正在检查更新…",
+    updateUpToDate: (x) => `已是最新 · v${x}`,
+    updateAvailable: (x) => `有可用更新：v${x}`,
+    updateMainAvailable: (x) => `新提交 ${x}`,
+    updateBtn: (x) => `更新到 v${x}`,
+    updateBtnMain: "安装最新提交",
+    updateApplying: "正在从 GitHub 下载并安装…",
+    updateApplied: (x) => `已安装 v${x} — 正在重新加载…`,
+    updateFailed: (x) => `更新失败：${x}`,
+    updateRollback: "撤销上次更新",
+    updateRolledBack: (x) => `已恢复 v${x} — 正在重新加载…`,
+    updateBaseline: "提交跟踪未启用：安装一次即可记录当前提交。",
     footerTag: "隔离配置文件 · 本地 CDP",
     sessionsLabel: "Lightpanda 中的活动会话",
     sessionsEmpty: "Lightpanda 中没有已同步的会话。",
@@ -160,6 +225,19 @@ const I18N = {
     errNoCookies: "このページのCookieが見つかりません。",
     errCookiesOutOfScope: "これらのCookieは拡張機能の権限範囲外です。拡張機能を再読み込み（chrome://extensions）して再試行してください。",
     errRefused: "ローカルリレーによって転送が拒否されました。",
+    updateLabel: "Bridge の更新",
+    updateChecking: "更新を確認中…",
+    updateUpToDate: (x) => `最新です · v${x}`,
+    updateAvailable: (x) => `更新があります: v${x}`,
+    updateMainAvailable: (x) => `新しいコミット ${x}`,
+    updateBtn: (x) => `v${x} に更新`,
+    updateBtnMain: "最新コミットをインストール",
+    updateApplying: "GitHub からダウンロードしてインストール中…",
+    updateApplied: (x) => `v${x} をインストールしました — 再読み込み中…`,
+    updateFailed: (x) => `更新に失敗しました: ${x}`,
+    updateRollback: "最後の更新を元に戻す",
+    updateRolledBack: (x) => `v${x} を復元しました — 再読み込み中…`,
+    updateBaseline: "コミット追跡は未設定です: 一度インストールすると記録されます。",
     footerTag: "分離プロファイル · Localhost CDP",
     sessionsLabel: "Lightpanda内のアクティブなセッション",
     sessionsEmpty: "Lightpandaに同期されたセッションはありません。",
@@ -188,6 +266,19 @@ const I18N = {
     errNoCookies: "Nessun cookie trovato per questa pagina.",
     errCookiesOutOfScope: "Questi cookie sono fuori dai permessi dell'estensione. Ricarica l'estensione (chrome://extensions) e riprova.",
     errRefused: "Trasferimento rifiutato dal relè locale.",
+    updateLabel: "Aggiornamento Bridge",
+    updateChecking: "Ricerca aggiornamenti…",
+    updateUpToDate: (x) => `Aggiornato · v${x}`,
+    updateAvailable: (x) => `Aggiornamento disponibile: v${x}`,
+    updateMainAvailable: (x) => `Nuovo commit ${x}`,
+    updateBtn: (x) => `Aggiorna a v${x}`,
+    updateBtnMain: "Installa l'ultimo commit",
+    updateApplying: "Download e installazione da GitHub…",
+    updateApplied: (x) => `v${x} installata — ricarica…`,
+    updateFailed: (x) => `Aggiornamento non riuscito: ${x}`,
+    updateRollback: "Annulla l'ultimo aggiornamento",
+    updateRolledBack: (x) => `v${x} ripristinata — ricarica…`,
+    updateBaseline: "Tracciamento esatto disattivato: installa una volta per registrare il commit.",
     footerTag: "Profilo isolato · Localhost CDP",
     sessionsLabel: "Sessioni attive in Lightpanda",
     sessionsEmpty: "Nessuna sessione sincronizzata in Lightpanda.",
@@ -216,6 +307,19 @@ const I18N = {
     errNoCookies: "Nenhum cookie encontrado para esta página.",
     errCookiesOutOfScope: "Estes cookies estão fora das permissões da extensão. Recarregue a extensão (chrome://extensions) e tente novamente.",
     errRefused: "Transferência recusada pelo relé local.",
+    updateLabel: "Atualização do Bridge",
+    updateChecking: "Verificando atualizações…",
+    updateUpToDate: (x) => `Atualizado · v${x}`,
+    updateAvailable: (x) => `Atualização disponível: v${x}`,
+    updateMainAvailable: (x) => `Novo commit ${x}`,
+    updateBtn: (x) => `Atualizar para v${x}`,
+    updateBtnMain: "Instalar o último commit",
+    updateApplying: "Baixando e instalando do GitHub…",
+    updateApplied: (x) => `v${x} instalada — recarregando…`,
+    updateFailed: (x) => `Falha na atualização: ${x}`,
+    updateRollback: "Desfazer a última atualização",
+    updateRolledBack: (x) => `v${x} restaurada — recarregando…`,
+    updateBaseline: "Rastreamento exato desativado: instale uma vez para registrar o commit.",
     footerTag: "Perfil isolado · Localhost CDP",
     sessionsLabel: "Sessões ativas no Lightpanda",
     sessionsEmpty: "Nenhuma sessão sincronizada no Lightpanda.",
@@ -242,6 +346,19 @@ const I18N = {
     errNoCookies: "لم يتم العثور على ملفات تعريف الارتباط.",
     errCookiesOutOfScope: "ملفات تعريف الارتباط هذه خارج نطاق أذونات الإضافة. أعد تحميل الإضافة (chrome://extensions) ثم أعد المحاولة.",
     errRefused: "تم رفض النقل بواسطة المرحل المحلي.",
+    updateLabel: "تحديث Bridge",
+    updateChecking: "جارٍ التحقق من التحديثات…",
+    updateUpToDate: (x) => `محدَّث · v${x}`,
+    updateAvailable: (x) => `يتوفر تحديث: v${x}`,
+    updateMainAvailable: (x) => `التزام جديد ${x}`,
+    updateBtn: (x) => `التحديث إلى v${x}`,
+    updateBtnMain: "تثبيت أحدث التزام",
+    updateApplying: "جارٍ التنزيل والتثبيت من GitHub…",
+    updateApplied: (x) => `تم تثبيت v${x} — جارٍ إعادة التحميل…`,
+    updateFailed: (x) => `فشل التحديث: ${x}`,
+    updateRollback: "تراجع عن آخر تحديث",
+    updateRolledBack: (x) => `تمت استعادة v${x} — جارٍ إعادة التحميل…`,
+    updateBaseline: "تتبّع الالتزام غير مفعّل: ثبّت مرة واحدة لتسجيل الالتزام المنشور.",
     footerTag: "ملف تعريف معزول · Localhost CDP",
     sessionsLabel: "الجلسات النشطة في Lightpanda",
     sessionsEmpty: "لا توجد جلسات متزامنة في Lightpanda.",
@@ -270,6 +387,19 @@ const I18N = {
     errNoCookies: "Файлы cookie для этой страницы не найдены.",
     errCookiesOutOfScope: "Эти файлы cookie вне разрешений расширения. Перезагрузите расширение (chrome://extensions) и повторите попытку.",
     errRefused: "Перенос отклонен локальным реле.",
+    updateLabel: "Обновление Bridge",
+    updateChecking: "Проверка обновлений…",
+    updateUpToDate: (x) => `Актуально · v${x}`,
+    updateAvailable: (x) => `Доступно обновление: v${x}`,
+    updateMainAvailable: (x) => `Новый коммит ${x}`,
+    updateBtn: (x) => `Обновить до v${x}`,
+    updateBtnMain: "Установить последний коммит",
+    updateApplying: "Загрузка и установка с GitHub…",
+    updateApplied: (x) => `v${x} установлена — перезагрузка…`,
+    updateFailed: (x) => `Ошибка обновления: ${x}`,
+    updateRollback: "Отменить последнее обновление",
+    updateRolledBack: (x) => `v${x} восстановлена — перезагрузка…`,
+    updateBaseline: "Точное отслеживание коммита выключено: установите один раз, чтобы записать коммит.",
     footerTag: "Изолированный профиль · Localhost CDP",
     sessionsLabel: "Активные сеансы в Lightpanda",
     sessionsEmpty: "Нет сеансов, синхронизированных с Lightpanda.",
@@ -304,6 +434,15 @@ const sessionsClear = document.querySelector('#sessions-clear');
 const labelSessions = document.querySelector('#label-sessions');
 const clearText = document.querySelector('#clear-text');
 const clearTextBase = clearText ? clearText.textContent : '';
+// Bridge update UI (the relay does the download; this is only the button)
+const updateChip = document.querySelector('#update-chip');
+const updateVersion = document.querySelector('#update-version');
+const updateMeta = document.querySelector('#update-meta');
+const updateBtn = document.querySelector('#update-btn');
+const rollbackBtn = document.querySelector('#rollback-btn');
+const labelUpdate = document.querySelector('#label-update');
+const appVersion = document.querySelector('#app-version');
+
 const toastEl = document.querySelector('#toast');
 
 let toastTimer = null;
@@ -379,6 +518,7 @@ function applyTranslations() {
   btnText.textContent = t('btnSync');
   footerSecureTag.textContent = t('footerTag');
   labelSessions.textContent = t('sessionsLabel');
+  if (labelUpdate) labelUpdate.textContent = t('updateLabel');
 
   // Update dropdown active item
   document.querySelectorAll('.lang-item').forEach(item => {
@@ -393,6 +533,8 @@ function applyTranslations() {
   } else {
     relayText.textContent = t('relayChecking');
   }
+
+  renderUpdateCard();
 }
 
 function setStatus(text, type = 'info') {
@@ -557,8 +699,117 @@ setInterval(() => {
   }
 }, 30000);
 
+// ---- Bridge update (GitHub) ------------------------------------------------
+// The extension is loaded unpacked: it can never rewrite its own files, and
+// Chrome never auto-updates it. The local relay does the download and the
+// install; the popup only reports the state and presses the button.
+let updateInfo = null;
+let updateBusy = false;
+
+function shortCommit(sha) {
+  return sha ? String(sha).slice(0, 7) : '';
+}
+
+function renderUpdateCard() {
+  if (!updateChip) return;
+  labelUpdate.textContent = t('updateLabel');
+  const deployed = chrome.runtime.getManifest().version;
+  updateVersion.textContent = 'v' + deployed;
+
+  if (updateBusy) {
+    updateChip.className = 'update-chip';
+    updateChip.textContent = t('updateApplying');
+    updateMeta.textContent = '';
+    return;
+  }
+
+  // No answer from the relay: never claim "up to date" on a guess.
+  if (!updateInfo || !updateInfo.ok) {
+    updateChip.className = 'update-chip off';
+    updateChip.textContent = t('relayOffline');
+    updateMeta.textContent = '';
+    updateBtn.style.display = 'none';
+    rollbackBtn.style.display = 'none';
+    return;
+  }
+
+  rollbackBtn.textContent = t('updateRollback');
+  rollbackBtn.style.display = updateInfo.backup_available ? '' : 'none';
+
+  if (updateInfo.update_available) {
+    const fromRelease = updateInfo.source === 'release';
+    updateChip.className = 'update-chip new';
+    updateChip.textContent = fromRelease
+      ? 'v' + updateInfo.latest_version
+      : shortCommit(updateInfo.latest_commit);
+    updateMeta.textContent = fromRelease
+      ? t('updateAvailable', updateInfo.latest_version)
+      : t('updateMainAvailable', shortCommit(updateInfo.latest_commit));
+    updateBtn.textContent = fromRelease
+      ? t('updateBtn', updateInfo.latest_version)
+      : t('updateBtnMain');
+    updateBtn.style.display = '';
+  } else {
+    updateChip.className = 'update-chip ok';
+    updateChip.textContent = t('updateUpToDate', deployed);
+    updateMeta.textContent = updateInfo.current_commit
+      ? shortCommit(updateInfo.current_commit)
+      : t('updateBaseline');
+    updateBtn.style.display = 'none';
+  }
+}
+
+async function refreshUpdateStatus() {
+  try {
+    const res = await fetch(`${RELAY}/v1/update/check`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(String(res.status));
+    updateInfo = await res.json();
+  } catch (_) {
+    updateInfo = null;
+  }
+  renderUpdateCard();
+}
+
+async function runUpdate(path, label, doneKey) {
+  if (updateBusy) return;
+  updateBusy = true;
+  setStatus(label, 'info');
+  updateBtn.disabled = true;
+  rollbackBtn.disabled = true;
+  renderUpdateCard();
+  try {
+    const res = await fetch(`${RELAY}${path}`, {
+      method: 'POST',
+      headers: bridgeHeaders(),
+      body: JSON.stringify({ source: 'auto' })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || t('errRefused'));
+    updateBusy = false;
+    setStatus(t(doneKey, data.version || ''), 'success');
+    // The new files are on disk; reload so Comet serves them. The popup goes
+    // away with the reload - the status line above is the last thing seen.
+    setTimeout(() => { try { chrome.runtime.reload(); } catch (_) {} }, 1400);
+  } catch (error) {
+    updateBusy = false;
+    updateBtn.disabled = false;
+    rollbackBtn.disabled = false;
+    setStatus(t('updateFailed', error.message || ''), 'error');
+    refreshUpdateStatus();
+  }
+}
+
+if (updateBtn) {
+  updateBtn.addEventListener('click', () => runUpdate('/v1/update/apply', t('updateApplying'), 'updateApplied'));
+}
+if (rollbackBtn) {
+  rollbackBtn.addEventListener('click', () => runUpdate('/v1/update/rollback', t('updateApplying'), 'updateRolledBack'));
+}
+
 async function init() {
   applyTranslations();
+  // The footer version is read from the manifest: no hand-edit on each bump.
+  if (appVersion) appVersion.textContent = 'v' + chrome.runtime.getManifest().version;
   await loadBridgeToken();
   if (!bridgeToken) {
     // First run: auto-pair with the local relay (fetch shared secret).
@@ -566,6 +817,9 @@ async function init() {
   }
   const relayOk = await checkRelay();
   if (relayOk) refreshSessions();  // populate the sessions counter badge
+  // Is GitHub ahead of the version Comet is running? The relay answers; the
+  // toolbar badge (background.js) says the same thing without opening this.
+  refreshUpdateStatus();
 
   // Find target tab
   const tabs = await chrome.tabs.query({ currentWindow: true });

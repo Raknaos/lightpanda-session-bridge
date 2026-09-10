@@ -13,12 +13,20 @@ import json
 import os
 import re
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import websocket
+
+# updater.py sits next to this file; make the import work whether the relay is
+# started as `python relay/server.py` or imported by the test suite.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import updater  # noqa: E402  (local module)
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -876,6 +884,19 @@ class Handler(BaseHTTPRequestHandler):
                 return
             sessions = list_sessions()
             self.send_json(200, {"ok": True, "sessions": sessions, "count": len(sessions)})
+        elif self.path == "/v1/update/check":
+            # Read-only: which version is deployed, and does GitHub have a
+            # newer release (or a newer commit on main)? Versions and hashes
+            # only - no secret, no cookie, nothing about a browsing session.
+            # No token required so the background badge can poll it; the caller
+            # still has to be the pinned extension (or local CLI tooling).
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
+            try:
+                self.send_json(200, updater.check_update())
+            except Exception as err:
+                self.send_json(200, {"ok": False, "error": str(err) or "update check failed"})
         elif self.path == "/v1/session/inspect":
             # Removed: leaked cookie names, origin, page URL/title to any caller.
             self.send_json(404, {"ok": False, "error": "not found"})
@@ -930,6 +951,45 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "result": result})
             except Exception as err:
                 self.send_json(400, {"ok": False, "error": str(err) or "cdp call refused"})
+            return
+        if self.path == "/v1/update/apply":
+            # Download the newest release (or the newest main commit) from
+            # GitHub and write it into the live unpacked extension directory.
+            # State-changing and filesystem-touching: pinned origin AND the
+            # shared token, exactly like /v1/session/import.
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
+            if not self._authorized():
+                self.send_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            try:
+                source = "auto"
+                length = int(self.headers.get("Content-Length", "0"))
+                if length > 2_000:
+                    raise ValueError("body refused")
+                if length > 0:
+                    self.connection.settimeout(10)
+                    payload = json.loads(self.rfile.read(length).decode("utf-8")) or {}
+                    source = payload.get("source") or "auto"
+                if source not in ("auto", "release", "main"):
+                    raise ValueError("unknown update source")
+                self.send_json(200, updater.apply_update(source))
+            except Exception as err:
+                self.send_json(400, {"ok": False, "error": str(err) or "update refused"})
+            return
+        if self.path == "/v1/update/rollback":
+            # Undo the last update from the backup made before it ran.
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
+            if not self._authorized():
+                self.send_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            try:
+                self.send_json(200, updater.rollback_update())
+            except Exception as err:
+                self.send_json(400, {"ok": False, "error": str(err) or "rollback refused"})
             return
         if self.path != "/v1/session/import":
             self.send_json(404, {"ok": False, "error": "not found"})
@@ -1024,6 +1084,51 @@ def self_test() -> int:
         _clear_pinned_extension_cache()
         import shutil as _shutil
         _shutil.rmtree(sandbox, ignore_errors=True)
+    # --- updater (the "Update" button in the popup) -----------------------
+    assert updater.parse_version("v0.4.3") == (0, 4, 3, "")
+    assert updater.parse_version("0.5.0-rc1") == (0, 5, 0, "rc1")
+    assert updater.parse_version("nonsense") is None
+    assert updater.is_newer("0.5.0", "0.4.3")
+    assert not updater.is_newer("0.4.3", "0.4.3")
+    assert not updater.is_newer("0.4.2", "0.4.3")
+    assert updater.is_newer("0.5.0", "0.5.0-rc1")        # a final beats its rc
+    assert updater.is_newer("0.5.0-rc2", "0.5.0-rc1")
+    assert not updater.is_newer("0.4.3", "nonsense")     # unparsable never wins
+
+    # An archive that tries to leave its own directory, or that carries an
+    # absolute path, must be refused before anything is written.
+    import io as _io
+    import tarfile as _tar
+    import zipfile as _zip
+    _tmpdir = tempfile.mkdtemp(prefix="lp-bridge-selftest-archive-")
+    try:
+        _zip_path = os.path.join(_tmpdir, "bad.zip")
+        with _zip.ZipFile(_zip_path, "w") as _z:
+            _z.writestr("../../evil.txt", "x")
+        _tar_path = os.path.join(_tmpdir, "bad.tar.gz")
+        with _tar.open(_tar_path, "w:gz") as _t:
+            for _name in ("../evil.txt", "/abs/evil.txt"):
+                _member = _tar.TarInfo(_name)
+                _member.size = 1
+                _t.addfile(_member, _io.BytesIO(b"x"))
+        for _path in (_zip_path, _tar_path):
+            try:
+                updater.extract_archive(_path, os.path.join(_tmpdir, "out"))
+                raise AssertionError("a traversal archive was accepted")
+            except RuntimeError as _err:
+                assert "traversal" in str(_err) or "absolute" in str(_err), str(_err)
+        assert not os.path.exists(os.path.join(os.path.dirname(_tmpdir), "evil.txt"))
+        # A tree with no extension/manifest.json is refused before any write.
+        _empty = os.path.join(_tmpdir, "empty")
+        os.makedirs(_empty, exist_ok=True)
+        try:
+            updater.locate_extension_root(_empty)
+            raise AssertionError("an archive without the extension was accepted")
+        except RuntimeError:
+            pass
+    finally:
+        _shutil.rmtree(_tmpdir, ignore_errors=True)
+
     print("security self-test: ok")
     return 0
 
@@ -1040,9 +1145,24 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--check-update", action="store_true",
+                        help="print the GitHub update status as JSON and exit")
+    parser.add_argument("--apply-update", action="store_true",
+                        help="install the newest release/commit into the extension dir")
+    parser.add_argument("--rollback-update", action="store_true",
+                        help="restore the tree saved by the previous update")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
+    if args.check_update:
+        print(json.dumps(updater.check_update(force=True), indent=2, ensure_ascii=True))
+        return 0
+    if args.apply_update:
+        print(json.dumps(updater.apply_update(), indent=2, ensure_ascii=True))
+        return 0
+    if args.rollback_update:
+        print(json.dumps(updater.rollback_update(), indent=2, ensure_ascii=True))
+        return 0
     try:
         server = RelayServer((HOST, args.port), Handler)
     except OSError as err:

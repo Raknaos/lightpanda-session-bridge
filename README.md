@@ -131,6 +131,37 @@ python bridge.py doctor   # full diagnosis with fixes
 
 ---
 
+## 🔄 Updating (one click, from the popup)
+
+Chrome never updates an extension that is loaded unpacked, and an extension is
+not allowed to rewrite its own files. The bridge solves it the only way that
+works: **the local relay performs the update**.
+
+- A **badge on the toolbar** (and a chip in the popup) appears as soon as GitHub
+  is ahead of what the browser is running: a newer release, *or* a newer commit
+  on `main`.
+- **Update** makes the relay download the release zip (or the `main` source
+  archive), verify its `sha256` against the published sidecar, check that the
+  archive really is this extension, back up the current tree, write the new
+  files and reload the extension.
+- **Undo** restores the tree saved immediately before the last update.
+
+The same three operations from a terminal:
+
+```bash
+python relay/server.py --check-update      # GitHub vs what runs here
+python relay/server.py --apply-update      # download + install + provenance
+python relay/server.py --rollback-update   # back to the previous tree
+```
+
+The provenance of the deployed copy lands in `extension/.build-info.json`
+(version, tag, commit, sha256, source). It is git-ignored: it describes *this*
+machine's install, not the repository.
+
+Only `https://api.github.com`, `github.com`, `codeload.github.com` and GitHub's
+object hosts are accepted, the download is size-capped, zip-slip and absolute
+paths are refused, and the extension directory is the only thing ever written.
+
 ## 🛠️ Advanced: manual service control
 
 <details>

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-09-10
+### Added
+- **An update button, and a badge that makes an update impossible to miss.** The popup compares the deployed version with GitHub and shows a *Update to vX.Y.Z* button when a release is ahead, or *Install the latest commit* when `main` has moved on. The toolbar badge appears on its own (checked every 3 h, on install and on browser start).
+- **The relay installs it, because the extension cannot update itself.** `GET /v1/update/check`, `POST /v1/update/apply` and `POST /v1/update/rollback`, plus the same three operations as `python relay/server.py --check-update | --apply-update | --rollback-update`. The archive is downloaded from a compiled-in repository (never from the caller), restricted to GitHub hosts over https, size-capped, refused if it contains traversal or absolute paths, and refused unless it holds a Manifest V3 `manifest.json` whose name is this extension. A published `.zip.sha256` sidecar is verified when present, the previous tree is backed up outside the repository, and *Undo* puts it back.
+- The footer version is now read from the manifest at runtime instead of being hand-edited in `popup.html` on each bump.
+### Changed
+- The extension requests the `alarms` permission for the periodic update check.
+### Fixed
+- `relay/server.py --self-test` also covers the version ordering, the archive traversal refusal and the incomplete-tree refusal.
+
 All notable changes to the Lightpanda Session Bridge will be documented in this file.
 
 ## [0.4.3] - 2026-09-10
