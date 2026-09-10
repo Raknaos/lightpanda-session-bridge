@@ -34,12 +34,21 @@ import zipfile
 REPO = os.environ.get("LP_BRIDGE_UPDATE_REPO", "Raknaos/lightpanda-session-bridge")
 BRANCH = os.environ.get("LP_BRIDGE_UPDATE_BRANCH", "main")
 API = "https://api.github.com"
+# Every host the download is allowed to end up on. GitHub answers a release
+# asset request with a 302 to a signed CDN URL, and the CDN hostname has changed
+# over the years, so all known ones are listed rather than trusting a wildcard:
+# `release-assets.githubusercontent.com` is what it redirects to today
+# (v0.5.2 fix - v0.5.1 failed here with "update redirect refused"), the other two
+# are the historical targets. The check runs on the *final* URL, so a redirect
+# can never walk the download off GitHub.
 ALLOWED_HOSTS = {
     "api.github.com",
     "github.com",
     "codeload.github.com",
     "objects.githubusercontent.com",
     "raw.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+    "github-releases.githubusercontent.com",
 }
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 BUILD_INFO = ".build-info.json"

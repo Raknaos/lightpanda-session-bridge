@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lightpanda Session Bridge",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Explicitly transfer the current site session to a local Lightpanda browser.",
   "update_url": "https://raknaos.github.io/lightpanda-session-bridge/updates.xml",
   "icons": {

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.2] - 2026-09-10
+### Fixed
+- **"Échec de la mise à jour : update redirect refused" — the update could never install.** GitHub answers a release-asset request with a 302 to a signed CDN URL, and it now redirects to `release-assets.githubusercontent.com`. That host was missing from the download allow-list, so the guard added in 0.5.0 rejected GitHub's own redirect and every install aborted. The current CDN host plus the two historical ones are now allow-listed; the check still runs on the **final** URL, so a redirect still cannot walk the download off GitHub, and a lookalike host (`release-assets.githubusercontent.com.evil.example`) is still refused.
+### Added
+- `tests/test_updater.py`: 8 tests for the download path against a fake HTTP layer — accepted CDN hosts, redirect off GitHub refused, redirect to plain http refused, lookalike host refused, non-GitHub source refused, oversized download refused by header *and* by body, and the allow-list contains no wildcard. Verified end to end against the real GitHub release: zip downloaded, `sha256` matched the published sidecar, tree installed, provenance written, rollback backup kept.
+
 ## [0.5.1] - 2026-09-10
 ### Changed
 - When the deployed copy carries no provenance (installed by hand, or by an installer older than 0.5.0) and the release is not older, the button now installs the **tagged release artifact** — the immutable one with a published `sha256` — instead of the `main` snapshot. The `main` channel is still used when the checkout is ahead of the last release, so an update can never silently downgrade content.

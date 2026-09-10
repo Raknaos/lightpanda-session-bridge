@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -346,6 +347,94 @@ class TestApplyAndRollback(UpdateTestCase):
         self.assertEqual(result["commit"], "c" * 40)
         with open(os.path.join(self.ext, "popup.html"), encoding="utf-8") as fh:
             self.assertEqual(fh.read(), "main-popup")
+
+
+class TestDownloadGuards(unittest.TestCase):
+    """_fetch: what the download path accepts, and what it must refuse.
+
+    v0.5.1 shipped with the real GitHub CDN host missing from the allow-list, so
+    every install died with "update redirect refused" (seen from the popup).
+    These tests pin the behaviour against a fake HTTP layer instead of the
+    network, so the guard can be changed without flying blind.
+    """
+
+    class _Response:
+        def __init__(self, url, body=b"zip-bytes", content_length=None):
+            self._url = url
+            self._body = body
+            self.headers = {}
+            if content_length is not None:
+                self.headers["Content-Length"] = str(content_length)
+
+        def geturl(self):
+            return self._url
+
+        def read(self, size=-1):
+            return self._body if size is None or size < 0 else self._body[:size]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def _serve(self, response):
+        return unittest.mock.patch.object(updater.urllib.request, "urlopen",
+                                          lambda request, timeout=None: response)
+
+    def test_current_cdn_host_is_accepted(self):
+        url = ("https://release-assets.githubusercontent.com/github-production-release-asset/"
+               "1/2?sp=r&sig=whatever")
+        with self._serve(self._Response(url)):
+            self.assertEqual(updater._fetch("https://api.github.com/stub/asset"), b"zip-bytes")
+
+    def test_historical_cdn_hosts_are_accepted(self):
+        for host in ("objects.githubusercontent.com", "github-releases.githubusercontent.com"):
+            with self._serve(self._Response("https://%s/x" % host)):
+                self.assertEqual(updater._fetch("https://api.github.com/stub/asset"), b"zip-bytes")
+
+    def test_redirect_off_github_is_refused(self):
+        with self._serve(self._Response("https://evil.example/asset.zip")):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch("https://api.github.com/stub/asset")
+        self.assertIn("redirect refused", str(caught.exception))
+
+    def test_redirect_to_plain_http_is_refused(self):
+        with self._serve(self._Response("http://release-assets.githubusercontent.com/x")):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch("https://api.github.com/stub/asset")
+        self.assertIn("redirect refused", str(caught.exception))
+
+    def test_lookalike_host_is_refused(self):
+        with self._serve(self._Response("https://release-assets.githubusercontent.com.evil.example/x")):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch("https://api.github.com/stub/asset")
+        self.assertIn("redirect refused", str(caught.exception))
+
+    def test_source_url_must_be_github_over_https(self):
+        for url in ("http://api.github.com/x", "https://evil.example/x", "file:///etc/passwd"):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch(url)
+            self.assertIn("source refused", str(caught.exception))
+
+    def test_oversized_download_is_refused(self):
+        url = "https://release-assets.githubusercontent.com/x"
+        # Declared by the header ...
+        with self._serve(self._Response(url, content_length=99)):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch("https://api.github.com/stub/asset", limit=10)
+        self.assertIn("too large", str(caught.exception))
+        # ... and when the header lies.
+        with self._serve(self._Response(url, body=b"x" * 50)):
+            with self.assertRaises(RuntimeError) as caught:
+                updater._fetch("https://api.github.com/stub/asset", limit=10)
+        self.assertIn("too large", str(caught.exception))
+
+    def test_the_real_asset_host_is_in_the_allow_list(self):
+        # Regression guard for the v0.5.1 bug, expressible without the network.
+        self.assertIn("release-assets.githubusercontent.com", updater.ALLOWED_HOSTS)
+        for host in updater.ALLOWED_HOSTS:
+            self.assertFalse(host.startswith("*"), "no wildcard hosts: %s" % host)
 
 
 class TestCheckUpdate(UpdateTestCase):
