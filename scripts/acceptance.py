@@ -969,9 +969,37 @@ LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, id
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated]
+@check("the installed popup translates the relay's own error codes")
+def installed_popup_translates():
+    """The repo copy can be perfect while the DEPLOYED popup is stale, and a
+    key-count parity check cannot see it: every language has all 56 keys.
+
+    Runs the real test, which resolves the mapping and the strings from the
+    INSTALLED file and compares against the exact expected value - the fallback
+    frame returns a non-empty right-language string, so only an exact compare
+    fails when the mapping is gone.
+    """
+    import shutil as _shutil2
+    node = _shutil2.which("node")
+    if not node:
+        return "SKIP", "node is absent"
+    installed = pathlib.Path.home() / ".config" / "lightpanda-bridge" / "extension-backup" / "popup.js"
+    if not installed.is_file():
+        return "SKIP", "no installed popup to check"
+    r = subprocess.run([node, str(REPO / "tests" / "node" / "test_relay_deadline.js")],
+                       cwd=str(REPO), capture_output=True, text=True)
+    out = (r.stdout or r.stderr).strip().splitlines()
+    passed = next((l for l in out if l.strip().endswith("passed")), "")
+    if r.returncode != 0:
+        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:90]
+    return "ok", f"{passed.strip()} (installed popup, fr codes resolved)"
+
+
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
-        audit_log, double_check_pin, diagnostics_endpoint, silent_sockets_are_released]
+        audit_log, double_check_pin, diagnostics_endpoint, silent_sockets_are_released,
+        installed_popup_translates]
 
 
 def main():

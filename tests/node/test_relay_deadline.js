@@ -11,7 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const POPUP = path.join(__dirname, '..', '..', 'extension', 'popup.js');
-const SRC = fs.readFileSync(POPUP, 'utf8');
+let SRC = fs.readFileSync(POPUP, 'utf8');   // let: a test repoints it at the INSTALLED copy
 
 // Locate the DECLARATION of a top-level symbol. A bare indexOf(name) finds the
 // first MENTION: for RelayTimeoutError that is inside RELAY_TIMEOUT_MS's
@@ -237,6 +237,81 @@ test('aucun code du relais ne peut etre rendu verbatim', async () => {
     if (got.startsWith('Relay error:')) {
       throw new Error(`relay can emit "${code}" but it has no i18n key`);
     }
+  }
+});
+
+test('la popup INSTALLEE rend les codes du relais dans SA langue', async () => {
+  // The repo copy can be perfect while the installed artifact is stale, and a
+  // language mismatch is invisible to a key-count parity check: every language
+  // has all 56 keys, so a lookup that lands in the WRONG block still returns a
+  // string and the check stays green. Anchor on one block, prove it is that
+  // language, then resolve through it.
+  const os = require('os');
+  const installed = path.join(
+    os.homedir(), '.config', 'lightpanda-bridge', 'extension-backup', 'popup.js');
+  if (!fs.existsSync(installed)) {
+    console.log('         (popup installee absente - check ignore)');
+    return;
+  }
+  const src = fs.readFileSync(installed, 'utf8');
+  const m = /^(\s*)fr:\s*\{/m.exec(src);
+  if (!m) throw new Error('bloc fr absent de la popup installee');
+  let i = src.indexOf('{', m.index), depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) break;
+  }
+  const FR = {};
+  for (const e of src.slice(m.index, i + 1).matchAll(
+      /(\w+):\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g))
+    FR[e[1]] = e[2] !== undefined ? e[2] : e[3];
+  if (!/relais/i.test(FR.errRefused || '')) {
+    throw new Error(`mauvais bloc de langue: errRefused = ${JSON.stringify(FR.errRefused)}`);
+  }
+  // Run the INSTALLED mapping against the INSTALLED French strings. Both sides
+  // must come from the installed file: extracting the mapping from SRC (the
+  // repo copy) while taking the strings from the installed copy stayed GREEN
+  // under a sabotage of the installed file - it was measuring the repo twice.
+  const rel = path.join(os.homedir(), '.config', 'lightpanda-bridge',
+                        'extension-backup', 'popup.js');
+  const sb = build(() => Promise.resolve({}));
+  const oldSrc = SRC;
+  try {
+    // build() already declared RELAY_ERROR_KEYS as a sandbox const, so a second
+    // `const` raises "already declared" and a bare assignment raises "Assignment
+    // to constant variable". Declare it under a distinct name and re-point
+    // relayErrorText's lookup at it.
+    SRC = src;                       // extract() closes over SRC
+    const inst = extract('RELAY_ERROR_KEYS')
+      .replace(/^const\s+RELAY_ERROR_KEYS/, 'const INSTALLED_ERROR_KEYS');
+    const fn = extract('relayErrorText').replace(/\bRELAY_ERROR_KEYS\b/g,
+                                                 'INSTALLED_ERROR_KEYS');
+    vm.runInContext(inst + '\n' + fn + '\nglobalThis.relayErrorText = relayErrorText;', sb);
+    sb.currentLanguage = 'fr';
+    sb.I18N.fr = FR;
+    // Assert the EXPECTED KEY, not merely "some string": with an empty mapping
+    // the fallback frame ('Erreur du relais : origin refused') still returns a
+    // non-empty string, so a "did it return text" check stayed GREEN while the
+    // translation was gone. Comparing against the exact FR value pins it.
+    const want = {
+      'origin refused': 'errOriginRefused',
+      'unauthorized': 'errUnauthorized',
+      'not found': 'errRouteMissing',
+      'update refused': 'errUpdateRefused',
+      'rollback refused': 'errUpdateRefused',
+      'session import refused': 'errRefused',
+    };
+    for (const [code, key] of Object.entries(want)) {
+      const got = sb.relayErrorText(code);
+      const expected = FR[key];
+      if (!expected) throw new Error(`cle ${key} absente du bloc fr installe`);
+      if (got !== expected) {
+        throw new Error(`${code} n'est PAS traduit: obtenu ${JSON.stringify(got)} `
+                      + `au lieu de ${JSON.stringify(expected)}`);
+      }
+    }
+  } finally {
+    SRC = oldSrc;
   }
 });
 
