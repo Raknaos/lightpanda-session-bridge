@@ -343,11 +343,18 @@ def diagnostics_are_sanitized():
     for required in ("storage_expected", "last_sync_cookies", "cdp_attached"):
         if required not in report["state"]:
             return "FAIL", "the report is missing %s" % required
-    if "<credential file>" not in json.dumps(report.get("config_dir", {})):
-        if report.get("config_dir", {}).get("entries"):
-            return "FAIL", "credential file names are listed verbatim"
-    return "ok", "%d sections, %d state fields, 4 planted secrets absent" % (
-        len(report), len(report["state"]))
+    # Credential FILENAMES must never appear. Do NOT demand a
+    # "<credential file>" placeholder: masking only happens when such a file
+    # exists, so on a CI runner (empty config dir) requiring the placeholder
+    # failed the gate over nothing. The real invariant is the negative one.
+    entries = report.get("config_dir", {}).get("entries") or []
+    leaked = [e for e in entries
+              if e.lower() in ("secret", "github_token", "session.json", "token")
+              or "token" in e.lower()]
+    if leaked:
+        return "FAIL", "credential/secret file named in the report: %s" % leaked[:2]
+    return "ok", "%d sections, %d state fields, 4 planted secrets absent, %d config entries, 0 leaked" % (
+        len(report), len(report["state"]), len(entries))
 
 
 @check("the relay serves the diagnostic endpoint")

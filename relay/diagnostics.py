@@ -138,8 +138,13 @@ def _listing(directory: str, limit: int = 40) -> dict:
 
 
 def _credential_name(name: str) -> bool:
+    """Filename of anything that HOLDS a credential, not just something named
+    like one. ``session.json`` is the file the relay persists cookie values
+    into - a benign-looking name for the most sensitive thing in the config
+    dir, and it only shows up once a session has been synced."""
     low = name.lower()
-    return any(k in low for k in ("secret", "token", "credential", "cookie"))
+    return any(k in low for k in ("secret", "token", "credential", "cookie",
+                                  "session", "state", "jar"))
 
 
 def _short(value: Any, cap: int = 120) -> str:
