@@ -593,15 +593,21 @@ const rollbackBtn = document.querySelector('#rollback-btn');
 const labelUpdate = document.querySelector('#label-update');
 const appVersion = document.querySelector('#app-version');
 
-const toastEl = document.querySelector('#toast');
-
+// Resolved LAZILY: the <script> tag sits BEFORE <div id="toast"> in the
+// document, and it is a classic script (no defer, not a module), so at module
+// evaluation time the element does not exist yet. Capturing it once at load gave
+// null FOREVER, `showToast` returned early on every call, and all three callers
+// ("Tout retirer" confirmation, copy-diagnostic success and failure) wrote to a
+// dead element: the action happened, with no feedback at all.
+let toastEl = null;
 let toastTimer = null;
 function showToast(msg) {
+  if (!toastEl) toastEl = document.querySelector('#toast');
   if (!toastEl) return;
   toastEl.textContent = msg;
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => toastEl && toastEl.classList.remove('show'), 2600);
 }
 
 let currentTab = null;

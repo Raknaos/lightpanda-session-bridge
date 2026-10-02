@@ -1,3 +1,36 @@
+## [0.7.5] - the CDP proxy was handing out cookie values over HTTP
+
+- `POST /v1/cdp {"method": "Network.getCookies"}` answered 200 with the whole
+  cookie jar **including values** - measured live, 7 cookies - to anyone holding
+  the token. `/v1/cdp` returned `proxy_cdp()`'s result verbatim and the blocklist
+  only covered `Browser.close`, `Target.disposeBrowserContext` and
+  `Network.deleteCookies`. This was the single route where a cookie value could
+  reach an HTTP response. `Network.getAllCookies`, `Network.clearBrowserCookies`,
+  `Storage.clearCookies`, `Storage.clearDataForOrigin` and
+  `Storage.clearDataForStorageKey` are now refused too - the last two could wipe
+  the storage of every synced origin while `clear_sessions` scopes the same job
+  per origin. Agents that genuinely need to know whether a cookie is present get
+  the new `route: "verify_cookie_names"`, which returns names only.
+- `list_sessions()` iterated `_SYNCED_SESSIONS` with no lock while
+  `clear_sessions` mutated it under `CDP_LOCK`: `RuntimeError: dictionary
+  changed size during iteration`, 24 times in 2 seconds when measured. It now
+  iterates a snapshot taken under the lock.
+- `set_session` reset only two of its four per-request counters before the early
+  `raise`s, so a refused import answered 400 with the PREVIOUS site's numbers:
+  `storage_expected = 7` and `storage_missing = ['user','cart','tok']` for a
+  payload carrying one key, rendered verbatim by the popup.
+- `_authorized()` let `_load_secret()`'s PermissionError escape: the client got a
+  connection reset instead of a 401, reachable unauthenticated on every guarded
+  route. It now never raises, and compares bytes on both sides.
+- `do_GET` had no socket timeout while `do_POST` had three, so a relay that
+  accepted the socket and never answered wedged the popup on "Checking..." forever.
+- `#toast` sits AFTER `<script src="popup.js">` in the document and the element
+  was captured at module load, so it was null for the whole session and every
+  `showToast()` was a silent no-op: "Tout retirer" cleared without confirming,
+  and copy-diagnostic feedback was invisible. The lookup is now lazy.
+
+196 tests green, acceptance gate 28/28, popup still 563 px.
+
 ## [0.7.4] - four audit findings, three of them real
 
 - `__Host-` cookies were not forced Secure (RFC 6265bis). The branch forced

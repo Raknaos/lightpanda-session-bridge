@@ -807,7 +807,18 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
     storage_count = 0
     global _LAST_STORAGE_APPLIED_COUNT
     global _LAST_STORAGE_REFUSED
+    global _LAST_STORAGE_EXPECTED
+    global _LAST_STORAGE_MISSING
+    # Reset the WHOLE per-request state here, not just the two counters below.
+    # `_LAST_STORAGE_EXPECTED` was only assigned after the early `raise`s, so an
+    # import that failed on a refused key answered 400 with the PREVIOUS site's
+    # numbers: `storage_expected = 7` and `storage_missing = ['user','cart',…]`
+    # for a payload that carried one key. popup.js renders those names verbatim,
+    # so the user was told site A's storage was missing from site B's sync.
     _LAST_STORAGE_APPLIED_COUNT = 0
+    _LAST_STORAGE_REFUSED = []
+    _LAST_STORAGE_EXPECTED = 0
+    _LAST_STORAGE_MISSING = []
 
     # Sanitize BEFORE the live page is touched. A key the relay cannot carry has
     # to fail fast AND by name: the x.com bug was a silent removal here, which
@@ -858,7 +869,6 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         # call returns 401/407. Bookkeeping is done (a resync can finish the
         # job), but the caller is told the truth.
         expected_storage = len(safe_storage)
-        global _LAST_STORAGE_EXPECTED
         _LAST_STORAGE_EXPECTED = expected_storage
         if expected_storage and storage_count != expected_storage:
             # ``x/y keys verified (missing: <names>)``: the names are what makes
@@ -949,7 +959,25 @@ def proxy_cdp(method: str, params: dict | None = None) -> dict:
         raise ValueError("invalid CDP method")
     if params is not None and not isinstance(params, dict):
         raise ValueError("invalid CDP params")
-    blocked = ("Browser.close", "Target.disposeBrowserContext", "Network.deleteCookies")
+    # Anything that would hand a cookie VALUE back to an HTTP caller, or wipe
+    # cookies the relay did not scope itself, is refused. `Network.getCookies`
+    # was the one live leak: /v1/cdp returned proxy_cdp()'s result verbatim, so
+    # `POST /v1/cdp {"method":"Network.getCookies"}` answered 200 with the whole
+    # jar - measured 7 cookies with values - to anyone holding the token. The
+    # token is a bearer secret in a local file; a leaked one turns every synced
+    # site into plaintext. Use `verify_cookie_names` (returns NAMES only) when
+    # an agent genuinely needs to know whether a cookie is present.
+    blocked = (
+        "Browser.close",
+        "Target.disposeBrowserContext",
+        "Network.deleteCookies",
+        "Network.getAllCookies",
+        "Network.getCookies",
+        "Network.clearBrowserCookies",
+        "Storage.clearCookies",
+        "Storage.clearDataForOrigin",
+        "Storage.clearDataForStorageKey",
+    )
     if method in blocked:
         raise ValueError("method refused by proxy")
     with CDP_LOCK:
@@ -963,6 +991,27 @@ def proxy_cdp(method: str, params: dict | None = None) -> dict:
             return _CDP_TRANSPORT.request(method, params, session_id=_CDP_SESSION_ID)
 
 
+def cookie_names_present(origin: str, names: list[str]) -> dict:
+    """Which of `names` Lightpanda holds for `origin`. NAMES ONLY, never values.
+
+    The replacement for the raw `Network.getCookies` an agent used to call
+    through /v1/cdp and get the full jar - values included - in an HTTP
+    response. Counting and names are enough to answer "am I still logged in?".
+    """
+    if not origin or not valid_origin(origin):
+        raise ValueError("invalid origin")
+    clean = [str(n) for n in (names or []) if str(n)][:200]
+    with CDP_LOCK:
+        _ensure_connection(origin)
+        held = {str(c.get("name")) for c in _CDP_TRANSPORT.request(
+            "Network.getCookies",
+            {"urls": [origin + "/", "https://%s/" % origin_hostname(origin)]},
+            session_id=_CDP_SESSION_ID).get("cookies", [])}
+    return {"present": [n for n in clean if n in held],
+            "missing": [n for n in clean if n not in held],
+            "checked": len(clean)}
+
+
 def list_sessions() -> list[dict]:
     """Sanitized view of synced sessions: origin, cookie count, expiry metadata.
     Never returns cookie values."""
@@ -971,7 +1020,15 @@ def list_sessions() -> list[dict]:
     except Exception:
         pass
     out = []
-    for origin, cookies in _SYNCED_SESSIONS.items():
+    # Snapshot under CDP_LOCK: `clear_sessions` mutates this dict while holding
+    # it, and this loop ran with no lock at all, so a GET /v1/sessions concurrent
+    # with a POST /v1/sessions/clear raised `RuntimeError: dictionary changed
+    # size during iteration` (24 times in 2s when measured). Taking the lock for
+    # the iteration - not the CDP work - is enough: the copy is what the caller
+    # then reads.
+    with CDP_LOCK:
+        snapshot = [(o, list(c)) for o, c in _SYNCED_SESSIONS.items()]
+    for origin, cookies in snapshot:
         host = origin_hostname(origin)
         now = time.time()
         # `expires_hint`, not `expires`: cookie_for_cdp pops `expires` for CDP,
@@ -1104,12 +1161,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def _authorized(self) -> bool:
         """Require the shared bridge token on every state-changing call.
-        The extension stores the same value under chrome.storage 'lpBridgeToken'."""
-        supplied = self.headers.get("X-Bridge-Token", "")
-        expected = _load_secret()
-        if not expected or not supplied:
+        The extension stores the same value under chrome.storage 'lpBridgeToken'.
+
+        Never raise. `_load_secret()` only caught FileNotFoundError, so an
+        unreadable secret file (ACL change, AV lock) let a PermissionError escape
+        through do_POST and ThreadingHTTPServer dropped the connection - the
+        client saw a connection reset, not a 401. And a non-ASCII token header
+        makes hmac.compare_digest raise TypeError (str vs str is fine, but a
+        header decoded as latin-1 with accents is still str; the real trap is
+        compare_digest refusing bytes/str mixes). Both were reachable
+        UNAUTHENTICATED, on every guarded route.
+        """
+        try:
+            supplied = self.headers.get("X-Bridge-Token", "") or ""
+            expected = _load_secret()
+            if not expected or not supplied:
+                return False
+            return hmac.compare_digest(supplied.encode("utf-8"),
+                                       expected.encode("utf-8"))
+        except Exception:
+            # An auth check that cannot answer is a refusal, not a 500 and never
+            # a granted request.
             return False
-        return hmac.compare_digest(supplied, expected)
 
     def _check_extension_caller(self) -> bool:
         """Caller must be the pinned chrome extension (the popup) or local CLI tooling
@@ -1136,6 +1209,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(204, {})
 
     def do_GET(self) -> None:
+        # A read deadline, like do_POST already had. Without it the popup's
+        # `fetch('/health')` could hang forever: the socket is accepted, the
+        # route never answers, and the UI stays on "Checking…" with the sync
+        # button disabled and no escape. Cheap insurance - a GET here never
+        # talks to Lightpanda for long.
+        try:
+            self.connection.settimeout(10)
+        except OSError:
+            pass
         if self.path == "/health":
             # Sanitized health: no active origin, no PII, no page URL. The body
             # comes from health_payload() so "attached" can be asserted in a test
@@ -1249,7 +1331,13 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("body refused")
                 self.connection.settimeout(30)
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
-                result = proxy_cdp(payload.get("method", ""), payload.get("params"))
+                route = payload.get("route", "")
+                if route == "verify_cookie_names":
+                    result = cookie_names_present(
+                        payload.get("origin", ""), payload.get("names", []))
+                else:
+                    result = proxy_cdp(payload.get("method", ""),
+                                       payload.get("params"))
                 self.send_json(200, {"ok": True, "result": result})
             except Exception as err:
                 self.send_json(400, {"ok": False, "error": str(err) or "cdp call refused"})
