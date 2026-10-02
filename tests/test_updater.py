@@ -578,8 +578,12 @@ class TestCheckUpdate(UpdateTestCase):
         self.assertEqual(status.get("error_kind"), "unreachable")
 
     def _rate_limited_urlopen(self, url, timeout=None):
+        # Real headers, as GitHub sends them on the error itself. With empty
+        # headers the honest message carries no figure, and asserting a number
+        # there would assert a memory, not a measurement.
         raise urllib.error.HTTPError(
-            url, 403, "Forbidden", {},
+            url, 403, "Forbidden",
+            {"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "0"},
             io.BytesIO(b'{"message": "API rate limit exceeded for 203.0.113.7."}'))
 
     def test_a_rate_limited_api_is_named_as_such(self):
@@ -588,17 +592,31 @@ class TestCheckUpdate(UpdateTestCase):
         with unittest.mock.patch.object(updater.urllib.request, "urlopen", self._rate_limited_urlopen):
             with self.assertRaises(RuntimeError) as caught:
                 updater._fetch_json("https://api.github.com/repos/x/y/releases/latest")
-        self.assertIn("60/hour", str(caught.exception))
+        # The quota must be named WITH ITS REAL FIGURE, read from the error's
+        # headers. Pinning "60/hour" asserted a number that is only true for an
+        # anonymous caller - and this fixture authenticates, so the honest
+        # answer is 5000/hour. Asserting "60/hour" here was asserting the bug.
+        msg = str(caught.exception)
+        self.assertIn("rate limit", msg.lower())
+        self.assertIn("5000/hour", msg)
+        self.assertNotIn("anonymous", msg)
 
     def test_a_rate_limited_check_says_what_to_do(self):
+        err = urllib.error.HTTPError(
+            "https://api.github.com/repos/x/y", 403, "Forbidden",
+            {"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "0"},
+            io.BytesIO(b'{"message": "API rate limit exceeded"}'))
+
         def limited(repo=updater.REPO):
-            raise RuntimeError(updater._RATE_HINT)
+            raise RuntimeError(updater._rate_hint(err))
         updater.latest_release = limited
         status = updater.check_update(force=True)
         self.assertFalse(status["ok"])
         self.assertFalse(status["update_available"])
         self.assertEqual(status.get("error_kind"), "rate_limit")
-        self.assertIn("60/hour", status["error"])
+        # Same reason as above: the figure is the real one, not a remembered one.
+        self.assertIn("5000/hour", status["error"])
+        self.assertNotIn("anonymous", status["error"])
 
     def test_missing_extension_dir_is_reported(self):
         os.environ["LP_BRIDGE_EXTENSION_DIR"] = os.path.join(self.ext, "nope")

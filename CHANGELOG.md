@@ -1,3 +1,25 @@
+## [0.7.14 - addendum] - the rate-limit message named the wrong quota
+
+`_RATE_HINT` was a constant saying "anonymous is 60/hour per IP", raised on every
+403/429. A user holding a valid token - which raises the quota to 5000/h - was
+told to add a token they already had. The figures now come from the error's own
+`X-RateLimit-*` headers, and the caller's identity from GitHub's number (60 =
+anonymous), not from the local token file.
+
+
+## [0.7.14] - a route can widen the deadline it inherited, only on the record
+
+`Handler.timeout` (15s) is the backstop that releases a silent socket. A route
+may narrow it - five do, at 10s - but a route that *widens* it reopens the hole
+the class deadline closed: one client holds a thread for as long as that route
+allows. `/v1/cdp` legitimately widens to 30s (the only route that makes the relay
+talk to Lightpanda). That exemption now lives in a constant, with five tests
+around it, each proven red.
+
+Writing the test found the shape the audit had guessed at: `self.path ==`, not
+`path ==`, and a `settimeout` inside a route body sits 15 lines below its branch
+header, so "the last route mentioned before the call" attributed it to nothing.
+
 ## [0.7.13] - a client that can wait forever has no honest state to be in
 
 The popup had eight `fetch()` calls and one deadline, on the import path only.

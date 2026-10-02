@@ -101,7 +101,25 @@ API_HOSTS = {"api.github.com"}
 # allow-listed above).
 TOKEN_ENV = "LP_BRIDGE_GITHUB_TOKEN"
 TOKEN_FILE = "github_token"
-_RATE_HINT = "GitHub API rate limit reached (anonymous is 60/hour per IP)"
+# Not a constant any more: this message used to claim "anonymous is 60/hour"
+# on EVERY quota failure, including authenticated ones - while a token gets
+# 5000/h. A user with a valid token was told to add a token. The real limit and
+# remaining count are read from the response headers, which GitHub sends on the
+# error itself.
+def _rate_hint(err):
+    h = getattr(err, "headers", None) or {}
+    limit = h.get("X-RateLimit-Limit")
+    remaining = h.get("X-RateLimit-Remaining")
+    # GitHub's OWN header is the authority, not whether this process happens to
+    # hold a token: it reports 60 for an anonymous call and 5000 for an
+    # authenticated one. Reading identity from the local token file produced
+    # "anonymous: 5000/hour" - two contradicting facts in one sentence.
+    if limit:
+        who = "authenticated token" if limit != "60" else "anonymous"
+        return ("GitHub API rate limit reached (%s: %s/hour, %s left)"
+                % (who, limit, remaining if remaining is not None else "?"))
+    who = "authenticated token" if github_token() else "anonymous"
+    return "GitHub API rate limit reached (%s, quota not reported)" % who
 
 _CACHE: dict = {"at": 0.0, "data": None}
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]([0-9A-Za-z.\-]+))?$")
@@ -308,7 +326,7 @@ def _fetch_json(url: str):
         haystack = " ".join([str(getattr(err, "reason", "")),
                              str(getattr(err, "headers", "") or ""), body]).lower()
         if err.code in (403, 429) and "rate limit" in haystack:
-            raise RuntimeError(_RATE_HINT) from err
+            raise RuntimeError(_rate_hint(err)) from err
         raise
 
 
