@@ -551,23 +551,31 @@
       z-index: 50;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      /* Tertiary action: tinted with the product's lilac so it reads as
+         clickable without competing with the primary sync button. Two review
+         passes said the same thing - readable, but it looked like a passive
+         label, not something you can press. */
       .diag-btn {
-        background: rgba(255, 255, 255, .72);
-        border: 1px solid rgba(11, 31, 51, .18);
-        color: var(--ink-secondary);
+        background: var(--lilac);
+        border: 1px solid rgba(107, 82, 255, .35);
+        color: var(--ink);
         font: inherit;
         font-size: 10px;
         font-weight: 600;
         letter-spacing: .02em;
-        padding: 3px 8px;
+        padding: 3px 9px;
         border-radius: 6px;
         cursor: pointer;
-        transition: color .15s, border-color .15s, background .15s;
+        transition: background .15s, border-color .15s, color .15s;
       }
       .diag-btn:hover {
-        color: var(--blue);
-        border-color: var(--blue);
-        background: #fff;
+        background: #d3c6ff;
+        border-color: var(--violet);
+        color: var(--ink);
+      }
+      .diag-btn:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 1px;
       }
   </style>
 </head>
