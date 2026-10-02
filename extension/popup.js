@@ -732,6 +732,11 @@ function bridgeHeaders() {
 // than the relay turns a specific message into a bare "Failed to fetch".
 const RELAY_TIMEOUT_MS = 45000;
 
+// Shortest gap between two badge refreshes. The popup can be closed and reopened
+// faster than the 30s cadence, and a burst of visibilitychange events would
+// otherwise fire one /health request each.
+const RELAY_MIN_CHECK_GAP_MS = 2000;
+
 // Name of the abort we raise, so callers can tell "the relay went silent" from
 // "the network refused". A bare TypeError('Failed to fetch') is not actionable
 // and is not translated.
@@ -1011,13 +1016,36 @@ sessionsClear.addEventListener('click', async () => {
   sessionsClear.disabled = false;
 });
 
-// Keep the counter honest while the popup stays open (30s cadence, only when
-// the tab is still visible to avoid pointless relay hits).
+// Keep BOTH panels honest while the popup stays open.
+//
+// The badge used to be sampled once, in init(), and never again: a relay that
+// died (or a Lightpanda that restarted) after the popup opened left "Relay
+// Online" on screen for as long as the panel stayed open - so the one check the
+// user reads first was the one thing that went stale. The third state from
+// v0.6.1 ('idle': relay alive, CDP dead) was therefore unreachable except in the
+// few hundred milliseconds after opening.
+//
+// One cadence, both refreshes, and only while visible: a hidden popup must not
+// spend the relay's budget on nothing.
 setInterval(() => {
-  if (document.visibilityState === 'visible' && bridgeToken) {
-    refreshSessions();
-  }
+  if (document.visibilityState !== 'visible' || !bridgeToken) return;
+  refreshSessions();
+  checkRelay();
 }, 30000);
+
+// Re-check on the way back in. Opening the popup is the moment a user most often
+// reacts to something having just broken (Lightpanda restarted, relay relaunched
+// after an update), and a stale badge is worse than no badge. Coalesced onto the
+// same tick as the interval so a fast close/reopen cannot pile up requests.
+let lastRelayCheck = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !bridgeToken) return;
+  const since = Date.now() - lastRelayCheck;
+  if (since < RELAY_MIN_CHECK_GAP_MS) return;
+  lastRelayCheck = Date.now();
+  checkRelay();
+  refreshSessions();
+});
 
 // ---- Bridge update (GitHub) ------------------------------------------------
 // The extension is loaded unpacked: it can never rewrite its own files, and

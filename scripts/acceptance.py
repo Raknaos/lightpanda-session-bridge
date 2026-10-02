@@ -964,11 +964,38 @@ def relay_errors_are_translated():
     return "ok", f"{len(emitted)} relay error codes, all mapped to an i18n key"
 
 
+@check("the relay badge is re-evaluated, not sampled once")
+def badge_is_refreshed():
+    """A badge is the first thing a user reads, and it was the only thing that
+    went stale: `checkRelay()` ran once in init() while the 30s interval
+    refreshed only the session counter. A relay that died after the popup opened
+    kept showing "Relay Online" until the panel was closed - and the third state
+    from v0.6.1 (relay alive, CDP dead) was unreachable except for the few
+    hundred milliseconds after opening.
+
+    Runs the real Node suite, which drives the extracted scheduling code.
+    """
+    import shutil as _sh
+    node = _sh.which("node")
+    if not node:
+        return "SKIP", "node is absent"
+    r = subprocess.run([node, str(REPO / "tests" / "node" / "test_badge_refresh.js")],
+                       cwd=str(REPO), capture_output=True, text=True)
+    out = (r.stdout or r.stderr).strip().splitlines()
+    if r.returncode != 0:
+        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    passed = next((l for l in out if l.strip().endswith("passed")), "?")
+    src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
+    gap = re.search(r"RELAY_MIN_CHECK_GAP_MS = (\d+)", src)
+    return "ok", f"{passed.strip()}, min gap {gap.group(1) if gap else '?'}ms"
+
+
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
-         popup_calls_are_bounded, relay_errors_are_translated]
+         popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed]
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():
     """The repo copy can be perfect while the DEPLOYED popup is stale, and a

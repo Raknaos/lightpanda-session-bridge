@@ -7,6 +7,19 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
+## [0.7.15] - the badge is the first thing read, and the only thing that went stale
+
+`checkRelay()` ran exactly once, in `init()`. The 30s interval refreshed only the
+session counter. So a relay that died after the popup opened - or a Lightpanda
+that restarted - kept showing "Relay Online" for as long as the panel stayed
+open, and the third state added in v0.6.1 (relay alive, CDP dead) was unreachable
+except in the few hundred milliseconds after opening.
+
+The interval now re-checks the relay too, and a `visibilitychange` listener
+re-checks on the way back in - the moment a user most often reacts to something
+having just broken. Bursts are coalesced behind a 2s floor, and a hidden or
+unpaired popup still spends nothing.
+
 ## [0.7.14] - a route can widen the deadline it inherited, only on the record
 
 `Handler.timeout` (15s) is the backstop that releases a silent socket. A route
