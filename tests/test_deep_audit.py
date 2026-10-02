@@ -117,8 +117,9 @@ class SessionListIsSafeUnderConcurrency(unittest.TestCase):
         relay._PERSISTED_INFLIGHT = False
         relay._LAST_SESSION = {"origin": "https://x.com", "cookies": [],
                                "storage": {}}
-        relay._SYNCED_SESSIONS = {"https://o%d.com" % i: [{"name": "a"}]
-                                  for i in range(40)}
+        with relay.SESSIONS_LOCK:
+            relay._SYNCED_SESSIONS = {"https://o%d.com" % i: [{"name": "a"}]
+                                      for i in range(40)}
 
         errors, stop = [], threading.Event()
 
@@ -137,17 +138,131 @@ class SessionListIsSafeUnderConcurrency(unittest.TestCase):
         for t in threads:
             t.start()
         try:
+            # Mutate under SESSIONS_LOCK, exactly as every real writer does.
+            # This test used to mutate the dict bare, which no production caller
+            # does - so it was not testing the shipped locking, it was testing an
+            # unlocked write the server can never perform. It passed on Windows
+            # and failed on Linux CI with "dictionary changed size during
+            # iteration", which is the platform-specific version of a broken
+            # test, not of a broken server.
             for _ in range(3000):
-                for key in list(relay._SYNCED_SESSIONS):
-                    relay._SYNCED_SESSIONS.pop(key, None)
-                for i in range(40):
-                    relay._SYNCED_SESSIONS["https://o%d.com" % i] = [{"name": "a"}]
+                with relay.SESSIONS_LOCK:
+                    for key in list(relay._SYNCED_SESSIONS):
+                        relay._SYNCED_SESSIONS.pop(key, None)
+                    for i in range(40):
+                        relay._SYNCED_SESSIONS["https://o%d.com" % i] = [{"name": "a"}]
         finally:
             stop.set()
             for t in threads:
                 t.join(timeout=10)
         self.assertEqual(errors, [],
                          "listing raced a mutation: %r" % errors[:3])
+
+
+class SessionsLockIsReal(unittest.TestCase):
+    """The dict has ONE owner lock, and a bare read still survives a mutation.
+
+    v0.7.7's fix took CDP_LOCK in `list_sessions` while `clear_sessions` mutated
+    under a different lock. Two locks guarding one dict is a race with a long fuse:
+    it surfaced on Linux CI and not on Windows.
+    """
+
+    def test_every_accessor_uses_sessions_lock(self):
+        """Every READ and WRITE of the dict is under SESSIONS_LOCK.
+
+        The first version of this test only looked at assignments, so putting the
+        reader back under CDP_LOCK - the exact v0.7.7 state - kept it green. It
+        now walks every Name load, attribute access and subscript of the dict,
+        which is what a race actually is.
+        """
+        import ast
+        src = pathlib.Path(relay.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        lines = src.splitlines()
+
+        def touches_dict(node):
+            if isinstance(node, ast.Name) and node.id == "_SYNCED_SESSIONS":
+                return True
+            if isinstance(node, ast.Attribute):
+                return touches_dict(node.value)
+            if isinstance(node, ast.Subscript):
+                return touches_dict(node.value)
+            return False
+
+        def guarded(lineno):
+            """Is this line inside a `with SESSIONS_LOCK` (or a lock-free helper)?"""
+            depth = 0
+            for n in range(lineno - 2, -1, -1):
+                stripped = lines[n].strip()
+                if stripped.startswith("def ") or stripped.startswith("class "):
+                    return False
+                if stripped.startswith("with "):
+                    if "SESSIONS_LOCK" in stripped:
+                        return True
+                    # another lock: not the owner of this dict
+                    depth += 1
+            return False
+
+        offenders = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                if node.id != "_SYNCED_SESSIONS":
+                    continue
+            elif not touches_dict(node):
+                continue
+            if not guarded(node.lineno):
+                line = lines[node.lineno - 1]
+                if line.strip().startswith("#"):
+                    continue
+                if "_SYNCED_SESSIONS: dict" in line:
+                    continue
+                offenders.append((node.lineno, line.strip()[:80]))
+        self.assertEqual(offenders, [],
+                         "acces a _SYNCED_SESSIONS hors SESSIONS_LOCK : %r"
+                         % offenders[:4])
+
+    def test_reading_survives_a_bare_mutation_anyway(self):
+        """Defence in depth: a reader must not explode on a concurrent write."""
+        saved = relay._SYNCED_SESSIONS
+        self.addCleanup(setattr, relay, "_SYNCED_SESSIONS", saved)
+        relay._PERSISTED_LOADED = relay._PERSISTED_APPLIED = True
+        relay._PERSISTED_INFLIGHT = False
+        relay._LAST_SESSION = {"origin": "https://x.com", "cookies": [],
+                               "storage": {}}
+        with relay.SESSIONS_LOCK:
+            relay._SYNCED_SESSIONS = {"https://o%d.com" % i: [{"name": "a"}]
+                                      for i in range(40)}
+
+        errors, stop = [], threading.Event()
+
+        def reader():
+            while not stop.is_set():
+                try:
+                    relay.list_sessions()
+                except Exception as exc:      # noqa: BLE001
+                    errors.append("%s: %s" % (type(exc).__name__, exc))
+                    return
+
+        def bare_writer():
+            # deliberately WITHOUT the lock, to prove the read path is robust
+            for _ in range(4000):
+                for key in list(relay._SYNCED_SESSIONS):
+                    relay._SYNCED_SESSIONS.pop(key, None)
+                for i in range(40):
+                    relay._SYNCED_SESSIONS["https://o%d.com" % i] = [{"name": "a"}]
+
+        readers = [threading.Thread(target=reader) for _ in range(3)]
+        for t in readers:
+            t.start()
+        writer = threading.Thread(target=bare_writer)
+        writer.start()
+        writer.join(timeout=30)
+        stop.set()
+        for t in readers:
+            t.join(timeout=10)
+        self.assertEqual(errors, [],
+                         "list_sessions a leve face a une mutation concurrente : %r"
+                         % errors[:3])
 
 
 class ImportStateIsPerRequest(unittest.TestCase):

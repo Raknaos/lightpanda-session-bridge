@@ -532,6 +532,14 @@ _LAST_SESSION: dict | None = None
 # Every synced session this daemon run: origin -> converted cookie list
 # (values kept in memory only, never logged, never returned by the API).
 _SYNCED_SESSIONS: dict[str, list[dict]] = {}
+# Single owner for the bookkeeping above. Every reader and writer of
+# _SYNCED_SESSIONS goes through SESSIONS_LOCK: taking CDP_LOCK was not enough,
+# because the dict is also written by the persisted-session restore path, which
+# does not hold CDP_LOCK. Two different locks guarding one dict is a race with a
+# long fuse - it reproduced on Linux CI ("dictionary changed size during
+# iteration") and not on Windows, which is exactly the kind of platform-specific
+# failure that survives a local green run.
+SESSIONS_LOCK = threading.RLock()
 
 
 def _alive() -> bool:
@@ -917,7 +925,8 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         # AND persist it, so a relay restart / reboot / watchdog restart no
         # longer forces the user to click "Synchroniser" again.
         _LAST_SESSION = {"origin": origin, "cookies": converted, "storage": safe_storage}
-        _SYNCED_SESSIONS[origin] = converted
+        with SESSIONS_LOCK:
+            _SYNCED_SESSIONS[origin] = converted
         _persist_session(_LAST_SESSION)
 
         # A half-transferred localStorage snapshot is worse than a visible
@@ -975,7 +984,8 @@ def _restore_persisted_session() -> bool:
                 state = _load_persisted_session()
                 if state:
                     _LAST_SESSION = state
-                    _SYNCED_SESSIONS.setdefault(state["origin"], state["cookies"])
+                    with SESSIONS_LOCK:
+                        _SYNCED_SESSIONS.setdefault(state["origin"], state["cookies"])
         if _PERSISTED_APPLIED or _PERSISTED_INFLIGHT or not _LAST_SESSION:
             return False
         # Claim it HERE, under the lock. Reading the flag and setting it are one
@@ -1068,6 +1078,12 @@ def cookie_names_present(origin: str, names: list[str]) -> dict:
             "checked": len(clean)}
 
 
+def session_count() -> int:
+    """How many origins are currently synced. Read under the sessions lock."""
+    with SESSIONS_LOCK:
+        return len(_SYNCED_SESSIONS)
+
+
 def list_sessions() -> list[dict]:
     """Sanitized view of synced sessions: origin, cookie count, expiry metadata.
     Never returns cookie values."""
@@ -1082,7 +1098,7 @@ def list_sessions() -> list[dict]:
     # size during iteration` (24 times in 2s when measured). Taking the lock for
     # the iteration - not the CDP work - is enough: the copy is what the caller
     # then reads.
-    with CDP_LOCK:
+    with SESSIONS_LOCK:
         snapshot = [(o, list(c)) for o, c in _SYNCED_SESSIONS.items()]
     for origin, cookies in snapshot:
         host = origin_hostname(origin)
@@ -1106,7 +1122,7 @@ def list_sessions() -> list[dict]:
 def clear_sessions(origin: str | None = None) -> int:
     """Remove cookies from Lightpanda for one origin or every synced origin.
     Returns the number of origins cleared."""
-    with CDP_LOCK:
+    with SESSIONS_LOCK:
         targets = [origin] if origin else list(_SYNCED_SESSIONS.keys())
         cleared = 0
         for org in targets:
@@ -1138,8 +1154,9 @@ def clear_sessions(origin: str | None = None) -> int:
                     removed += 1
                 except Exception:
                     pass
-            was_synced = org in _SYNCED_SESSIONS
-            _SYNCED_SESSIONS.pop(org, None)
+            with SESSIONS_LOCK:
+                was_synced = org in _SYNCED_SESSIONS
+                _SYNCED_SESSIONS.pop(org, None)
             if _LAST_SESSION and _LAST_SESSION.get("origin") == org:
                 globals()["_LAST_SESSION"] = None
             if removed or was_synced:
@@ -1192,7 +1209,7 @@ def health_payload() -> tuple[int, dict]:
         "ok": True,
         "service": "lightpanda-session-bridge",
         "attached": attached,
-        "sessions": len(_SYNCED_SESSIONS),
+        "sessions": session_count(),
     }
 
 

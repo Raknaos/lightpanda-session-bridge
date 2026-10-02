@@ -1,3 +1,21 @@
+## [0.7.9] - one lock per dict: the session race only failed on Linux
+
+- v0.7.7 fixed `dictionary changed size during iteration` by taking `CDP_LOCK` in
+  `list_sessions`, but `clear_sessions` and the persisted-session restore mutate
+  the same dict under a DIFFERENT lock. Two locks guarding one dict protect
+  nothing. Linux CI caught it - Windows never did, because the GIL and the thread
+  scheduling made the window unobservable locally. All readers and writers of
+  `_SYNCED_SESSIONS` now go through a single `SESSIONS_LOCK`; `/health` reads its
+  count through `session_count()`.
+- The concurrency test mutated the dict bare, a state no production caller can
+  produce, so it tested the harness rather than the shipped locking. It now
+  mutates under the lock, and a second test proves the read path survives a
+  writer that does NOT take the lock at all - a read must be robust to a
+  careless writer, not merely hope it is disciplined.
+- The AST guard that pins this only inspected assignments, so putting the reader
+  back under `CDP_LOCK` left it green. It now walks every `Name`, `Attribute` and
+  `Subscript` touching the dict, and the sabotage names the offending line.
+
 ## [0.7.8] - the DNS verdict cache had a TTL but was never pruned
 
 - `_DNS_CACHE` had `_DNS_CACHE_TTL`, but the TTL only decided when an entry was
