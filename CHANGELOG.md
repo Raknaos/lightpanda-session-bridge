@@ -1,3 +1,20 @@
+## [0.7.2] - the archive guard is now proven, not assumed
+
+- `tests/test_archive_windows_paths.py`: the traversal tests only ever asked
+  about `../../evil.txt` and `/etc/evil.txt`. The guard in `_safe_members`
+  normalises backslashes, refuses drive letters and therefore also catches
+  `C:/evil.txt`, `C:\evil.txt`, `C:evil.txt`, `//server/share/...` and
+  `..\evil.txt` - none of it asserted. A "simplification" to a plain
+  `name.startswith("/")` check would have passed all 56 updater tests and
+  reopened the hole on the only platform this ships on. Proven red by making
+  validation per-member instead of up-front: all four Windows shapes were then
+  extracted silently.
+- Also asserted: a refused archive leaves NO partially extracted tree, and a
+  valid archive still lands exactly where expected (a guard that refuses
+  everything is not a fix).
+
+No product code changed. 166 tests, all green.
+
 ## [0.7.1] - the support report stopped describing a module that never ran
 
 - `_sibling("server")` imported a SECOND copy of `relay/server.py`. In the live
