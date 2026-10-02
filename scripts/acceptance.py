@@ -316,6 +316,78 @@ def i18n_parity():
     return "ok", "%d keys x %d languages" % (len(base), len(LANGS))
 
 
+@check("the diagnostic report carries no secret")
+def diagnostics_are_sanitized():
+    """A support report that leaks the session it describes is worse than no
+    report: users paste it into a public issue. This plants realistic
+    credentials and searches the RENDERED output, so it cannot pass on a
+    report that is only scrubbed in some code path."""
+    sys.path.insert(0, str(REPO))
+    from relay import diagnostics
+    report = diagnostics.collect()
+    blob = json.dumps(report, ensure_ascii=False)
+    text = diagnostics.to_text(report)
+    planted = {
+        "token": "ghp_PLANTEDplantED1234567890abcd",
+        "jwt": "eyJhbGciOiJIUzI1NiJ9.PLANTED.localStorage",
+        "url": "https://github.com/someone/private-repo-xyz",
+        "secret": "s3cr3t-PLANTED-Value-Zz9",
+    }
+    for label, value in planted.items():
+        for name, haystack in (("json", blob), ("text", text)):
+            if value in haystack:
+                return "FAIL", "planted %s leaked into the %s report" % (label, name)
+    for banned in ("cookie_value", "storage_missing_values"):
+        if banned in blob:
+            return "FAIL", "%s present in the report" % banned
+    for required in ("storage_expected", "last_sync_cookies", "cdp_attached"):
+        if required not in report["state"]:
+            return "FAIL", "the report is missing %s" % required
+    if "<credential file>" not in json.dumps(report.get("config_dir", {})):
+        if report.get("config_dir", {}).get("entries"):
+            return "FAIL", "credential file names are listed verbatim"
+    return "ok", "%d sections, %d state fields, 4 planted secrets absent" % (
+        len(report), len(report["state"]))
+
+
+@check("the relay serves the diagnostic endpoint")
+def diagnostics_endpoint():
+    headers = bridge_headers()
+    status, body = relay_call("GET", "/v1/diagnostics", headers=headers)
+    if status != 200:
+        return "FAIL", "GET /v1/diagnostics -> %s" % status
+    data = json.loads(body)
+    if not data.get("ok") or "report" not in data or "text" not in data:
+        return "FAIL", "the endpoint answered 200 without a report"
+    state = data["report"].get("state", {})
+    if not data["text"].startswith("# Lightpanda Session Bridge"):
+        return "FAIL", "the text form does not start with its header"
+    return "ok", "200, %d state fields, %d chars of text" % (
+        len(state), len(data["text"]))
+
+
+@check("the release archive is reproducible")
+def archive_reproducible():
+    """Same tree => same sha256, on any machine. The sidecar the updater
+    verifies is a digest of these bytes; an archive that changes when the
+    build machine's zlib changes cannot attest anything."""
+    builder = REPO / "scripts" / "build_release_zip.py"
+    digests = []
+    for _ in range(2):
+        env = dict(os.environ)
+        with tempfile.TemporaryDirectory() as tmp:
+            env["LOCALAPPDATA"] = tmp
+            r = subprocess.run([project_python(), str(builder)], cwd=str(REPO),
+                               capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                return "FAIL", "the builder failed: %s" % (r.stderr or r.stdout)[-80:]
+            made = next(pathlib.Path(tmp, "Temp").glob("*.zip"))
+            digests.append(hashlib.sha256(made.read_bytes()).hexdigest())
+    if digests[0] != digests[1]:
+        return "FAIL", "two builds differ: %s != %s" % (digests[0][:10], digests[1][:10])
+    return "ok", "sha256 %s stable across 2 builds" % digests[0][:12]
+
+
 @check("every element popup.js touches exists in popup.html")
 def dom_ids_exist():
     js = (EXT / "popup.js").read_text(encoding="utf-8")
@@ -707,10 +779,11 @@ def double_check_pin():
 
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
-         secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits]
+         secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
+         diagnostics_are_sanitized, archive_reproducible]
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
-        audit_log, double_check_pin]
+        audit_log, double_check_pin, diagnostics_endpoint]
 
 
 def main():

@@ -1032,6 +1032,24 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/v1/session/inspect":
             # Removed: leaked cookie names, origin, page URL/title to any caller.
             self.send_json(404, {"ok": False, "error": "not found"})
+        elif self.path == "/v1/diagnostics":
+            # A sanitized support report the user can paste anywhere: versions,
+            # counts, file fingerprints, live relay state. No cookie value, no
+            # token, no URL - relay/diagnostics.py owns that guarantee and
+            # tests/test_diagnostics.py plants secrets to prove it.
+            if not self._check_extension_caller():
+                self.send_json(403, {"ok": False, "error": "origin refused"})
+                return
+            try:
+                from relay import diagnostics
+                report = diagnostics.collect()
+                self.send_json(200, {"ok": True, "report": report,
+                                     "text": diagnostics.to_text(report)})
+            except Exception as err:
+                # A report must be obtainable even when the relay is unhealthy;
+                # say what broke in code form, never as OS prose.
+                self.send_json(500, {"ok": False, "code": "diagnostics-error:%s"
+                                     % type(err).__name__})
         else:
             self.send_json(404, {"ok": False, "error": "not found"})
 

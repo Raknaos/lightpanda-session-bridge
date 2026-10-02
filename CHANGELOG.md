@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0] - 2026-10-02
+### Added
+- **Copy diagnostic** (footer of the popup): one click puts a sanitized report
+  on the clipboard - versions, counts, file fingerprints, live relay state, last
+  installs. A failed sync used to end at a screenshot with nothing to act on.
+  No cookie value, no token, no URL: `relay/diagnostics.py` owns that guarantee
+  and both its unit tests and the acceptance gate plant credentials to prove it.
+- `GET /v1/diagnostics` returns the same report as json + text.
+
+### Fixed
+- **The release archive is now reproducible.** It was rebuilt from the same tree
+  into a different sha256, because `ZipFile.write` stamped the build time and OS
+  into every entry and because deflate is not reproducible across build machines
+  (.venv ships zlib 1.3.1, the system python ships 1.3.1.zlib-ng - same 148 KB
+  tree, 148120 vs 148524 bytes). Entries are now STORED with a fixed epoch, a
+  fixed creator and no host metadata: one sha256 per tree, on every machine.
+- `scripts/build_release_zip.py` died with a bare `FileNotFoundError` when
+  `LOCALAPPDATA/Temp` did not exist (fresh profile, CI, non-Windows).
+- Removed `relay/patch_snippet.txt`, a tracked scratch file.
+
 ## [0.5.8] - 2026-09-14
 ### Fixed
 - `WinError 10053` shown raw in the popup ("Transfert incomplet : 0/8"): the

@@ -9,12 +9,19 @@ import json
 import os
 import pathlib
 import subprocess
+import tempfile
+import time
 import zipfile
 
 root = pathlib.Path(__file__).resolve().parent.parent
 ext = root / "extension"
 version = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))["version"]
-out = pathlib.Path(os.environ["LOCALAPPDATA"]) / "Temp" / f"lightpanda-session-bridge-{version}.zip"
+# mkdir(exist_ok=True) because LOCALAPPDATA is only set on Windows and its Temp
+# subdir does not exist on a fresh profile or in CI - the builder used to die
+# with a bare FileNotFoundError before writing a single entry.
+out_dir = pathlib.Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "Temp"
+out_dir.mkdir(parents=True, exist_ok=True)
+out = out_dir / f"lightpanda-session-bridge-{version}.zip"
 if out.exists():
     out.unlink()
 
@@ -35,10 +42,42 @@ def tracked_files():
             if p.is_file() and p.name not in (".build-info.json",)]
 
 
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for p in tracked_files():
-        arc = "extension/" + p.relative_to(ext).as_posix()
-        z.write(p, arc)
+# Reproducible archive. ZipFile.write() makes the bytes depend on WHO and WHEN
+# built it, and the sidecar the updater verifies is a digest of those bytes:
+#   - date_time defaults to now    -> rebuild a minute later, different sha256
+#   - create_system/external_attr carry the build OS -> a Linux CI build and a
+#     Windows release build disagree on identical sources
+#   - DEFLATE is not reproducible across build machines. Measured on this very
+#     repo: .venv ships zlib 1.3.1, the system python ships 1.3.1.zlib-ng - two
+#     different deflate implementations, so the same 148 KB tree compressed to
+#     148120 vs 148524 bytes. No compression level fixes that; the algorithms
+#     simply differ.
+# So the archive is STORED: uncompressed deflate is the only deflate whose
+# output is fixed by the input. Cost is the real one and it is small - the
+# shipped tree is ~150 KB of HTML/JS/fonts already compressed. What it buys is
+# that the published sha256 means "these bytes are the committed tree" on every
+# machine, forever, instead of "these bytes are whatever zlib felt like".
+COMPRESS_LEVEL = None
+FIXED_TIME = time.gmtime(int(os.environ.get("SOURCE_DATE_EPOCH") or 315532800))[:6]
+
+
+def _entries() -> list:
+    files = tracked_files()
+    out = []
+    for path in files:
+        arc = "extension/" + path.relative_to(ext).as_posix()
+        info = zipfile.ZipInfo(arc, date_time=FIXED_TIME)
+        info.compress_type = zipfile.ZIP_STORED
+        info.create_system = 3            # always "unix", whatever the builder
+        info.external_attr = 0o644 << 16  # a plain file
+        out.append((info, path))
+    return out
+
+
+with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as z:
+    for info, path in _entries():
+        with open(path, "rb") as fh:
+            z.writestr(info, fh.read())
 
 digest = hashlib.sha256(out.read_bytes()).hexdigest()
 sidecar = out.with_name(out.name + ".sha256")

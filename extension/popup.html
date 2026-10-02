@@ -551,6 +551,24 @@
       z-index: 50;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .diag-btn {
+        background: rgba(255, 255, 255, .72);
+        border: 1px solid rgba(11, 31, 51, .18);
+        color: var(--ink-secondary);
+        font: inherit;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: .02em;
+        padding: 3px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: color .15s, border-color .15s, background .15s;
+      }
+      .diag-btn:hover {
+        color: var(--blue);
+        border-color: var(--blue);
+        background: #fff;
+      }
   </style>
 </head>
 <body>
@@ -654,6 +672,9 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         <span id="footer-secure-tag">Isolated Profile · Localhost CDP</span>
       </div>
+      <button id="diag-btn" class="diag-btn" type="button">
+        <span id="diag-text">Copier le diagnostic</span>
+      </button>
       <span id="app-version">v0.5.0</span>
     </footer>
   </div>
