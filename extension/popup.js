@@ -1194,6 +1194,16 @@ transferEl.addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Never copy more than the origin out of the tab. A full URL routinely carries
+// ?token=, #access_token= or a session id, and the clipboard is paste-anywhere.
+function reportableOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch (_) {
+    return 'unknown';
+  }
+}
+
 // Copy diagnostic (v0.6.0)
 // A failed sync used to end at a screenshot with nothing to act on. This pulls
 // the relay's sanitized report (versions, counts, live state - no cookie, no
@@ -1214,7 +1224,12 @@ async function copyDiagnostic() {
       '',
       '--- extension side ---',
       'popup: ' + (document.getElementById('app-version') || {}).textContent,
-      'tab: ' + (currentTab ? currentTab.url : 'unknown'),
+      // ORIGIN only. This used to copy `currentTab.url` whole, which routinely
+      // carries `?token=`, `#access_token=` or a session id in the query or
+      // fragment - so a "no URL, no token" diagnostic exported the credential
+      // into a paste-anywhere clipboard. The sync path already narrows to the
+      // origin; the report does the same now.
+      'site: ' + reportableOrigin(currentTab ? currentTab.url : ''),
       'language: ' + currentLanguage
     ].join('\n');
     await navigator.clipboard.writeText(report);

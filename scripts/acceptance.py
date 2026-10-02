@@ -425,6 +425,26 @@ def dom_ids_exist():
     return "ok", "%d ids referenced, all present" % len(wanted)
 
 
+@check("the popup copies no URL query or fragment into the diagnostic report")
+def diagnostic_report_is_origin_only():
+    """The popup's report comment promises "no cookie, no token, no URL".
+
+    It used to copy `currentTab.url` whole, so `?access_token=` or
+    `#access_token=` landed in a paste-anywhere clipboard. Runs the real array
+    literal from popup.js through a real URL parser, so it cannot pass on a
+    report that is only scrubbed in some code path.
+    """
+    node = shutil.which("node")
+    script = REPO / "tests" / "node" / "test_diagnostic_report.js"
+    if not node or not script.is_file():
+        return "SKIP", "node or the harness is absent"
+    r = subprocess.run([node, str(script)], cwd=str(REPO),
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return "FAIL", (r.stdout or r.stderr).strip().splitlines()[-1][:90]
+    return "ok", "8 URL shapes, no query, no fragment, no value"
+
+
 @check("python files compile")
 def python_compiles():
     bad = []
@@ -804,7 +824,7 @@ def double_check_pin():
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
-         diagnostics_are_sanitized, archive_reproducible]
+         diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible]
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
         audit_log, double_check_pin, diagnostics_endpoint]

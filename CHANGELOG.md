@@ -1,3 +1,19 @@
+## [0.7.10] - the diagnostic report exported the tab URL, token and all
+
+- `copyDiagnostic` promised "no cookie, no token, no URL" in its own comment and
+  then copied `currentTab.url` whole. That URL routinely carries `?access_token=`,
+  `#access_token=` or a session id, so a "no secret" report pushed the credential
+  into a paste-anywhere clipboard. The report now carries the origin only, via a
+  `reportableOrigin` helper - the same narrowing the sync path already did.
+- New gate check (29th, LOCAL): runs the real `const report = [...]` array out of
+  `popup.js` through a real URL parser over 8 URL shapes, so it cannot pass on a
+  report scrubbed in only some code path.
+- A delegated audit reported the bootstrap endpoint as CRITICAL - claiming a
+  forged `Origin` header receives the shared secret, "proved live". Re-tested in
+  isolation: a made-up 32-char extension id gets 403 and writes no pin; only the
+  official id passes. The audit's probe had already pinned the forged id first, so
+  it was measuring the poisoning scenario while describing the default one.
+
 ## [0.7.9] - one lock per dict: the session race only failed on Linux
 
 - v0.7.7 fixed `dictionary changed size during iteration` by taking `CDP_LOCK` in
