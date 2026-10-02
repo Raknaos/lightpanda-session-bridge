@@ -7,6 +7,29 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
+## [0.7.17] - retracting 0.7.16: the wrong-language frame was never painted
+
+v0.7.16 claimed the popup flashed French to English users. It did not. The claim
+came from `Emulation.setScriptExecutionDisabled`, which proves the pre-translation
+DOM exists - not that a frame reached the screen. `popup.js` is a parser-blocking
+classic script at line 701 of a 704-line document, so Chrome holds the first paint
+until it has run.
+
+`Page.startScreencast` - the compositor, the only authority on what was shown -
+recorded the real installed popup on `chrome-extension://<id>`: the FIRST frame is
+already fully French (`FR`, "Copier le diagnostic", v0.7.16, relay online). No
+flash, ever.
+
+The v0.7.16 gate check and all four harnesses that produced the finding are
+removed. `scripts/measure_real_popup_screencast.py` is kept: it measures the
+installed product on its real origin, and reading the frames is the only way to
+tell a language change from a state change (30% of pixels differed between two
+frames that were both French).
+
+The HTML change itself - `Copier le diagnostic` -> `Copy diagnostic` - is kept. It
+is the default language, so the literal now matches what the untranslated panel
+would say if a browser ever did paint it early.
+
 ## [0.7.16] - a popup painted one wrong-language frame before any script ran
 
 `#diag-text` shipped `Copier le diagnostic` as its literal. A literal in
