@@ -1,3 +1,19 @@
+## [0.7.13] - a client that can wait forever has no honest state to be in
+
+The popup had eight `fetch()` calls and one deadline, on the import path only.
+`/v1/bootstrap` runs first, so a relay that accepted the socket and went silent
+left the badge on "Checking…" forever and `/health` was never even tried. All
+eight now go through one `relayFetch` helper carrying a cancellable signal.
+
+The deadline is 45 s on purpose: the relay cuts a body read at 10 s and its class
+deadline is 15 s, and a client that aborts first turns a translated reason into a
+bare `Failed to fetch`.
+
+Relay error codes were rendered verbatim — "origin refused" inside a French
+popup. Nine codes are now mapped to i18n keys in ten languages, and the gate
+reads the codes out of `relay/server.py` so a new one fails instead of shipping
+untranslated.
+
 ## [0.7.12] - a client that never spoke could never be released
 
 - `Handler` had no class-level `timeout`, so `StreamRequestHandler.setup()` left

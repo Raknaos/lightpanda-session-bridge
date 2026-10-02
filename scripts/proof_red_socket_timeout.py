@@ -38,6 +38,20 @@ def main() -> int:
     if n != 1:
         print("ABORT: no class-level timeout found to sabotage")
         return 2
+    # A subn that MATCHES can still produce an identical string, and then the
+    # whole run is vacuous: sabotaged == original means the "proof red" would be
+    # testing the shipped code. An audit flagged exactly this on the earlier 600s
+    # version (production was 15, the regex still matched, and sabotage was a
+    # no-op - PROOF RED could only ever pass vacuously). Assert it here instead
+    # of trusting the pattern.
+    if sabotaged == original:
+        print("ABORT: the sabotage produced an IDENTICAL file - the proof "
+              "would be vacuous (production deadline is already 45?)")
+        return 2
+    if not re.search(r"^\s*timeout = 15$", original, re.MULTILINE):
+        print("ABORT: production deadline is not 15s; re-derive SABOTAGE and the "
+              "test's ATTEND_WINDOW before trusting this script")
+        return 2
     SERVER.write_text(sabotaged, encoding="utf-8", newline="")
     budget = 420
     try:

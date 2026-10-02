@@ -890,10 +890,85 @@ def double_check_pin():
     return "ok", "relay accepts %s...%s" % (pinned_id()[:4], pinned_id()[-4:])
 
 
+@check("every popup relay call carries a deadline")
+def popup_calls_are_bounded():
+    """A client that can wait forever has no honest state to be in.
+
+    The popup had 8 fetch() calls and ONE AbortController, on the import path
+    only. /v1/bootstrap in particular runs before anything else, so a relay
+    that accepted the socket and went silent left the badge on "Checking…"
+    forever and /health was never even tried.
+
+    Asserts on the real helper, not on a count: a bare `signal:` grep passes
+    while a call bypasses relayFetch entirely.
+    """
+    import shutil as _shutil
+    node = _shutil.which("node")
+    if not node:
+        return "SKIP", "node is absent"
+    src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
+    # Every fetch( in the file must live inside relayFetch (the helper itself).
+    helper_start = src.find("async function relayFetch")
+    helper_end = src.find("\n}", helper_start)
+    helper = src[helper_start:helper_end] if helper_start >= 0 else ""
+    strays = []
+    offset = 0
+    while True:
+        i = src.find("fetch(", offset)
+        if i < 0:
+            break
+        if not (helper_start <= i <= helper_end):
+            strays.append(src[:i].count("\n") + 1)
+        offset = i + 6
+    if not helper:
+        return "FAIL", "relayFetch is absent: the popup has no deadline helper"
+    if strays:
+        return "FAIL", f"{len(strays)} fetch() outside relayFetch (lines {strays[:4]})"
+    if "AbortController" not in helper or "signal:" not in helper:
+        return "FAIL", "relayFetch carries no cancellable signal"
+    deadline = re.search(r"RELAY_TIMEOUT_MS = (\d+)", src)
+    ms = int(deadline.group(1)) if deadline else 0
+    # The client must outlast the relay's own cut-off (body reads at 10s, class
+    # deadline 15s) or the user sees a bare "Failed to fetch" instead of the
+    # translated reason the relay actually sent.
+    if ms <= 15000:
+        return "FAIL", f"RELAY_TIMEOUT_MS={ms}ms fires before the relay's 15s deadline"
+    return "ok", f"all fetch() go through relayFetch, {ms} ms > 15 s relay deadline"
+
+
+@check("every relay error code has a translation")
+def relay_errors_are_translated():
+    """The relay answers in short English codes; the popup shipped in 10
+    languages. Rendering a code verbatim put "origin refused" inside a French
+    popup.
+
+    The codes are read out of relay/server.py, so a NEW relay error fails here
+    instead of shipping untranslated.
+    """
+    src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
+    server = (REPO / "relay" / "server.py").read_text(encoding="utf-8")
+    block = re.search(r"const RELAY_ERROR_KEYS = \{([\s\S]*?)\n\};", src)
+    if not block:
+        return "FAIL", "RELAY_ERROR_KEYS is absent from popup.js"
+    mapped = set(re.findall(r"'([a-z ]+)':\s*'err\w+'", block.group(1)))
+    emitted = set(re.findall(r'"error":\s*"([a-z ]+)"', server))
+    emitted |= set(re.findall(r'"error":\s*str\(err\)\s*or\s*"([a-z ]+)"', server))
+    missing = sorted(emitted - mapped)
+    if missing:
+        return "FAIL", f"{len(missing)} relay code(s) untranslated: {missing[:4]}"
+    if not emitted:
+        # The guard must be able to see a violation: an empty emission set
+        # means the regex no longer matches the relay's real shape and every
+        # future code would pass silently.
+        return "FAIL", "no relay error code could be read: the guard is blind"
+    return "ok", f"{len(emitted)} relay error codes, all mapped to an i18n key"
+
+
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
-         diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible]
+         diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
+         popup_calls_are_bounded, relay_errors_are_translated]
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
         audit_log, double_check_pin, diagnostics_endpoint, silent_sockets_are_released]

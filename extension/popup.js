@@ -24,7 +24,13 @@ const I18N = {
     diagBtn: "Copy diagnostic",
     diagCopied: "Diagnostic copied",
     diagFailed: "Copy failed",
-    errRelayTimeout: 'Relay did not answer within 30s (Lightpanda restarting?). Try again.',
+    errRelayTimeout: 'Relay did not answer (Lightpanda restarting?). Try again.',
+    errRelayUnreachable: "Could not reach the relay (is it running?).",
+    errOriginRefused: "The relay refused this site's origin.",
+    errUnauthorized: "The relay rejected this extension (not paired).",
+    errRouteMissing: "The relay does not know this request.",
+    errUpdateRefused: "The relay refused the update operation.",
+    unknownRelayError: "Relay error: {0}",
     missingKeys: (list) => ` (missing: ${list})`,
     errStorageRefused: (detail) => `Some localStorage keys could not be transferred: ${detail}`,
     errNeedHttps: "Please open a public HTTPS website (e.g. Gmail, A6API).",
@@ -79,7 +85,13 @@ const I18N = {
     diagBtn: "Copier le diagnostic",
     diagCopied: "Diagnostic copié",
     diagFailed: "Échec de la copie",
-    errRelayTimeout: 'Le relais n\'a pas répondu sous 30 s (Lightpanda en redémarrage ?). Réessayez.',
+    errRelayTimeout: 'Le relais n\'a pas répondu (Lightpanda en redémarrage ?). Réessayez.',
+    errRelayUnreachable: "Impossible de joindre le relais (est-il démarré ?).",
+    errOriginRefused: "Le relais a refusé l'origine de ce site.",
+    errUnauthorized: "Le relais a rejeté cette extension (non appairée).",
+    errRouteMissing: "Le relais ne connaît pas cette requête.",
+    errUpdateRefused: "Le relais a refusé l'opération de mise à jour.",
+    unknownRelayError: "Erreur du relais : {0}",
     missingKeys: (list) => ` (manquantes: ${list})`,
     errStorageRefused: (detail) => `Certaines clés localStorage n'ont pas pu être transférées : ${detail}`,
     errNeedHttps: "Ouvrez un site HTTPS public (ex: Gmail, A6API).",
@@ -134,7 +146,13 @@ const I18N = {
     diagBtn: "Copiar diagnóstico",
     diagCopied: "Diagnóstico copiado",
     diagFailed: "Error al copiar",
-    errRelayTimeout: 'El relay no respondió en 30 s (¿Lightpanda reiniciándose?). Inténtelo de nuevo.',
+    errRelayTimeout: 'El relay no respondió (¿Lightpanda reiniciándose?). Inténtelo de nuevo.',
+    errRelayUnreachable: "No se pudo contactar con el relay (¿está en marcha?).",
+    errOriginRefused: "El relay rechazó el origen de este sitio.",
+    errUnauthorized: "El relay rechazó esta extensión (sin emparejar).",
+    errRouteMissing: "El relay no conoce esta solicitud.",
+    errUpdateRefused: "El relay rechazó la operación de actualización.",
+    unknownRelayError: "Error del relay: {0}",
     missingKeys: (list) => ` (faltan: ${list})`,
     errStorageRefused: (detail) => `No se pudieron transferir algunas claves de localStorage: ${detail}`,
     errNeedHttps: "Abre un sitio web HTTPS público (ej. Gmail, A6API).",
@@ -189,7 +207,13 @@ const I18N = {
     diagBtn: "Diagnose kopieren",
     diagCopied: "Diagnose kopiert",
     diagFailed: "Kopieren fehlgeschlagen",
-    errRelayTimeout: 'Relay antwortete nicht innerhalb von 30 s (Lightpanda startet neu?). Erneut versuchen.',
+    errRelayTimeout: 'Relay hat nicht geantwortet (Lightpanda startet neu?). Erneut versuchen.',
+    errRelayUnreachable: "Der Relay war nicht erreichbar (läuft er?).",
+    errOriginRefused: "Der Relay hat den Ursprung dieser Seite abgelehnt.",
+    errUnauthorized: "Der Relay hat diese Erweiterung abgelehnt (nicht gekoppelt).",
+    errRouteMissing: "Der Relay kennt diese Anfrage nicht.",
+    errUpdateRefused: "Der Relay hat den Vorgang abgelehnt.",
+    unknownRelayError: "Relay-Fehler: {0}",
     missingKeys: (list) => ` (fehlen: ${list})`,
     errStorageRefused: (detail) => `Einige localStorage-Schlüssel konnten nicht übertragen werden: ${detail}`,
     errNeedHttps: "Bitte öffnen Sie eine öffentliche HTTPS-Website.",
@@ -242,7 +266,13 @@ const I18N = {
     diagBtn: "复制诊断信息",
     diagCopied: "诊断信息已复制",
     diagFailed: "复制失败",
-    errRelayTimeout: '中继在 30 秒内未响应（Lightpanda 正在重启？）。请重试。',
+    errRelayTimeout: '中继未响应（Lightpanda 正在重启？）。请重试。',
+    errRelayUnreachable: "无法连接中继（它是否在运行？）。",
+    errOriginRefused: "中继拒绝了该站点的来源。",
+    errUnauthorized: "中继拒绝了此扩展（未配对）。",
+    errRouteMissing: "中继不认识此请求。",
+    errUpdateRefused: "中继拒绝了更新操作。",
+    unknownRelayError: "中继错误：{0}",
     missingKeys: (list) => ` (缺失: ${list})`,
     errStorageRefused: (detail) => `部分 localStorage 键无法传输：${detail}`,
     errNeedHttps: "请打开公开的 HTTPS 网站（例如 Gmail、A6API）。",
@@ -297,7 +327,13 @@ const I18N = {
     diagBtn: "診断情報をコピー",
     diagCopied: "診断情報をコピーしました",
     diagFailed: "コピーに失敗しました",
-    errRelayTimeout: 'リレーが30秒以内に応答しませんでした（Lightpanda再起動中？）。もう一度お試しください。',
+    errRelayTimeout: 'リレーが応答しませんでした（Lightpanda再起動中？）。もう一度お試しください。',
+    errRelayUnreachable: "リレーに接続できません（起動していますか？）。",
+    errOriginRefused: "リレーがこのサイトのオリジンを拒否しました。",
+    errUnauthorized: "リレーがこの拡張機能を拒否しました（未ペアリング）。",
+    errRouteMissing: "リレーはこのリクエスト知りません。",
+    errUpdateRefused: "リレーが更新操作を拒否しました。",
+    unknownRelayError: "リレーエラー：{0}",
     missingKeys: (list) => ` (欠落: ${list})`,
     errStorageRefused: (detail) => `一部の localStorage キーを転送できませんでした：${detail}`,
     errNeedHttps: "公開HTTPSサイト（Gmail、A6APIなど）を開いてください。",
@@ -354,7 +390,13 @@ const I18N = {
     diagBtn: "Copia diagnostica",
     diagCopied: "Diagnostica copiata",
     diagFailed: "Copia non riuscita",
-    errRelayTimeout: 'Il relay non ha risposto entro 30 s (Lightpanda in riavvio?). Riprova.',
+    errRelayTimeout: 'Il relay non ha risposto (Lightpanda in riavvio?). Riprova.',
+    errRelayUnreachable: "Impossibile raggiungere il relay (è in esecuzione?).",
+    errOriginRefused: "Il relay ha rifiutato l'origine di questo sito.",
+    errUnauthorized: "Il relay ha rifiutato questa estensione (non associata).",
+    errRouteMissing: "Il relay non riconosce questa richiesta.",
+    errUpdateRefused: "Il relay ha rifiutato l'operazione di aggiornamento.",
+    unknownRelayError: "Errore del relay: {0}",
     missingKeys: (list) => ` (mancanti: ${list})`,
     errStorageRefused: (detail) => `Alcune chiavi localStorage non sono state trasferite: ${detail}`,
     errNeedHttps: "Apri un sito HTTPS pubblico (es. Gmail, A6API).",
@@ -409,7 +451,13 @@ const I18N = {
     diagBtn: "Copiar diagnóstico",
     diagCopied: "Diagnóstico copiado",
     diagFailed: "Falha ao copiar",
-    errRelayTimeout: 'O relay não respondeu em 30 s (Lightpanda reiniciando?). Tente novamente.',
+    errRelayTimeout: 'O relay não respondeu (Lightpanda reiniciando?). Tente novamente.',
+    errRelayUnreachable: "Não foi possível contatar o relay (ele está rodando?).",
+    errOriginRefused: "O relay recusou a origem deste site.",
+    errUnauthorized: "O relay rejeitou esta extensão (não pareada).",
+    errRouteMissing: "O relay não conhece este pedido.",
+    errUpdateRefused: "O relay recusou a operação de atualização.",
+    unknownRelayError: "Erro do relay: {0}",
     missingKeys: (list) => ` (faltando: ${list})`,
     errStorageRefused: (detail) => `Algumas chaves de localStorage não puderam ser transferidas: ${detail}`,
     errNeedHttps: "Abra um site HTTPS público (ex: Gmail, A6API).",
@@ -462,7 +510,13 @@ const I18N = {
     diagBtn: "نسخ التشخيص",
     diagCopied: "تم نسخ التشخيص",
     diagFailed: "فشل النسخ",
-    errRelayTimeout: 'لم يستجب المرجع خلال 30 ثانية (هل يعيد Lightpanda التشغيل؟). حاول مرة أخرى.',
+    errRelayTimeout: 'لم يستجب المرجع (هل يعيد Lightpanda التشغيل؟). حاول مرة أخرى.',
+    errRelayUnreachable: "تعذر الوصول إلى الوسيط (هل يعمل؟).",
+    errOriginRefused: "رفض الوسيط أصل هذا الموقع.",
+    errUnauthorized: "رفض الوسيط هذا الامتداد (غير مقترن).",
+    errRouteMissing: "لا يعرف الوسيط هذا الطلب.",
+    errUpdateRefused: "رفض الوسيط عملية التحديث.",
+    unknownRelayError: "خطأ الوسيط: {0}",
     missingKeys: (list) => ` (المفقودة: ${list})`,
     errStorageRefused: (detail) => `تعذّر نقل بعض مفاتيح localStorage: ${detail}`,
     errNeedHttps: "يرجى فتح موقع HTTPS عام.",
@@ -519,7 +573,13 @@ const I18N = {
     diagBtn: "Скопировать диагностику",
     diagCopied: "Диагностика скопирована",
     diagFailed: "Не удалось скопировать",
-    errRelayTimeout: 'Реле не ответило в течение 30 с (Lightpanda перезапускается?). Повторите попытку.',
+    errRelayTimeout: 'Реле не ответило (Lightpanda перезапускается?). Повторите попытку.',
+    errRelayUnreachable: "Не удалось связаться с реле (оно запущено?).",
+    errOriginRefused: "Реле отклонило источник этого сайта.",
+    errUnauthorized: "Реле отклонило это расширение (не сопряжено).",
+    errRouteMissing: "Реле не знает этот запрос.",
+    errUpdateRefused: "Реле отклонило операцию обновления.",
+    unknownRelayError: "Ошибка реле: {0}",
     missingKeys: (list) => ` (отсутствуют: ${list})`,
     errStorageRefused: (detail) => `Некоторые ключи localStorage не удалось перенести: ${detail}`,
     errNeedHttps: "Откройте общедоступный сайт HTTPS (например, Gmail, A6API).",
@@ -636,7 +696,7 @@ async function bootstrapToken() {
   // One-time pairing with the local relay: fetch the shared secret from
   // /v1/bootstrap (restricted to chrome-extension:// callers) and persist it.
   try {
-    const res = await fetch(`${RELAY}/v1/bootstrap`, { method: 'GET', cache: 'no-store' });
+    const res = await relayFetch('/v1/bootstrap', { method: 'GET', cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && data.token) {
@@ -655,6 +715,79 @@ function bridgeHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   if (bridgeToken) headers['X-Bridge-Token'] = bridgeToken;
   return headers;
+}
+
+// Every relay call must END, one way or another.
+//
+// Seven of the eight fetches in this popup had no deadline at all. A relay that
+// accepts the TCP connection and then says nothing - which is exactly what a
+// wedged or restarting daemon does - left the popup on a hardcoded "Checking..."
+// with an undifferentiated badge, forever, with /health never even attempted.
+// A spinner is not a status (skill pitfall 10).
+//
+// The deadline is deliberately LONGER than the relay's own (10s body reads,
+// 15s class deadline): the relay should get to answer with a real, translated
+// error first. It exists only for the case where the relay dies mid-request,
+// where the alternative is a popup that can never recover. Aborting earlier
+// than the relay turns a specific message into a bare "Failed to fetch".
+const RELAY_TIMEOUT_MS = 45000;
+
+// Name of the abort we raise, so callers can tell "the relay went silent" from
+// "the network refused". A bare TypeError('Failed to fetch') is not actionable
+// and is not translated.
+class RelayTimeoutError extends Error {
+  constructor() {
+    super('relay-timeout');
+    this.name = 'RelayTimeoutError';
+  }
+}
+
+// The relay answers in short English codes. Rendering them verbatim put an
+// English sentence inside a translated popup, which is a defect in a product
+// shipped in 10 languages. Map the codes the relay can actually emit (read off
+// relay/server.py, not guessed) to translated keys; an unknown code still
+// surfaces, but inside a translated frame rather than as raw relay prose.
+//
+// `str(err)` from Python is free text and CANNOT be mapped - it may be a
+// localized OS sentence. So it is never rendered raw: it lands in a translated
+// frame that names the operation instead of quoting untranslatable prose.
+const RELAY_ERROR_KEYS = {
+  'origin refused': 'errOriginRefused',
+  'unauthorized': 'errUnauthorized',
+  'not found': 'errRouteMissing',
+  'session import refused': 'errRefused',
+  'clear refused': 'errRefused',
+  'cdp call refused': 'errRefused',
+  'update refused': 'errUpdateRefused',
+  'update check failed': 'errUpdateRefused',
+  'rollback refused': 'errUpdateRefused'
+};
+
+function relayErrorText(code) {
+  if (!code) return t('errRefused');
+  const key = RELAY_ERROR_KEYS[String(code).trim().toLowerCase()];
+  if (key) return t(key);
+  // Unknown code: keep it visible but translated-framed. `unknownRelayError`
+  // takes the code as a parameter so nothing is silently dropped.
+  return t('unknownRelayError', code);
+}
+
+async function relayFetch(path, options) {
+  const opts = options || {};
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+  try {
+    return await fetch(`${RELAY}${path}`, Object.assign({}, opts, {
+      signal: controller.signal
+    }));
+  } catch (err) {
+    if (err && (err.name === 'AbortError' || err.name === 'RelayTimeoutError')) {
+      throw new RelayTimeoutError();
+    }
+    throw err;
+  } finally {
+    clearTimeout(deadline);
+  }
 }
 
 function t(key, ...args) {
@@ -722,7 +855,7 @@ function eligible(url) {
 
 async function checkRelay() {
   try {
-    const res = await fetch(`${RELAY}/health`, { method: 'GET', cache: 'no-store' });
+    const res = await relayFetch('/health', { method: 'GET', cache: 'no-store' });
     if (res.ok) {
       // Three states, not two. The relay can be perfectly reachable while its
       // CDP connection to Lightpanda is dead - and then every sync fails while
@@ -756,7 +889,7 @@ async function checkRelay() {
 
 async function fetchSessions() {
   try {
-    const res = await fetch(`${RELAY}/v1/sessions`, {
+    const res = await relayFetch('/v1/sessions', {
       method: 'GET', cache: 'no-store', headers: bridgeHeaders()
     });
     if (!res.ok) return null;
@@ -829,7 +962,7 @@ function renderSessions(data) {
 async function clearSessionsOnRelay(origin = null) {
   try {
     const body = origin ? { origin } : {};
-    const res = await fetch(`${RELAY}/v1/sessions/clear`, {
+    const res = await relayFetch('/v1/sessions/clear', {
       method: 'POST', headers: bridgeHeaders(), body: JSON.stringify(body)
     });
     return res.ok;
@@ -952,7 +1085,7 @@ function renderUpdateCard() {
 
 async function refreshUpdateStatus() {
   try {
-    const res = await fetch(`${RELAY}/v1/update/check`, { cache: 'no-store' });
+    const res = await relayFetch('/v1/update/check', { cache: 'no-store' });
     if (!res.ok) throw new Error(String(res.status));
     updateInfo = await res.json();
   } catch (_) {
@@ -969,7 +1102,7 @@ async function runUpdate(path, label, doneKey) {
   rollbackBtn.disabled = true;
   renderUpdateCard();
   try {
-    const res = await fetch(`${RELAY}${path}`, {
+    const res = await relayFetch(path, {
       method: 'POST',
       headers: bridgeHeaders(),
       body: JSON.stringify({ source: 'auto' })
@@ -985,7 +1118,7 @@ async function runUpdate(path, label, doneKey) {
     updateBusy = false;
     updateBtn.disabled = false;
     rollbackBtn.disabled = false;
-    setStatus(t('updateFailed', error.message || ''), 'error');
+    setStatus(t('updateFailed', (error && error.name === 'RelayTimeoutError') ? t('errRelayTimeout') : t('errRelayUnreachable')), 'error');
     refreshUpdateStatus();
   }
 }
@@ -1135,26 +1268,30 @@ transferEl.addEventListener('click', async () => {
     const storageKeys = storage ? Object.keys(storage).length : 0;
 
     // 3. Send payload to Relay (authenticated with shared token).
-    //    AbortController + deadline: without one, a relay that never answers
-    //    (or an extension reload mid-fetch) left the status line on
+    //    relayFetch carries the deadline: without one, a relay that never
+    //    answers (or an extension reload mid-fetch) left the status line on
     //    "Transferring & verifying…" forever - the popup has no way to say
     //    "still working" honestly, so the sync must end, pass or fail.
+    //    This route gets the LONGER budget: it is the only one that makes the
+    //    relay talk to Lightpanda (navigate + settle + four injection rounds),
+    //    so 10s is its own body deadline and 45s the client-side backstop.
     const payload = { origin, cookies, storage };
-    const controller = new AbortController();
-    const deadline = setTimeout(() => controller.abort(), 30000);
     let response, result;
     try {
-      response = await fetch(`${RELAY}/v1/session/import`, {
+      response = await relayFetch('/v1/session/import', {
         method: 'POST',
         headers: bridgeHeaders(),
-        body: JSON.stringify(payload),
-        signal: controller.signal
+        body: JSON.stringify(payload)
       });
       result = await response.json();
     } catch (fetchErr) {
-      throw (fetchErr && fetchErr.name === 'AbortError') ? new Error(t('errRelayTimeout')) : fetchErr;
-    } finally {
-      clearTimeout(deadline);
+      // RelayTimeoutError is what relayFetch raises on the deadline; the raw
+      // AbortError is kept in the check too in case relayFetch is bypassed.
+      if (fetchErr && (fetchErr.name === 'RelayTimeoutError'
+                       || fetchErr.name === 'AbortError')) {
+        throw new Error(t('errRelayTimeout'));
+      }
+      throw fetchErr;
     }
 
     // The relay verifies EVERY key it was sent, so a short count means a
@@ -1178,7 +1315,13 @@ transferEl.addEventListener('click', async () => {
     }
 
     if (!response.ok || !result.ok) {
-      throw new Error(result.error || t('errRefused'));
+      // The relay speaks in short English codes ('origin refused',
+      // 'unauthorized', 'session import refused', ...). Rendering them
+      // verbatim put an English sentence in a French popup. Map the known
+      // codes to translated keys and keep the fallback translated too; an
+      // unknown code still surfaces, but in a translated frame rather than as
+      // raw relay prose.
+      throw new Error(relayErrorText(result.error));
     }
 
     setStatus(t('success', result.cookie_count, result.storage_count ?? storageKeys), 'success');
@@ -1187,7 +1330,16 @@ transferEl.addEventListener('click', async () => {
     sessionsCard.classList.add('open');
     await refreshSessions();
   } catch (error) {
-    setStatus(error.message || t('errRefused'), 'error');
+    // `error.message` is always truthy, so the i18n fallback beside it could
+    // never run - the popup rendered either raw relay prose or Chrome's
+    // 'Failed to fetch'. Only messages we raised ourselves are safe to
+    // show; anything else is a browser/network string we cannot translate.
+    const shown = (error && error.name === 'Error' && !error.relayCode)
+      ? error.message
+      : (error && error.name === 'RelayTimeoutError'
+          ? t('errRelayTimeout')
+          : t('errRelayUnreachable'));
+    setStatus(shown, 'error');
   } finally {
     transferEl.disabled = !confirmEl.checked;
   }
@@ -1214,7 +1366,7 @@ async function copyDiagnostic() {
   const label = diagText;
   const original = label ? label.textContent : '';
   try {
-    const res = await fetch(`${RELAY}/v1/diagnostics`, {
+    const res = await relayFetch('/v1/diagnostics', {
       method: 'GET', cache: 'no-store', headers: bridgeHeaders()
     });
     const data = await res.json();
@@ -1237,7 +1389,7 @@ async function copyDiagnostic() {
     showToast(t('diagCopied'));
   } catch (err) {
     if (label) label.textContent = t('diagFailed');
-    showToast(t('diagFailed') + ' (' + (err.message || 'relay offline') + ')');
+    showToast(t('diagFailed') + ' — ' + ((err && err.name === 'RelayTimeoutError') ? t('errRelayTimeout') : t('errRelayUnreachable')));
   } finally {
     setTimeout(() => { if (label) label.textContent = original; }, 2500);
   }
