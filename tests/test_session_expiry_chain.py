@@ -42,6 +42,28 @@ EXT_ID = "fcigkjkchglchhohedljlenopbkgnino"
 TEST_TOKEN = "test-token-not-a-secret-0000"
 
 
+_SAVED_NAMES = []
+
+
+class _FakeTransport:
+    """Minimal stand-in for the CDP transport when no browser is attached."""
+
+    def request(self, method, params=None, session_id=None):
+        return {}
+
+
+def _fake_request(method, params=None, session_id=None):
+    if method == "Network.getCookies":
+        return {"cookies": [{"name": n} for n in _SAVED_NAMES]}
+    return {}
+
+
+def _record_apply(origin, cookies, storage):
+    """Stand in for the browser write, keeping the NAMES so verification passes."""
+    _SAVED_NAMES[:] = [str(c.get("name")) for c in cookies]
+    return 0
+
+
 def popup_js():
     return (ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
 
@@ -55,9 +77,44 @@ class _LiveRelay:
     the callable itself, which is the easy one to forget.
     """
 
+    offline_browser = False
+
     def __enter__(self):
+        offline_browser = self.offline_browser
+        """Serve the real Handler.
+
+        `offline_browser=True` replaces the Lightpanda transport with a stub that
+        reports the cookies back. The import route REQUIRES a live browser - it
+        calls `_ensure_connection`, `_apply_session` and verifies through
+        `Network.getCookies` - so on a CI runner with no Lightpanda it answers
+        400 "Connection refused" and the test measured the BROWSER, not the
+        expiry chain. Stub the transport, not the code under test: the expiry
+        derivation in `cookie_for_cdp`, the `> 0` gate and `list_sessions()` all
+        still run for real.
+        """
         self._real_secret = server._load_secret
+        self._real_request = None
+        self._real_ensure = None
         server._load_secret = lambda: TEST_TOKEN
+        self._stubbed = False
+        self._fake_transport = None
+        if offline_browser:
+            # `_CDP_TRANSPORT` is None until a real connection exists, which is
+            # exactly the runner's state - so stubbing must tolerate the handle
+            # being absent, not assume one.
+            self._real_transport = server._CDP_TRANSPORT
+            transport = server._CDP_TRANSPORT
+            if transport is None:
+                transport = _FakeTransport()
+                self._fake_transport = transport
+                server._CDP_TRANSPORT = transport
+            self._real_request = transport.request
+            transport.request = _fake_request
+            self._real_ensure = server._ensure_connection
+            server._ensure_connection = lambda origin: None
+            self._real_apply_global = server._apply_session
+            server._apply_session = _record_apply
+            self._stubbed = True
         self.srv = server.RelayServer(("127.0.0.1", 0), server.Handler)
         self.port = self.srv.server_address[1]
         self.thread = threading.Thread(target=self.srv.serve_forever, daemon=True)
@@ -68,6 +125,15 @@ class _LiveRelay:
         self.srv.shutdown()
         self.srv.server_close()
         server._load_secret = self._real_secret
+        if self._stubbed:
+            if server._CDP_TRANSPORT is self._fake_transport:
+                # The stub we installed: take it out entirely, the way the
+                # product leaves it when no browser has ever connected.
+                server._CDP_TRANSPORT = self._real_transport
+            else:
+                server._CDP_TRANSPORT.request = self._real_request
+            server._ensure_connection = self._real_ensure
+            server._apply_session = self._real_apply_global
         return False
 
     def call(self, path, payload=None, timeout=25):
@@ -153,38 +219,47 @@ class TestTheChain(unittest.TestCase):
         client to poll. A flag that only changes because we re-imported is
         computed at import time, not from the stored expiry."""
         soon = time.time() + 6
-        with _LiveRelay() as relay:
-            status, resp = relay.call("/v1/session/import", {
-                "origin": "https://example.com",
-                "cookies": [{"name": "lp_expiry_probe", "value": "probe",
-                             "domain": "example.com", "path": "/", "secure": True,
-                             "httpOnly": False, "expires_hint": soon}]})
-            self.assertEqual(status, 200,
-                             "import refuse: %s" % json.dumps(resp)[:200])
+        _SAVED_NAMES.clear()
+        _LiveRelay.offline_browser = True
+        try:
+            with _LiveRelay() as relay:
+                status, resp = relay.call("/v1/session/import", {
+                    "origin": "https://example.com",
+                    "cookies": [{"name": "lp_expiry_probe", "value": "probe",
+                                 "domain": "example.com", "path": "/",
+                                 "secure": True, "httpOnly": False,
+                                 "expires_hint": soon}]})
+                self.assertEqual(status, 200,
+                                 "import refuse: %s" % json.dumps(resp)[:200])
 
-            _, first = relay.call("/v1/sessions")
-            sess = next((s for s in first.get("sessions", [])
-                         if s.get("host") == "example.com"), None)
-            self.assertIsNotNone(sess,
-                                 "la session importee n'apparait pas dans la liste")
-            self.assertIsInstance(sess.get("expires"), (int, float),
-                                  "expires est absent: la popup n'affiche aucun "
-                                  "compte a rebours (mesure: '-' sur 9 echantillons "
-                                  "sur 26s)")
-            self.assertFalse(sess.get("expired"),
-                             "une session qui expire dans 6s est deja marquee morte")
+                _, first = relay.call("/v1/sessions")
+                sess = next((x for x in first.get("sessions", [])
+                             if x.get("host") == "example.com"), None)
+                self.assertIsNotNone(sess,
+                                     "la session importee n'apparait pas dans "
+                                     "la liste")
+                self.assertIsInstance(sess.get("expires"), (int, float),
+                                      "expires est absent: la popup n'affiche "
+                                      "aucun compte a rebours (mesure: '-' sur "
+                                      "9 echantillons sur 26s)")
+                self.assertFalse(sess.get("expired"),
+                                 "une session qui expire dans 6s est deja "
+                                 "marquee morte")
 
-            # Wait past the expiry with NO client call in between, so the flip can
-            # only come from the server recomputing it from its own clock.
-            left = soon - time.time()
-            if left > 0:
-                threading.Event().wait(left + 1.5)
-            _, later = relay.call("/v1/sessions")
-            sess2 = next((s for s in later.get("sessions", [])
-                          if s.get("host") == "example.com"), None)
-            self.assertTrue(sess2 and sess2.get("expired"),
-                            "expired n'est jamais vrai apres le passage de "
-                            "l'echeance")
+                # Wait past the expiry with NO client call in between, so the
+                # flip can only come from the server recomputing it from its own
+                # clock.
+                left = soon - time.time()
+                if left > 0:
+                    threading.Event().wait(left + 1.5)
+                _, later = relay.call("/v1/sessions")
+                sess2 = next((x for x in later.get("sessions", [])
+                              if x.get("host") == "example.com"), None)
+                self.assertTrue(sess2 and sess2.get("expired"),
+                                "expired n'est jamais vrai apres le passage de "
+                                "l'echeance")
+        finally:
+            _LiveRelay.offline_browser = False
 
 
 if __name__ == "__main__":
