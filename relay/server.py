@@ -1099,7 +1099,13 @@ def list_sessions() -> list[dict]:
     # the iteration - not the CDP work - is enough: the copy is what the caller
     # then reads.
     with SESSIONS_LOCK:
-        snapshot = [(o, list(c)) for o, c in _SYNCED_SESSIONS.items()]
+        # `list(d.items())` snapshots the pairs in one C-level pass, so it cannot
+        # raise "dictionary changed size during iteration" even if a writer skips
+        # the lock. The loop form `for o, c in d.items()` does raise - Linux CI
+        # caught exactly that. Defence in depth: the lock is the contract, but a
+        # read that a careless writer can crash is not worth relying on the
+        # contract alone for.
+        snapshot = [(o, list(c)) for o, c in list(_SYNCED_SESSIONS.items())]
     for origin, cookies in snapshot:
         host = origin_hostname(origin)
         now = time.time()

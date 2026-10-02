@@ -1,3 +1,12 @@
+## [0.7.11] - a read that a careless writer could still crash
+
+- `list_sessions` snapshotted the sessions dict with `for origin, cookies in
+  _SYNCED_SESSIONS.items()`. That form raises `RuntimeError: dictionary changed
+  size during iteration` if the dict changes mid-loop. Linux CI produced it; three
+  consecutive local runs did not, so the v0.7.9 fix shipped as "green" while the
+  shape was still crashable. `list(d.items())` takes the snapshot in one C-level
+  pass and cannot raise. The lock remains the contract; this is defence in depth.
+
 ## [0.7.10] - the diagnostic report exported the tab URL, token and all
 
 - `copyDiagnostic` promised "no cookie, no token, no URL" in its own comment and
