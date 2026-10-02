@@ -23,6 +23,10 @@ import sys
 import time
 from typing import Any
 
+# Absolute path of THIS file, used to recognise the daemon's own module even when
+# it is registered under __main__ (see _sibling).
+_THIS_FILE = os.path.abspath(__file__)
+
 REDACTED = "[redacted]"
 
 
@@ -169,10 +173,24 @@ def _safe(fn, default=None):
 # the report
 # --------------------------------------------------------------------------
 
+def _same_file(a: str, b: str) -> bool:
+    """True if two paths point at the same file, case-insensitively.
+
+    Windows paths are case-insensitive and ``__file__`` arrives with whatever
+    case the interpreter was launched with, so ``Server.py`` and ``server.py``
+    are the same file there.
+    """
+    try:
+        return (os.path.normcase(os.path.abspath(a))
+                == os.path.normcase(os.path.abspath(b)))
+    except (TypeError, ValueError):
+        return False
+
+
 def _sibling(name: str):
     """Return the ALREADY-IMPORTED instance of a module that sits next to us.
 
-    Two traps, both measured here:
+    Three traps, all measured here:
 
     1. ``relay/`` is not a package: the live process runs ``relay/server.py``
        with ``relay/`` as its import root (flat ``import updater``) while the
@@ -183,12 +201,28 @@ def _sibling(name: str):
        holds a ``server`` and a ``relay.server`` with independent globals. A
        report built from the wrong one reads empty state and answers "0 cookies"
        while the live relay holds 12.
+    3. THE ONE THAT ACTUALLY BIT. In the live daemon ``server.py`` runs as the
+       entry point, so its module is registered under ``__main__`` - and
+       ``sys.modules`` holds NO ``server`` key at all. ``_sibling("server")``
+       therefore imported a SECOND copy of the file and the report read that
+       copy's globals: always empty. Measured live on 2026-10-02, while
+       ``/health`` said ``attached: true, sessions: 1`` the very same
+       ``/v1/diagnostics`` said ``cdp_attached: false, synced_origins: 0,
+       cdp_transport: "NoneType"``. The support report - the one artefact a user
+       pastes into a bug report - was describing a module that never ran.
 
-    So: look in ``sys.modules`` under both names and reuse whichever is already
-    loaded; only fall back to importing, preferring the dotted name when the
-    caller already lives in the package.
+    So: check ``__main__`` first and prefer it when it really is this file.
     """
     dotted = "relay." + name
+    # __main__ wins only when it IS the module we were asked for. Comparing its
+    # __file__ to our own diagnostics.py would never match; the sibling lives at
+    # <our dir>/<name>.py, so compare against THAT.
+    main_mod = sys.modules.get("__main__")
+    if main_mod is not None:
+        main_file = getattr(main_mod, "__file__", None)
+        sibling_path = os.path.join(os.path.dirname(_THIS_FILE), name + ".py")
+        if main_file and _same_file(main_file, sibling_path):
+            return main_mod
     existing = sys.modules.get(dotted) or sys.modules.get(name)
     if existing is not None:
         return existing

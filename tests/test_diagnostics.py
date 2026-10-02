@@ -153,6 +153,57 @@ class ImportContext(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), "1")
 
+    def test_main_is_used_when_it_really_is_the_relay(self):
+        """THE THIRD TRAP, and the one that bit live.
+
+        `relay/server.py` runs as the entry point, so its module is registered
+        under ``__main__`` and ``sys.modules`` holds NO ``server`` key at all.
+        ``_sibling("server")`` therefore imported a SECOND copy of server.py and
+        the report read that copy's globals - always empty.
+
+        Measured live on 2026-10-02: ``/health`` answered ``attached: true,
+        sessions: 1`` while the very same ``/v1/diagnostics`` answered
+        ``cdp_attached: false, synced_origins: 0, cdp_transport: "NoneType"``.
+        The support report - the one artefact a user pastes into a bug report -
+        was describing a module that never ran.
+        """
+        daemon = type(sys)("__main__")
+        daemon.__file__ = str(ROOT / "relay" / "server.py")
+        saved_main = sys.modules.get("__main__")
+        saved_server = sys.modules.pop("server", None)
+        saved_dotted = sys.modules.pop("relay.server", None)
+        sys.modules["__main__"] = daemon
+        try:
+            found = diagnostics._sibling("server")
+            self.assertIs(found, daemon,
+                         "the live daemon's __main__ module was not reused: the "
+                         "report reads a fresh, empty copy of server.py")
+        finally:
+            if saved_main is not None:
+                sys.modules["__main__"] = saved_main
+            for key, val in (("server", saved_server),
+                             ("relay.server", saved_dotted)):
+                if val is None:
+                    sys.modules.pop(key, None)
+                else:
+                    sys.modules[key] = val
+
+    def test_a_test_runner_as_main_does_not_hijack_the_lookup(self):
+        """The flip side: under `python -m unittest`, __main__ is the runner.
+        Trusting the NAME alone would make the report read the runner's globals
+        instead of the relay's - a bug that only appears in CI."""
+        sentinel = type(sys)("pretend_main")
+        sentinel.__file__ = str(ROOT / "tests" / "test_diagnostics.py")
+        saved = sys.modules.get("__main__")
+        sys.modules["__main__"] = sentinel
+        try:
+            found = diagnostics._sibling("server")
+            self.assertIsNot(found, sentinel,
+                             "__main__ was returned even though it is not server.py")
+        finally:
+            if saved is not None:
+                sys.modules["__main__"] = saved
+
     def test_sibling_import_returns_the_module_not_the_package(self):
         """__import__("updater") returns the TOP package when relay is a
         package, so updater.extension_dir raised AttributeError."""

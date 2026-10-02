@@ -28,6 +28,28 @@ def up(url, timeout=4):
     except Exception:
         return False
 
+def relay_healthy(timeout=6):
+    """True only if the relay answers AND is attached to Lightpanda.
+
+    A bare urlopen() is not enough. Before v0.6.1 the watchdog treated any 200
+    from /health as "relay fine", while the CDP connection could be dead: the
+    watchdog then left a half-working relay alone and, when it did act, raced
+    the running one. /health now carries `attached`, so the watchdog checks the
+    thing it actually cares about - a relay that can carry a sync.
+    """
+    try:
+        with urllib.request.urlopen(HEALTH, timeout=timeout) as r:
+            if r.status != 200:
+                return False
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return False
+    attached = data.get("attached")
+    if attached is False:
+        log("watchdog: relay answers but is NOT attached to Lightpanda")
+        return False
+    return True
+
 def start_daemon_task():
     """Ask Task Scheduler to (re)start the relay in its own task instance."""
     try:
@@ -43,18 +65,28 @@ def start_daemon_task():
         return False
 
 def main():
-    relay_ok = up(HEALTH)
+    # Two independent questions. "Is the relay process serving?" is what we
+    # can fix by restarting it. "Is Lightpanda reachable?" is not the relay's
+    # fault: the relay opens the CDP socket on demand, so a Lightpanda that is
+    # simply not running yet must NOT trigger a restart (that is how the
+    # watchdog used to race a perfectly healthy relay).
+    relay_ok = relay_healthy()
     cdp_ok = up(CDP)
     if relay_ok:
+        if not cdp_ok:
+            log("watchdog: relay healthy, Lightpanda not reachable "
+                "(relay connects on demand - not restarting)")
         return  # nothing to do
     log(f"watchdog: relay={relay_ok} cdp={cdp_ok} exe={sys.executable} -> (re)starting")
     if start_daemon_task():
         for _ in range(20):
             time.sleep(1)
-            if up(HEALTH):
-                log("watchdog: relay is up")
+            # Same check as the entry gate: a relay that answers while not
+            # attached is not "up", it is the exact failure we are here for.
+            if relay_healthy():
+                log("watchdog: relay is up and attached")
                 return
-        log("watchdog: relay still down after daemon start")
+        log("watchdog: relay still down (or unattached) after daemon start")
     else:
         # Fallback: legacy direct start (works when run interactively).
         try:

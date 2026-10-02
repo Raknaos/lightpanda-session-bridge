@@ -1002,9 +1002,15 @@ def health_payload() -> tuple[int, dict]:
     Still strictly sanitized: no origin, no page URL, no cookie name, no token.
     """
     transport = _CDP_TRANSPORT
+    # getattr, not a direct call: anything may install a transport here (tests
+    # do), and do_GET has no try around this - an AttributeError used to kill
+    # the HTTP thread instead of answering. Absence of alive() is not evidence
+    # of death, but it is not proof of life either: report not-attached.
+    alive = getattr(transport, "alive", None) if transport is not None else None
     attached = bool(
         transport is not None
-        and transport.alive()
+        and alive is not None
+        and alive()
         and _CDP_SESSION_ID is not None
     )
     return 200, {
@@ -1394,6 +1400,27 @@ class RelayServer(ThreadingHTTPServer):
     # port, which silently produced two relays: one owning the synced sessions,
     # the other answering "attached: false" to every agent. Keep it exclusive.
     allow_reuse_address = False
+    # ...but allow_reuse_address only controls SO_REUSEADDR, which stops a rebind
+    # after close and does NOT stop a second process binding a socket that is
+    # already LISTENING. SO_EXCLUSIVEADDRUSE is the flag that forbids it. Measured
+    # on 2026-10-02: the watchdog and the scheduled task both launched a relay in
+    # the same second, and while /health answered attached:true, the diagnostics
+    # report built from the other copy's memory said cdp_attached:false with 0
+    # sessions - same instant, same port, opposite answers.
+    _exclusive_address_use = hasattr(socket, "SO_EXCLUSIVEADDRUSE")
+
+    def server_bind(self):
+        if self._exclusive_address_use and self.allow_reuse_address is False:
+            # Must precede bind(); Windows then refuses any other binder.
+            try:
+                self.socket.setsockopt(socket.SOL_SOCKET,
+                                       socket.SO_EXCLUSIVEADDRUSE, 1)
+            except OSError:
+                # Not supported on this stack: allow_reuse_address=False above is
+                # then the only guard, which is why the gate also checks that a
+                # duplicate relay exits 0 rather than fighting for the port.
+                pass
+        super().server_bind()
 
 
 def main() -> int:

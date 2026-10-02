@@ -1,3 +1,28 @@
+## [0.7.1] - the support report stopped describing a module that never ran
+
+- `_sibling("server")` imported a SECOND copy of `relay/server.py`. In the live
+  daemon `server.py` is the entry point, so its module is registered under
+  `__main__` and `sys.modules` holds no `server` key at all. The report read the
+  fresh copy's globals, which are always empty. Live symptom: `/health` said
+  `attached: true, sessions: 1` while `/v1/diagnostics` said `cdp_attached:
+  false, synced_origins: 0, cdp_transport: "NoneType"` - same process, same
+  instant, opposite answers. Now `__main__` is reused when it really is the
+  relay (compared by path, so a test runner as `__main__` cannot hijack it).
+- `RelayServer` requests `SO_EXCLUSIVEADDRUSE`. `allow_reuse_address = False`
+  only clears SO_REUSEADDR, which does NOT stop a second process binding an
+  already-listening socket - two relays were live at once, each holding its own
+  copy of the session state.
+- `health_payload()` no longer raises on a transport object without `alive()`.
+  `do_GET` has no try around it, so the AttributeError killed the HTTP thread
+  instead of answering.
+- The watchdog checked only that `/health` answered 200, so it called a relay
+  with a dead CDP connection healthy, and it restarted the relay when only
+  Lightpanda was down. It now requires `attached: true`, and a dead Lightpanda
+  is logged instead of triggering a restart (the relay connects on demand).
+
+Tests: `test_single_relay.py` (4), `test_watchdog_health.py` (8), 2 new in
+`test_diagnostics.py`. 161 total, all green. Every fix proven red without it.
+
 ## [0.7.0] - the popup finally shows what /health reports
 
 - `checkRelay()` looked only at `res.ok`, so v0.6.1's honest `attached: false`
