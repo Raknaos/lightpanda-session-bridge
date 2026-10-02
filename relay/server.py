@@ -412,19 +412,66 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
 
 
 class CdpTransport:
+    # More unsolicited events than this while waiting for one reply means the
+    # peer is streaming but not answering: stop instead of spinning to the
+    # socket timeout. Generous enough for a page logging hard.
+    MAX_SKIPPED_EVENTS = 2000
+
     def __init__(self, socket):
         self.socket = socket
         self.next_id = 0
+        # Set once any command on this socket has failed at the OS level. A dead
+        # socket stays a live Python object, so the only way to know is to
+        # remember that it died: without this, _ensure_connection keeps returning
+        # the stale transport forever and /health answers attached=true.
+        self.dead = False
+
+    def alive(self) -> bool:
+        """True unless this socket has already proven it cannot carry traffic.
+
+        Absence of evidence is not evidence of death: an idle relay with no
+        session synced yet has made no request, so it must still count as alive
+        (and tearing it down would wipe Lightpanda's per-connection cookie jar).
+        """
+        return not self.dead
+
+    def _kill(self) -> None:
+        self.dead = True
 
     def request(self, method: str, params: dict | None = None, session_id: str | None = None) -> dict:
         self.next_id += 1
         payload = {"id": self.next_id, "method": method, "params": params or {}}
         if session_id:
             payload["sessionId"] = session_id
-        self.socket.send(json.dumps(payload))
+        try:
+            self.socket.send(json.dumps(payload))
+        except (OSError, websocket.WebSocketException):
+            self._kill()
+            raise
+        # Unbounded was the defect: CDP pushes unsolicited events (console logs,
+        # Target.detachedFromTarget, network notifications) that carry no "id",
+        # so a chatty page kept this loop busy until the socket timeout and the
+        # HTTP request never completed. Bounded: more than MAX_SKIPPED_EVENTS
+        # events in a row for ONE request means the peer is not answering us.
+        skipped = 0
         while True:
-            response = json.loads(self.socket.recv())
+            try:
+                raw = self.socket.recv()
+            except (OSError, websocket.WebSocketException):
+                self._kill()
+                raise
+            if not raw:
+                # Graceful close by the peer: the socket is finished with.
+                self._kill()
+                raise OSError("CDP socket closed by peer")
+            response = json.loads(raw)
             if response.get("id") != self.next_id:
+                skipped += 1
+                if skipped > self.MAX_SKIPPED_EVENTS:
+                    self._kill()
+                    raise RuntimeError(
+                        "Lightpanda sent %d unsolicited events without ever "
+                        "answering request %d" % (skipped, self.next_id))
                 continue
             if "error" in response:
                 raise RuntimeError(f"Lightpanda CDP request failed: {response['error']}")
@@ -452,18 +499,34 @@ _LAST_SESSION: dict | None = None
 _SYNCED_SESSIONS: dict[str, list[dict]] = {}
 
 
+def _alive() -> bool:
+    """Fallback used when a transport object has no alive(): absence of
+    evidence of death is not evidence of death."""
+    return True
+
+
 def _ensure_connection(origin: str) -> None:
     """Open the CDP connection if needed. The connection is NEVER discarded on
     origin change: Lightpanda scopes its cookie jar per connection, so tearing
     it down would wipe every previously synced session."""
     global _CDP_SOCKET, _CDP_TRANSPORT, _CDP_SESSION_ID, _CDP_TARGET_ID
-    if _CDP_TRANSPORT is not None:
+    # "is not None" is not "is usable": a socket that died (Lightpanda restarted,
+    # WSL dropped) is still a live Python object, so the old early-return kept a
+    # dead transport forever. alive() only says False once the socket has
+    # actually failed, so a healthy idle connection is still preserved - tearing
+    # that down would wipe Lightpanda's per-connection cookie jar.
+    # getattr, not a direct call: a caller may install its own transport object
+    # (tests do), and a stand-in without alive() is not evidence of death.
+    if _CDP_TRANSPORT is not None and getattr(_CDP_TRANSPORT, "alive", _alive)():
         return
     if _CDP_SOCKET is not None:
         try:
             _CDP_SOCKET.close()
         except Exception:
             pass
+    _CDP_TRANSPORT = None
+    _CDP_SESSION_ID = None
+    _CDP_TARGET_ID = None
     _CDP_SOCKET = websocket.create_connection(CDP, timeout=15, suppress_origin=True)
     _CDP_TRANSPORT = CdpTransport(_CDP_SOCKET)
     _CDP_TARGET_ID, _CDP_SESSION_ID = attach_page(_CDP_TRANSPORT, origin)
@@ -927,6 +990,31 @@ def re_fullmatch_method(method: str) -> bool:
     return bool(_re.fullmatch(r"[A-Za-z]+\.[A-Za-z]+", method))
 
 
+def health_payload() -> tuple[int, dict]:
+    """Body for GET /health.
+
+    Extracted so the truth of this endpoint is testable without a socket. The
+    previous inline version derived "attached" from ``_CDP_SESSION_ID is not
+    None`` - a flag that is never cleared when the socket dies, so a dead relay
+    answered 200 attached=true and the popup badge went green over a connection
+    that could not carry a single byte.
+
+    Still strictly sanitized: no origin, no page URL, no cookie name, no token.
+    """
+    transport = _CDP_TRANSPORT
+    attached = bool(
+        transport is not None
+        and transport.alive()
+        and _CDP_SESSION_ID is not None
+    )
+    return 200, {
+        "ok": True,
+        "service": "lightpanda-session-bridge",
+        "attached": attached,
+        "sessions": len(_SYNCED_SESSIONS),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     # Neutral banner: the enum response is readable by any local process, so it
     # carries no product name or version.
@@ -990,12 +1078,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            # Sanitized health: no active origin, no PII, no page URL.
-            self.send_json(200, {
-                "ok": True,
-                "service": "lightpanda-session-bridge",
-                "attached": _CDP_SESSION_ID is not None
-            })
+            # Sanitized health: no active origin, no PII, no page URL. The body
+            # comes from health_payload() so "attached" can be asserted in a test
+            # instead of trusted by eyeball.
+            status, body = health_payload()
+            self.send_json(status, body)
         elif self.path == "/v1/bootstrap":
             # One-time pairing handshake: delivers the shared secret to the
             # official extension so it can authenticate /v1/session/import.
