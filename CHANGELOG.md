@@ -1,3 +1,33 @@
+## [0.7.4] - four audit findings, three of them real
+
+- `__Host-` cookies were not forced Secure (RFC 6265bis). The branch forced
+  `path=/` and dropped `domain` but left `secure` untouched, so a supplied
+  `secure: false` downgraded the one prefix whose entire guarantee is
+  "Secure, host-only, path=/". `__Secure-` was already forced.
+- `artifacts.session_state` in the support report was permanently `unset`:
+  `collect()` looked for `session_state_path` in `updater.py`, but it lives in
+  `server.py` as `_session_state_path`. The report claimed the cookie file was
+  absent on machines where it existed, holding the cookies.
+- One torn line in `update.log` discarded the entire install history: the parser
+  was a single list comprehension, so one truncated line (a power cut during an
+  unsynchronised append) returned `[]`. Parsing is now per line.
+- `/v1/sessions` `expires` was dead by construction: `cookie_for_cdp` pops
+  `expires` (Lightpanda drops cookies set with one) and `list_sessions` read
+  that same key, so expiry was always null and `expired` always false - the
+  popup could never warn about a stale session. The lifetime is now preserved as
+  `expires_hint`, stripped again on the way to CDP.
+
+Rejected after verification: a nested `sub/D:evil.js` drive-relative escape
+(`_safe_members` already refuses it), and cookie values reaching CDP unbounded
+from the extension's own browser API (the extension is the trust boundary; a
+value cap belongs at the extension, not only the relay).
+
+Two existing tests were asserting a shape production never stores (they wrote
+`expires` straight into the dict), so they stayed green while `/v1/sessions`
+reported null forever. They now build cookies through `cookie_for_cdp`.
+
+184 tests green, acceptance gate 28/28.
+
 ## [0.7.3] - the restored session can no longer be injected twice
 
 - `_restore_persisted_session()` is reached from the CDP proxy AND from the

@@ -129,10 +129,17 @@ class SessionManagerTests(unittest.TestCase):
         self.assertNotIn("value", raw)
 
     def test_list_sessions_expiry_metadata(self):
+        # Built through cookie_for_cdp, i.e. the shape the product actually
+        # stores. The previous fixture wrote `expires` straight into the dict,
+        # which production never does - cookie_for_cdp pops it for CDP - so this
+        # test asserted a code path no request can reach, and stayed green while
+        # /v1/sessions reported `expires: null` forever.
         import time as _time
         soon = _time.time() + 3600
         server._SYNCED_SESSIONS["https://a.com"] = [
-            {"name": "x", "domain": "a.com", "expires": soon}
+            server.cookie_for_cdp(
+                {"name": "x", "value": "v", "domain": "a.com", "expires": soon},
+                "https://a.com")
         ]
         out = server.list_sessions()
         self.assertEqual(out[0]["host"], "a.com")
@@ -141,11 +148,22 @@ class SessionManagerTests(unittest.TestCase):
 
     def test_list_sessions_expired_flag(self):
         server._SYNCED_SESSIONS["https://b.com"] = [
-            {"name": "x", "domain": "b.com", "expires": 100.0}
+            server.cookie_for_cdp(
+                {"name": "x", "value": "v", "domain": "b.com", "expires": 100.0},
+                "https://b.com")
         ]
         out = server.list_sessions()
         self.assertTrue(out[0]["expired"])
         self.assertEqual(out[0]["expires"], 100.0)
+
+    def test_a_session_cookie_reports_no_expiry(self):
+        server._SYNCED_SESSIONS["https://c.com"] = [
+            server.cookie_for_cdp(
+                {"name": "x", "value": "v", "domain": "c.com"}, "https://c.com")
+        ]
+        out = server.list_sessions()
+        self.assertIsNone(out[0]["expires"])
+        self.assertFalse(out[0]["expired"])
 
     # ---------- set_session bookkeeping ----------
 

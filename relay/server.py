@@ -384,8 +384,14 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     else:
         item.setdefault("path", "/")
 
-    # __Secure- prefixed cookies MUST be Secure (RFC 6265bis)
-    if str(item.get("name", "")).startswith("__Secure-"):
+    # __Host- and __Secure- prefixed cookies MUST be Secure (RFC 6265bis).
+    # __Host- was the gap: it forced path='/' and dropped the domain but left
+    # `secure` alone, so an attacker-supplied `secure: false` (or its absence)
+    # downgraded the one prefix whose entire guarantee is "Secure, host-only,
+    # path=/". Verified: cookie_for_cdp({"name": "__Host-sid", ...}) returned no
+    # `secure` key at all, next to __Secure- which correctly forced it.
+    name = str(item.get("name", ""))
+    if name.startswith(("__Secure-", "__Host-")):
         item["secure"] = True
 
     item["url"] = origin
@@ -394,7 +400,13 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     # with expires silently vanish from its jar, breaking the whole session).
     # Omit it: the injected cookie becomes a session cookie for the runtime,
     # which is the correct lifetime for a transferred session anyway.
-    item.pop("expires", None)
+    # It is preserved as `expires_hint` instead of being lost: `/v1/sessions`
+    # read `expires` off the stored cookie dict, so popping it made `expires`
+    # permanently null and `expired` permanently false - the popup could never
+    # warn about a stale session, it just looked like a session cookie.
+    expires_hint = item.pop("expires", None)
+    item["expires_hint"] = float(expires_hint) if (
+        isinstance(expires_hint, (int, float)) and expires_hint > 0) else None
 
     # Normalize sameSite enum for Lightpanda CDP:
     # Chrome extension API returns lowercase: 'unspecified', 'no_restriction', 'lax', 'strict'
@@ -685,8 +697,14 @@ def _apply_session(origin: str, cookies: list[dict], storage: dict | None = None
     navigation after the injection wipes it), then register the document-start
     restore so no later navigation can lose it either."""
     _ensure_connection(origin)
+    # `expires_hint` is ours (it feeds /v1/sessions expiry), not Chrome's: an
+    # unknown key in a CDP cookie object is refused or ignored depending on the
+    # build, and the whole batch fails. Strip it on the way out only - the stored
+    # session keeps it.
+    cdp_cookies = [{k: v for k, v in c.items() if k != "expires_hint"}
+                   for c in cookies]
     _CDP_TRANSPORT.request(
-        "Network.setCookies", {"cookies": cookies}, session_id=_CDP_SESSION_ID
+        "Network.setCookies", {"cookies": cdp_cookies}, session_id=_CDP_SESSION_ID
     )
     try:
         _CDP_TRANSPORT.request(
@@ -956,8 +974,11 @@ def list_sessions() -> list[dict]:
     for origin, cookies in _SYNCED_SESSIONS.items():
         host = origin_hostname(origin)
         now = time.time()
-        expiries = [c.get("expires", -1) for c in cookies
-                    if isinstance(c, dict) and isinstance(c.get("expires", -1), (int, float)) and c.get("expires", -1) > 0]
+        # `expires_hint`, not `expires`: cookie_for_cdp pops `expires` for CDP,
+        # so reading the original key here always yielded -1 and this list was
+        # always empty.
+        expiries = [c.get("expires_hint", -1) for c in cookies
+                    if isinstance(c, dict) and isinstance(c.get("expires_hint", -1), (int, float)) and c.get("expires_hint", -1) > 0]
         next_expiry = min(expiries) if expiries else None
         out.append({
             "origin": origin,

@@ -240,7 +240,17 @@ def collect() -> dict:
     relay = _sibling("server")
 
     ext_dir = _safe(updater.extension_dir, "") or ""
-    state_path = _safe(getattr(updater, "session_state_path", None), None)
+    # `session_state_path` lives in server.py (as `_session_state_path`), not in
+    # updater.py, so the updater lookup below always returned None -> "" ->
+    # _fingerprint("") == "unset". The report therefore claimed the session file
+    # was absent on a machine where it existed, holding the cookies. Look in
+    # both modules, and try the private spelling too - that is the one that is
+    # actually defined.
+    state_path = (getattr(relay, "_session_state_path", None)
+                  or getattr(relay, "session_state_path", None)
+                  or getattr(updater, "_session_state_path", None)
+                  or getattr(updater, "session_state_path", None))
+    state_path = _safe(state_path, None)
     state_path = state_path() if callable(state_path) else str(state_path or "")
 
     return {
@@ -322,9 +332,19 @@ def _install_log(updater) -> list:
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             lines = [ln for ln in fh.readlines() if ln.strip()]
-        return scrub([json.loads(ln) for ln in lines[-10:]])
-    except Exception:
+    except OSError:
         return []
+    # Parse PER LINE. `updater.audit()` appends with an unsynchronised open() and
+    # a single write, so a power cut or a concurrent append leaves a truncated
+    # last line; the old list comprehension parsed all ten or none, so one torn
+    # line silently returned [] and the report lost its entire install history.
+    records = []
+    for ln in lines[-10:]:
+        try:
+            records.append(json.loads(ln))
+        except ValueError:
+            continue
+    return scrub(records)
 
 
 def to_text(report: dict) -> str:
