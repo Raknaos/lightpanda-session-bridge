@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import sys
 import time
 from typing import Any
@@ -46,20 +47,25 @@ def _sensitive_key(key: str) -> bool:
 def _looks_sensitive(text: str) -> bool:
     """A full URL, or a high-entropy credential blob, is never echoed back.
 
-    Deliberately NOT "long string": ``lightpanda-session-bridge`` and every
-    git SHA are long, all-lowercase, non-secret strings. What separates a
-    cookie value from a product name is entropy, not length - mixed case
-    together with digits, or characters outside a plain name alphabet.
+    Deliberately NOT "long string": ``lightpanda-session-bridge``, a git SHA
+    and an ISO timestamp are all long, non-secret strings. What separates a
+    cookie value from metadata is entropy, not length.
+
+    Values this module (or the audit writer) minted are exempt, checked before
+    the entropy rules:
+      * file fingerprints - the report's proof that the deployed extension is
+        the repo's;
+      * ISO-8601 timestamps - ``2026-09-14T18:15:40+0200`` is uppercase + digits
+        and was being blanked, which silently removed WHEN each install
+        happened, i.e. the ordering a support conversation needs.
     """
     if text.startswith(("http://", "https://", "ws://", "wss://")):
         return True
     if len(text) < 20:
         return False
-    # Values this module minted itself must never be touched. The file
-    # fingerprints ("900 B sha256:ae35d3da97e6") are the report's proof that the
-    # deployed extension is the repo's - they carry mixed case and digits, so
-    # the entropy rules below would eat them unless they are exempted FIRST.
     if "sha256:" in text:
+        return False
+    if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", text):
         return False
     has_upper = any(c.isupper() for c in text)
     has_lower = any(c.islower() for c in text)

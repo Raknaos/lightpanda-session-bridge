@@ -62,6 +62,20 @@ class ReportIsSanitized(unittest.TestCase):
                          {"lightpanda-session-bridge": 1})
         self.assertEqual(diagnostics.scrub(FAKE_URL), diagnostics.REDACTED)
 
+    def test_timestamps_and_fingerprints_are_not_secrets(self):
+        """Regression, caught on the real relay: the audit writer emits ISO
+        timestamps, which the entropy rule blanked ("at = [redacted]"), so the
+        report lost WHEN each install happened - the ordering a support
+        conversation needs."""
+        for value in ("2026-09-14T18:15:40+0200", "2026-10-02T13:46:58+0200"):
+            self.assertEqual(diagnostics.scrub(value), value)
+        self.assertEqual(diagnostics.scrub("900 B sha256:ae35d3da97e6"),
+                         "900 B sha256:ae35d3da97e6")
+        # ... while a real credential of the same shape still goes
+        for secret in (FAKE_COOKIE, FAKE_LS, FAKE_SECRET, FAKE_URL):
+            self.assertNotEqual(diagnostics.scrub(secret), secret,
+                                "%s must stay scrubbed" % secret[:12])
+
     def test_install_log_is_scrubbed_but_counted(self):
         """The log is the only foreign data in the report: it must be
         scrubbed, while a clean line survives."""
