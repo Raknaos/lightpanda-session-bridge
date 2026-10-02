@@ -235,6 +235,14 @@
       background: rgba(255, 225, 230, 0.8);
       border-color: rgba(225, 29, 72, 0.35);
     }
+    /* Third state, added in v0.6.1: the relay answers but is not attached to
+       Lightpanda. Neither green (it is up) nor red (it is up too) - amber says
+       "reachable, not ready yet", which is exactly what it is. */
+    .badge.idle {
+      color: #9a6200;
+      background: rgba(255, 243, 205, 0.85);
+      border-color: rgba(217, 119, 6, 0.35);
+    }
     .badge .dot {
       width: 6px;
       height: 6px;

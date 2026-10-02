@@ -48,6 +48,10 @@ UPDATE = {
     "release":   ("true", "release", "a478b90", "d1efe8c"),
     "uptodate":  ("false", "main", "a478b90", "a478b90"),
     "offline":   None,
+    # Relay answers, but its CDP connection to Lightpanda is dead (v0.6.1).
+    # Renders the third badge state, which had no preview before - a state that
+    # cannot be screenshotted is a state nobody reviews.
+    "idle":      ("false", "main", "a478b90", "a478b90"),
 }
 
 STUB = """<script>
@@ -118,7 +122,9 @@ def build_harness(state):
     stub = (STUB.replace("__LANG__", "fr").replace("__UPD__", upd)
                 .replace("__SESSIONS__", SESSIONS)
                 .replace("__CLICK__", click)
-                .replace("__HEALTH__", "null" if state == "offline" else "{ ok:true, version:'0.5.9' }")
+                .replace("__HEALTH__", "null" if state == "offline" else
+                    ("{ ok:true, attached:false, sessions:0 }" if state == "idle"
+                     else "{ ok:true, attached:true, sessions:1, version:'0.5.9' }"))
                 .replace("__VERSION__", "0.5.4").replace("__TAB__", "https://x.com/home"))
     out = html.replace('  <script src="popup.js"></script>',
                        stub + '  <script src="popup.js"></script>', 1)
@@ -141,7 +147,8 @@ def run(chrome, url, extra=()):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state", default="available",
-                    choices=["available", "release", "uptodate", "offline", "expanded"],
+                    choices=["available", "release", "uptodate", "offline",
+                             "idle", "expanded"],
                     help="relay/update state to render (default: available)")
     ap.add_argument("--cap", type=int, default=600, help="Chrome's popup height cap")
     ap.add_argument("--no-shot", action="store_true")

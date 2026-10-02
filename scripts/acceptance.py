@@ -310,9 +310,24 @@ def i18n_parity():
         if missing or extra:
             return "FAIL", "%s missing=%s extra=%s" % (lang, sorted(missing)[:3], sorted(extra)[:3])
     used = set(re.findall(r"\bt\('([A-Za-z0-9_]+)'", js))
+    # Also the double-quoted call form: t("relayIdle"). Missing either variant
+    # empties a label silently (t() falls back to en, then to ""), never to
+    # "undefined", so a lost translation is invisible.
+    used |= set(re.findall(r'\bt\("([A-Za-z0-9_]+)"', js))
     unknown = used - base
     if unknown:
         return "FAIL", "popup.js calls t('%s') with no translation" % sorted(unknown)[0]
+    # An insert that ate a comma puts two keys on one line. Valid-ish JS, but it
+    # hides that language from the per-line regex above, which is exactly how a
+    # missing translation reached a shipped release.
+    for lang in LANGS:
+        m = re.search(r"\n  %s: \{(.*?)\n  \},?\n" % lang, block, re.S)
+        if not m:
+            continue
+        for line in m.group(1).split("\n"):
+            if len(re.findall(r"^\s{4}\w+:", line)) > 1:
+                return "FAIL", ("%s has two keys on one line (an insert ate a "
+                                "comma): %s" % (lang, line.strip()[:40]))
     return "ok", "%d keys x %d languages" % (len(base), len(LANGS))
 
 

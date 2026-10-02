@@ -1,3 +1,23 @@
+## [0.7.0] - the popup finally shows what /health reports
+
+- `checkRelay()` looked only at `res.ok`, so v0.6.1's honest `attached: false`
+  never reached the user: the badge still read "Relay Online" over a dead CDP
+  connection. It now reads the field and shows a third state.
+- New `badge.idle` style (amber). Not green - the relay is up. Not red - nothing
+  is broken. The relay answers; Lightpanda is simply not attached yet.
+- New `relayIdle` key in all 10 languages, kept short ("Non connecté") because
+  "Relais prêt - navigateur non connecté" was clipped inside the pill.
+- `preview_popup.py --state idle` renders that state, so a UI state with no
+  screenshot cannot go unreviewed again.
+- The acceptance gate's i18n check now also catches `t("key")` double-quoted
+  calls and "two keys on one line" (an insert that ate a comma).
+- `--apply-update --channel release|main|auto`: `--apply-update` silently
+  followed `check_update`'s recommendation, so asking for the published release
+  could install the main-channel tarball instead - whose sha256 has no sidecar,
+  which it reported as `checksum_verified: false` with no way to ask otherwise.
+
+Tests: 147 green, gate 28/28, CI green.
+
 ## [0.6.1] - /health stops lying about a dead connection
 
 - `CdpTransport` learns when its socket died (OSError, graceful close, or a peer

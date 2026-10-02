@@ -9,6 +9,8 @@ const I18N = {
     relayChecking: "Checking…",
     relayOnline: "Relay Online",
     relayOffline: "Relay Offline",
+    relayOffline: "Relay Offline",
+    relayIdle: "Not connected",
     targetOrigin: "Target Origin",
     readingTab: "Reading tab…",
     incompatiblePage: "Incompatible page",
@@ -62,6 +64,8 @@ const I18N = {
     relayChecking: "Vérification…",
     relayOnline: "Relais en ligne",
     relayOffline: "Relais hors-ligne",
+    relayOffline: "Relais hors-ligne",
+    relayIdle: "Non connecté",
     targetOrigin: "Origine Cible",
     readingTab: "Lecture de la page…",
     incompatiblePage: "Page non compatible",
@@ -115,6 +119,8 @@ const I18N = {
     relayChecking: "Comprobando…",
     relayOnline: "Relé en línea",
     relayOffline: "Relé desconectado",
+    relayOffline: "Relé desconectado",
+    relayIdle: "Sin conexión",
     targetOrigin: "Origen de destino",
     readingTab: "Leyendo pestaña…",
     incompatiblePage: "Página no compatible",
@@ -168,6 +174,8 @@ const I18N = {
     relayChecking: "Prüfe…",
     relayOnline: "Relais online",
     relayOffline: "Relais offline",
+    relayOffline: "Relais offline",
+    relayIdle: "Nicht verbunden",
     targetOrigin: "Zielursprung",
     readingTab: "Tab wird gelesen…",
     incompatiblePage: "Nicht kompatible Seite",
@@ -219,6 +227,8 @@ const I18N = {
     relayChecking: "检查中…",
     relayOnline: "中继在线",
     relayOffline: "中继离线",
+    relayOffline: "中继离线",
+    relayIdle: "未连接",
     targetOrigin: "目标源",
     readingTab: "读取标签页…",
     incompatiblePage: "页面不兼容",
@@ -272,6 +282,8 @@ const I18N = {
     relayChecking: "確認中…",
     relayOnline: "リレー オンライン",
     relayOffline: "リレー オフライン",
+    relayOffline: "リレー オフライン",
+    relayIdle: "未接続",
     targetOrigin: "ターゲット オリジン",
     readingTab: "タブを読み取り中…",
     incompatiblePage: "非対応のページ",
@@ -327,6 +339,8 @@ const I18N = {
     relayChecking: "Verifica…",
     relayOnline: "Relè Online",
     relayOffline: "Relè Offline",
+    relayOffline: "Relè Offline",
+    relayIdle: "Non connesso",
     targetOrigin: "Origine Destinazione",
     readingTab: "Lettura scheda…",
     incompatiblePage: "Pagina non compatibile",
@@ -380,6 +394,8 @@ const I18N = {
     relayChecking: "Verificando…",
     relayOnline: "Relé Online",
     relayOffline: "Relé Offline",
+    relayOffline: "Relé Offline",
+    relayIdle: "Não conectado",
     targetOrigin: "Origem de Destino",
     readingTab: "Lendo guia…",
     incompatiblePage: "Página incompatível",
@@ -431,6 +447,8 @@ const I18N = {
     relayChecking: "جاري الفحص…",
     relayOnline: "المرحل متصل",
     relayOffline: "المرحل غير متصل",
+    relayOffline: "المرحل غير متصل",
+    relayIdle: "غير متصل",
     targetOrigin: "المصدر المستهدف",
     readingTab: "قراءة الصفحة…",
     incompatiblePage: "صفحة غير متوافقة",
@@ -486,6 +504,8 @@ const I18N = {
     relayChecking: "Проверка…",
     relayOnline: "Реле онлайн",
     relayOffline: "Реле офлайн",
+    relayOffline: "Реле офлайн",
+    relayIdle: "Не подключено",
     targetOrigin: "Целевой источник",
     readingTab: "Чтение вкладки…",
     incompatiblePage: "Несовместимая страница",
@@ -698,6 +718,24 @@ async function checkRelay() {
   try {
     const res = await fetch(`${RELAY}/health`, { method: 'GET', cache: 'no-store' });
     if (res.ok) {
+      // Three states, not two. The relay can be perfectly reachable while its
+      // CDP connection to Lightpanda is dead - and then every sync fails while
+      // the badge said "online". v0.6.1 made the relay honest about that; the
+      // popup has to pass the truth on instead of only looking at res.ok.
+      let attached = true;
+      try {
+        const data = await res.json();
+        if (typeof data.attached === 'boolean') attached = data.attached;
+      } catch (_) { /* old relay without the field: keep the old behaviour */ }
+      if (!attached) {
+        // 'idle', not 'offline': the relay process is alive and answering. The
+        // amber badge is the honest third state - red here would report an
+        // outage that is not happening, green would promise a sync that cannot
+        // succeed yet.
+        relayBadge.className = 'badge idle';
+        relayText.textContent = t('relayIdle');
+        return true;
+      }
       relayBadge.className = 'badge online';
       relayText.textContent = t('relayOnline');
       return true;
