@@ -353,17 +353,19 @@ def diagnostics_are_sanitized():
 @check("the relay serves the diagnostic endpoint")
 def diagnostics_endpoint():
     headers = bridge_headers()
-    status, body = relay_call("GET", "/v1/diagnostics", headers=headers)
+    # relay_call already returns a decoded dict (see its two json.loads).
+    status, data = relay_call("GET", "/v1/diagnostics", headers=headers)
     if status != 200:
-        return "FAIL", "GET /v1/diagnostics -> %s" % status
-    data = json.loads(body)
+        return "FAIL", "GET /v1/diagnostics -> %s %s" % (status, data.get("code", ""))
     if not data.get("ok") or "report" not in data or "text" not in data:
         return "FAIL", "the endpoint answered 200 without a report"
     state = data["report"].get("state", {})
     if not data["text"].startswith("# Lightpanda Session Bridge"):
         return "FAIL", "the text form does not start with its header"
-    return "ok", "200, %d state fields, %d chars of text" % (
-        len(state), len(data["text"]))
+    if data["text"].count("[redacted]") and "generated_at" not in data["text"]:
+        return "FAIL", "the report is redacting its own header"
+    return "ok", "200, %d state fields, %d chars, %d redactions" % (
+        len(state), len(data["text"]), data["text"].count("[redacted]"))
 
 
 @check("the release archive is reproducible")
