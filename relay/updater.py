@@ -25,6 +25,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -60,6 +61,20 @@ BACKUP_META = "meta.json"
 # Files that live in a managed directory but are never part of the shipped
 # source tree. Kept during a prune so the relay's own bookkeeping survives.
 MIRROR_KEEP = (BUILD_INFO, BACKUP_META)
+
+# One writer at a time. The relay is a ThreadingHTTPServer and three different
+# callers reach this module concurrently: the popup (/v1/update/apply,
+# /v1/update/rollback), an agent holding the token, and
+# `python relay/server.py --apply-update`. Without this, one thread's rmtree can
+# delete the directory another thread is mirroring from, and rollback_update can
+# pull the backup out from under an install in flight.
+#
+# RLock, not Lock: apply_update calls check_update, so a plain Lock deadlocks the
+# request thread against itself (the suite hung for 7 minutes before this). The
+# reentrancy is per-thread, which is exactly the semantics wanted here - a nested
+# check_update from inside apply_update must NOT block, but a second THREAD still
+# must.
+_UPDATE_LOCK = threading.RLock()
 BACKUP_DIRNAME = "extension-backup"
 AUDIT_FILE = "update.log"
 # 5 minutes, not 60 seconds: every check is up to three anonymous API calls and
@@ -369,127 +384,129 @@ def shipped_commit(repo: str = REPO, branch: str = BRANCH):
 
 def check_update(force: bool = False, repo: str = REPO) -> dict:
     """Compare what is deployed with GitHub. Read-only, cacheable."""
-    now = time.time()
-    if not force and _CACHE["data"] is not None and (now - _CACHE["at"]) < CACHE_TTL:
-        return _CACHE["data"]
+    """Serialized: only one update operation runs at a time."""
+    with _UPDATE_LOCK:
+        now = time.time()
+        if not force and _CACHE["data"] is not None and (now - _CACHE["at"]) < CACHE_TTL:
+            return _CACHE["data"]
 
-    ext_dir = extension_dir()
-    result = {
-        "ok": True,
-        "repo": repo,
-        "extension_dir": ext_dir or None,
-        "writable": bool(ext_dir) and os.access(ext_dir, os.W_OK),
-        "update_available": False,
-        "source": None,
-        "current_version": None,
-        "current_commit": None,
-        "current_tag": None,
-        "latest_version": None,
-        "latest_tag": None,
-        "latest_commit": None,
-        "baseline_unknown": False,
-        "backup_available": bool(read_backup_meta().get("version")),
-        "published_at": None,
-        "url": None,
-        "notes": "",
-    }
-    current = installed_info(ext_dir)
-    result.update({
-        "current_version": current["version"],
-        "current_commit": current["commit"],
-        "current_tag": current["tag"],
-    })
-    if not ext_dir:
-        result.update({"ok": False, "error": "extension directory not found"})
-        _CACHE.update({"at": now, "data": result})
-        return result
-
-    try:
-        release = latest_release(repo)
-    except Exception as err:  # network down, rate limited, ...
-        # An actionable message beats a class name: "GitHub API rate limit
-        # reached (anonymous is 60/hour per IP)" tells the user what to do,
-        # "GitHub unreachable (RuntimeError)" does not.
-        detail = str(err) if str(err) else ""
+        ext_dir = extension_dir()
+        result = {
+            "ok": True,
+            "repo": repo,
+            "extension_dir": ext_dir or None,
+            "writable": bool(ext_dir) and os.access(ext_dir, os.W_OK),
+            "update_available": False,
+            "source": None,
+            "current_version": None,
+            "current_commit": None,
+            "current_tag": None,
+            "latest_version": None,
+            "latest_tag": None,
+            "latest_commit": None,
+            "baseline_unknown": False,
+            "backup_available": bool(read_backup_meta().get("version")),
+            "published_at": None,
+            "url": None,
+            "notes": "",
+        }
+        current = installed_info(ext_dir)
         result.update({
-            "ok": False,
-            "error": detail or f"GitHub unreachable ({type(err).__name__})",
-            "error_kind": "rate_limit" if "rate limit" in detail.lower() else "unreachable",
+            "current_version": current["version"],
+            "current_commit": current["commit"],
+            "current_tag": current["tag"],
         })
+        if not ext_dir:
+            result.update({"ok": False, "error": "extension directory not found"})
+            _CACHE.update({"at": now, "data": result})
+            return result
+
+        try:
+            release = latest_release(repo)
+        except Exception as err:  # network down, rate limited, ...
+            # An actionable message beats a class name: "GitHub API rate limit
+            # reached (anonymous is 60/hour per IP)" tells the user what to do,
+            # "GitHub unreachable (RuntimeError)" does not.
+            detail = str(err) if str(err) else ""
+            result.update({
+                "ok": False,
+                "error": detail or f"GitHub unreachable ({type(err).__name__})",
+                "error_kind": "rate_limit" if "rate limit" in detail.lower() else "unreachable",
+            })
+            _CACHE.update({"at": now, "data": result})
+            return result
+
+        head = None
+        try:
+            head = latest_commit(repo)
+        except Exception:
+            head = None
+
+        if release:
+            result["latest_version"] = release["version_text"]
+            result["latest_tag"] = release["tag"]
+            result["published_at"] = release["published_at"]
+            result["url"] = release["html_url"]
+            result["notes"] = release["notes"]
+
+        release_is_newer = bool(
+            release and release["version_text"]
+            and is_newer(release["version_text"], current["version"] or "0.0.0")
+        )
+
+        if release_is_newer:
+            result.update({"update_available": True, "source": "release",
+                           "from": current["version"], "to": release["version_text"]})
+        elif head and current["commit"] and head["sha"] != current["commit"]:
+            # Same release, main moved on - but only a commit that changed the
+            # shipped subtree is worth installing. Fail-open: if GitHub will not
+            # say, offer the tip, because a needless update beats a missed one.
+            try:
+                shipped = shipped_commit(repo)
+            except Exception:
+                shipped = None
+            target = shipped or head
+            if shipped and shipped["sha"] == current["commit"]:
+                result.update({
+                    "update_available": False,
+                    "note": "main moved to %s, but nothing shipped changed" % head["short"],
+                })
+            else:
+                result.update({
+                    "update_available": True, "source": "main",
+                    "from": current["commit"][:8], "to": target["short"],
+                })
+        elif not current["commit"] and release:
+            # No provenance (hand-installed, or an installer older than 0.5.0), so
+            # the deployed tree *is* the release only by assumption. Offer the
+            # tagged artifact - the immutable, checksum-verified one - never a
+            # downgrade, and never a silent guess about what is on disk.
+            installed = parse_version(current["version"] or "")
+            published = parse_version(release["version_text"])
+            if installed and published and installed[:3] <= published[:3]:
+                result.update({
+                    "update_available": True, "source": "release",
+                    "baseline_unknown": True,
+                    "from": current["version"], "to": release["version_text"],
+                })
+            else:
+                result.update({"update_available": True, "source": "main",
+                               "baseline_unknown": True, "from": None,
+                               "to": (head or {}).get("short")})
+        elif head and not current["commit"]:
+            # No release to fall back on: install main and record the commit so the
+            # next check is exact.
+            result.update({"update_available": True, "source": "main",
+                           "baseline_unknown": True, "from": None, "to": head["short"]})
+
+        if head:
+            result["latest_commit"] = head["sha"]
+            result["latest_commit_short"] = head["short"]
+            result["latest_commit_message"] = head["message"]
+            result["latest_commit_date"] = head["date"]
+
         _CACHE.update({"at": now, "data": result})
         return result
-
-    head = None
-    try:
-        head = latest_commit(repo)
-    except Exception:
-        head = None
-
-    if release:
-        result["latest_version"] = release["version_text"]
-        result["latest_tag"] = release["tag"]
-        result["published_at"] = release["published_at"]
-        result["url"] = release["html_url"]
-        result["notes"] = release["notes"]
-
-    release_is_newer = bool(
-        release and release["version_text"]
-        and is_newer(release["version_text"], current["version"] or "0.0.0")
-    )
-
-    if release_is_newer:
-        result.update({"update_available": True, "source": "release",
-                       "from": current["version"], "to": release["version_text"]})
-    elif head and current["commit"] and head["sha"] != current["commit"]:
-        # Same release, main moved on - but only a commit that changed the
-        # shipped subtree is worth installing. Fail-open: if GitHub will not
-        # say, offer the tip, because a needless update beats a missed one.
-        try:
-            shipped = shipped_commit(repo)
-        except Exception:
-            shipped = None
-        target = shipped or head
-        if shipped and shipped["sha"] == current["commit"]:
-            result.update({
-                "update_available": False,
-                "note": "main moved to %s, but nothing shipped changed" % head["short"],
-            })
-        else:
-            result.update({
-                "update_available": True, "source": "main",
-                "from": current["commit"][:8], "to": target["short"],
-            })
-    elif not current["commit"] and release:
-        # No provenance (hand-installed, or an installer older than 0.5.0), so
-        # the deployed tree *is* the release only by assumption. Offer the
-        # tagged artifact - the immutable, checksum-verified one - never a
-        # downgrade, and never a silent guess about what is on disk.
-        installed = parse_version(current["version"] or "")
-        published = parse_version(release["version_text"])
-        if installed and published and installed[:3] <= published[:3]:
-            result.update({
-                "update_available": True, "source": "release",
-                "baseline_unknown": True,
-                "from": current["version"], "to": release["version_text"],
-            })
-        else:
-            result.update({"update_available": True, "source": "main",
-                           "baseline_unknown": True, "from": None,
-                           "to": (head or {}).get("short")})
-    elif head and not current["commit"]:
-        # No release to fall back on: install main and record the commit so the
-        # next check is exact.
-        result.update({"update_available": True, "source": "main",
-                       "baseline_unknown": True, "from": None, "to": head["short"]})
-
-    if head:
-        result["latest_commit"] = head["sha"]
-        result["latest_commit_short"] = head["short"]
-        result["latest_commit_message"] = head["message"]
-        result["latest_commit_date"] = head["date"]
-
-    _CACHE.update({"at": now, "data": result})
-    return result
 
 
 def clear_cache() -> None:
@@ -632,16 +649,49 @@ def _mirror(src_root: str, dst_root: str) -> tuple:
 
 
 def _backup(ext_dir: str) -> str:
+    """Snapshot the live tree so `rollback_update` has an undo point.
+
+    Build it BESIDE the current backup and swap at the end. The old version did
+    `rmtree(backup_root)` first, so a failure during the copy - ENOSPC, EPERM, a
+    file lock, which is the NORMAL case on Windows when Chrome holds popup.js
+    open - left the install with no undo point at all, before the live tree had
+    been touched by anything. The old generation is only discarded once the new
+    one is complete.
+    """
     backup_root = os.path.join(config_dir(), BACKUP_DIRNAME)
-    shutil.rmtree(backup_root, ignore_errors=True)
-    os.makedirs(backup_root, exist_ok=True)
-    _mirror(ext_dir, backup_root)
+    # Snapshot the info BEFORE mirroring: the live tree is replaced right after
+    # this call, so anything read afterwards describes the NEW install rather
+    # than the one this backup can restore.
     info = installed_info(ext_dir)
-    meta = {key: info.get(key) for key in ("version", "commit", "tag", "source")}
-    meta["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    with open(os.path.join(backup_root, BACKUP_META), "w", encoding="utf-8") as fh:
-        json.dump(meta, fh, indent=2)
-    return backup_root
+    staging = backup_root + ".new"
+    retired = backup_root + ".old"
+    try:
+        shutil.rmtree(staging, ignore_errors=True)
+        os.makedirs(staging, exist_ok=True)
+        _mirror(ext_dir, staging)
+        # _mirror deliberately SKIPS BUILD_INFO (it belongs to the tree being
+        # replaced, not to the source), so the backup never carried it and a
+        # rollback restored a tree whose provenance was blank. Carry it over.
+        live_build = os.path.join(ext_dir, BUILD_INFO)
+        if os.path.isfile(live_build):
+            shutil.copy2(live_build, os.path.join(staging, BUILD_INFO))
+        meta = {key: info.get(key)
+                for key in ("version", "commit", "tag", "source")}
+        meta["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        with open(os.path.join(staging, BACKUP_META), "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2)
+        # Swap only now: the new generation is complete and readable.
+        shutil.rmtree(retired, ignore_errors=True)
+        if os.path.isdir(backup_root):
+            os.replace(backup_root, retired)
+        os.replace(staging, backup_root)
+        return backup_root
+    finally:
+        # No half-written staging dir: the next backup would mirror from it, and
+        # read_backup_meta() would report the version of an install that never
+        # completed. The OLD generation is untouched by this cleanup.
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(retired, ignore_errors=True)
 
 
 def _write_build_info(ext_dir: str, payload: dict) -> None:
@@ -681,131 +731,135 @@ def _checksum_from_assets(assets: list, zip_name: str):
 
 def apply_update(source: str = "auto", repo: str = REPO) -> dict:
     """Download and install the newest release (or main commit) from GitHub."""
-    ext_dir = extension_dir()
-    if not ext_dir:
-        raise RuntimeError("extension directory not found")
-    if not os.access(ext_dir, os.W_OK):
-        raise RuntimeError("extension directory is not writable")
+    """Serialized: only one update operation runs at a time."""
+    with _UPDATE_LOCK:
+        ext_dir = extension_dir()
+        if not ext_dir:
+            raise RuntimeError("extension directory not found")
+        if not os.access(ext_dir, os.W_OK):
+            raise RuntimeError("extension directory is not writable")
 
-    status = check_update(force=True, repo=repo)
-    if not status.get("ok"):
-        raise RuntimeError(status.get("error") or "update check failed")
-    source = status.get("source") if source in ("auto", None) else source
-    if source not in ("release", "main"):
-        raise RuntimeError("nothing to install: already up to date")
+        status = check_update(force=True, repo=repo)
+        if not status.get("ok"):
+            raise RuntimeError(status.get("error") or "update check failed")
+        source = status.get("source") if source in ("auto", None) else source
+        if source not in ("release", "main"):
+            raise RuntimeError("nothing to install: already up to date")
 
-    release = latest_release(repo) if source == "release" else None
-    archive_name, archive_url, accept, checksum, tag, commit = "", "", "application/octet-stream", None, None, None
+        release = latest_release(repo) if source == "release" else None
+        archive_name, archive_url, accept, checksum, tag, commit = "", "", "application/octet-stream", None, None, None
 
-    if source == "release":
-        if not release:
-            raise RuntimeError("release not found")
-        zip_name = ""
-        for asset in release["assets"]:
-            if asset["name"].lower().endswith(".zip"):
-                zip_name = asset["name"]
-                archive_name, archive_url = asset["name"], asset["url"]
-                checksum = _checksum_from_assets(release["assets"], zip_name)
-                break
-        if not archive_url:
-            # No release asset: fall back to the source archive of the tag.
-            tag = release["tag"]
-            archive_name = f"source-{tag}.tar.gz"
-            archive_url = f"{API}/repos/{repo}/tarball/{urllib.parse.quote(tag)}"
-        tag = tag or release["tag"]
-        commit = (latest_commit(repo, tag=tag) or {}).get("sha") or release.get("commit")
-    else:
-        head = latest_commit(repo)
-        if not head:
-            raise RuntimeError("main branch not found")
+        if source == "release":
+            if not release:
+                raise RuntimeError("release not found")
+            zip_name = ""
+            for asset in release["assets"]:
+                if asset["name"].lower().endswith(".zip"):
+                    zip_name = asset["name"]
+                    archive_name, archive_url = asset["name"], asset["url"]
+                    checksum = _checksum_from_assets(release["assets"], zip_name)
+                    break
+            if not archive_url:
+                # No release asset: fall back to the source archive of the tag.
+                tag = release["tag"]
+                archive_name = f"source-{tag}.tar.gz"
+                archive_url = f"{API}/repos/{repo}/tarball/{urllib.parse.quote(tag)}"
+            tag = tag or release["tag"]
+            commit = (latest_commit(repo, tag=tag) or {}).get("sha") or release.get("commit")
+        else:
+            head = latest_commit(repo)
+            if not head:
+                raise RuntimeError("main branch not found")
+            try:
+                target = shipped_commit(repo) or head
+            except Exception:
+                target = head
+            commit = target["sha"]
+            tag = None  # main-channel install: no tag to claim
+            archive_name = f"source-{target['short']}.tar.gz"
+            archive_url = f"{API}/repos/{repo}/tarball/{target['sha']}"
+
+        raw = _fetch(archive_url, accept=accept)
+        digest = hashlib.sha256(raw).hexdigest()
+        if checksum and digest != checksum:
+            raise RuntimeError("checksum mismatch: artifact refused")
+
+        workdir = tempfile.mkdtemp(prefix="lp-bridge-update-")
         try:
-            target = shipped_commit(repo) or head
-        except Exception:
-            target = head
-        commit = target["sha"]
-        tag = None  # main-channel install: no tag to claim
-        archive_name = f"source-{target['short']}.tar.gz"
-        archive_url = f"{API}/repos/{repo}/tarball/{target['sha']}"
+            suffix = ".zip" if archive_name.lower().endswith(".zip") else ".tar.gz"
+            archive_path = os.path.join(workdir, "artifact" + suffix)
+            with open(archive_path, "wb") as fh:
+                fh.write(raw)
+            extract_dir = os.path.join(workdir, "extract")
+            os.makedirs(extract_dir)
+            extract_archive(archive_path, extract_dir)
+            root = locate_extension_root(extract_dir)
+            manifest = validate_extension_tree(root)
 
-    raw = _fetch(archive_url, accept=accept)
-    digest = hashlib.sha256(raw).hexdigest()
-    if checksum and digest != checksum:
-        raise RuntimeError("checksum mismatch: artifact refused")
+            previous = installed_info(ext_dir)
+            backup_root = _backup(ext_dir)
+            copy, remove = _mirror(root, ext_dir)
+            _write_build_info(ext_dir, {
+                "version": manifest.get("version"),
+                "manifest_version": manifest.get("manifest_version"),
+                "tag": tag,
+                "commit": commit,
+                "source": source,
+                "artifact": archive_name,
+                "sha256": digest,
+                "release_url": (release or {}).get("html_url"),
+                "previous": {key: previous.get(key) for key in ("version", "commit", "tag")},
+            })
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
 
-    workdir = tempfile.mkdtemp(prefix="lp-bridge-update-")
-    try:
-        suffix = ".zip" if archive_name.lower().endswith(".zip") else ".tar.gz"
-        archive_path = os.path.join(workdir, "artifact" + suffix)
-        with open(archive_path, "wb") as fh:
-            fh.write(raw)
-        extract_dir = os.path.join(workdir, "extract")
-        os.makedirs(extract_dir)
-        extract_archive(archive_path, extract_dir)
-        root = locate_extension_root(extract_dir)
-        manifest = validate_extension_tree(root)
-
-        previous = installed_info(ext_dir)
-        backup_root = _backup(ext_dir)
-        copy, remove = _mirror(root, ext_dir)
-        _write_build_info(ext_dir, {
+        audit({"event": "install", "source": source, "version": manifest.get("version"),
+               "previous_version": previous.get("version"), "previous_commit": (previous.get("commit") or "")[:8],
+               "commit": (commit or "")[:8], "tag": tag, "artifact": archive_name,
+               "sha256": digest, "files_written": len(copy), "files_removed": len(remove)})
+        clear_cache()
+        return {
+            "ok": True,
+            "source": source,
             "version": manifest.get("version"),
-            "manifest_version": manifest.get("manifest_version"),
             "tag": tag,
             "commit": commit,
-            "source": source,
+            "commit_short": (commit or "")[:8] or None,
             "artifact": archive_name,
             "sha256": digest,
-            "release_url": (release or {}).get("html_url"),
+            "checksum_verified": bool(checksum),
+            "files_written": len(copy),
+            "files_removed": len(remove),
             "previous": {key: previous.get(key) for key in ("version", "commit", "tag")},
-        })
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
-
-    audit({"event": "install", "source": source, "version": manifest.get("version"),
-           "previous_version": previous.get("version"), "previous_commit": (previous.get("commit") or "")[:8],
-           "commit": (commit or "")[:8], "tag": tag, "artifact": archive_name,
-           "sha256": digest, "files_written": len(copy), "files_removed": len(remove)})
-    clear_cache()
-    return {
-        "ok": True,
-        "source": source,
-        "version": manifest.get("version"),
-        "tag": tag,
-        "commit": commit,
-        "commit_short": (commit or "")[:8] or None,
-        "artifact": archive_name,
-        "sha256": digest,
-        "checksum_verified": bool(checksum),
-        "files_written": len(copy),
-        "files_removed": len(remove),
-        "previous": {key: previous.get(key) for key in ("version", "commit", "tag")},
-        "backup": backup_root,
-        "reload_required": True,
-    }
+            "backup": backup_root,
+            "reload_required": True,
+        }
 
 
 def rollback_update() -> dict:
     """Restore the tree saved by the previous update (undo)."""
-    ext_dir = extension_dir()
-    if not ext_dir:
-        raise RuntimeError("extension directory not found")
-    backup_root = os.path.join(config_dir(), BACKUP_DIRNAME)
-    meta = read_backup_meta()
-    if not meta.get("version") or not os.path.isfile(os.path.join(backup_root, "manifest.json")):
-        raise RuntimeError("no backup to restore")
-    manifest = validate_extension_tree(backup_root)
-    current = installed_info(ext_dir)
-    copy, remove = _mirror(backup_root, ext_dir)
-    _write_build_info(ext_dir, {
-        "version": manifest.get("version"),
-        "manifest_version": manifest.get("manifest_version"),
-        "tag": meta.get("tag"),
-        "commit": meta.get("commit"),
-        "source": "rollback",
-        "previous": {key: current.get(key) for key in ("version", "commit", "tag")},
-    })
-    shutil.rmtree(backup_root, ignore_errors=True)
-    clear_cache()
-    return {"ok": True, "version": manifest.get("version"), "tag": meta.get("tag"),
-            "commit": meta.get("commit"), "files_written": len(copy),
-            "files_removed": len(remove), "reload_required": True}
+    """Serialized: only one update operation runs at a time."""
+    with _UPDATE_LOCK:
+        ext_dir = extension_dir()
+        if not ext_dir:
+            raise RuntimeError("extension directory not found")
+        backup_root = os.path.join(config_dir(), BACKUP_DIRNAME)
+        meta = read_backup_meta()
+        if not meta.get("version") or not os.path.isfile(os.path.join(backup_root, "manifest.json")):
+            raise RuntimeError("no backup to restore")
+        manifest = validate_extension_tree(backup_root)
+        current = installed_info(ext_dir)
+        copy, remove = _mirror(backup_root, ext_dir)
+        _write_build_info(ext_dir, {
+            "version": manifest.get("version"),
+            "manifest_version": manifest.get("manifest_version"),
+            "tag": meta.get("tag"),
+            "commit": meta.get("commit"),
+            "source": "rollback",
+            "previous": {key: current.get(key) for key in ("version", "commit", "tag")},
+        })
+        shutil.rmtree(backup_root, ignore_errors=True)
+        clear_cache()
+        return {"ok": True, "version": manifest.get("version"), "tag": meta.get("tag"),
+                "commit": meta.get("commit"), "files_written": len(copy),
+                "files_removed": len(remove), "reload_required": True}

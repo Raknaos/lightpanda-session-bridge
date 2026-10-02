@@ -1,3 +1,22 @@
+## [0.7.7] - the undo point could be destroyed before it existed
+
+- `_backup` did `rmtree(backup_root)` BEFORE rebuilding it, so any failure during
+  the copy - ENOSPC, EPERM, or a file lock, which is the NORMAL case on Windows
+  when Chrome holds `popup.js` open - left the install with no undo point at all.
+  It now builds in `extension-backup.new` and swaps at the end, cleaning both the
+  staging and the retired generation in a `finally`.
+- `apply_update`, `rollback_update` and `check_update` took no lock. The relay is
+  a ThreadingHTTPServer and three callers reach the module concurrently (popup,
+  an agent with the token, `--apply-update`). All three now serialize on
+  `_UPDATE_LOCK`, an **RLock** because `apply_update` calls `check_update` and a
+  plain `Lock` deadlocks the request thread against itself.
+- `_mirror` skips `.build-info.json` by design, so the backup never carried it:
+  a rollback restored a tree with blank provenance. It is now copied explicitly.
+- `meta.json` was filled from `installed_info()` re-read AFTER the mirror, so it
+  described the NEW install instead of the one the backup can restore. The info is
+  now snapshotted before mirroring. Found in production: the report said
+  `version: None` while `installed_info()` said `0.7.6`.
+
 ## [0.7.6] - the document-start restore scripts stacked, and "Tout retirer" left half the session
 
 - Every import registered a `Page.addScriptToEvaluateOnNewDocument` holding a full
