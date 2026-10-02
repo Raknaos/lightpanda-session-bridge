@@ -233,11 +233,26 @@ def collect() -> dict:
 
 
 def _deployed_version() -> str:
-    return str(_sibling("updater").check_update().get("current_version", "unknown"))
+    info = _check_update()
+    return str(info.get("current_version") or "unknown")
 
 
 def _deployed_commit() -> str:
-    return str(_sibling("updater").check_update().get("current_commit", "unknown"))[:12]
+    info = _check_update()
+    commit = str(info.get("current_commit") or "")
+    # `str(None)[:12]` is "None", not a hash: on a fresh checkout or a CI runner
+    # there is no installed commit yet and check_update returns None for it, so
+    # the report said deployed_commit = None and a test asserting a hex sha
+    # failed on CI while passing locally. "unknown" is the honest answer.
+    return commit[:12] if re.fullmatch(r"[0-9a-f]{7,40}", commit) else "unknown"
+
+
+def _check_update() -> dict:
+    try:
+        data = _sibling("updater").check_update()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
 def _state(relay, updater) -> dict:
@@ -255,7 +270,7 @@ def _state(relay, updater) -> dict:
         "persisted_applied": getattr(relay, "_PERSISTED_APPLIED", False),
         "last_sync_origin": _short(last.get("origin")),
         "last_sync_cookies": len(last.get("cookies") or []),
-        "update_available": _safe(lambda: updater.check_update().get("update_available")),
+        "update_available": _check_update().get("update_available"),
     }
 
 

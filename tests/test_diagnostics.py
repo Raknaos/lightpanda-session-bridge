@@ -40,7 +40,24 @@ class ReportIsSanitized(unittest.TestCase):
         self.assertEqual(report["product"]["name"], "lightpanda-session-bridge")
         self.assertTrue(report["generated_at"])
         self.assertIn("sha256:", report["artifacts"]["manifest"])
-        self.assertRegex(report["product"]["deployed_commit"], r"^[0-9a-f]{7,12}$")
+        # CI contradiction, fixed: on a runner there is no installed commit and
+        # check_update returns None for it, so the report said deployed_commit
+        # = None (str(None)[:12]) and this assertion failed on GitHub while
+        # passing here. Either a hex sha or the honest "unknown".
+        self.assertRegex(report["product"]["deployed_commit"], r"^([0-9a-f]{7,12}|unknown)$")
+
+    def test_missing_deployment_reports_unknown_not_none(self):
+        """A fresh checkout / CI runner has no .build-info.json. The report must
+        say "unknown", never the string "None" and never a crash."""
+        import relay.updater as updater
+        saved = updater.check_update
+        updater.check_update = lambda: {"current_version": None, "current_commit": None}
+        try:
+            self.assertEqual(diagnostics._deployed_commit(), "unknown")
+            self.assertEqual(diagnostics._deployed_version(), "unknown")
+            self.assertEqual(diagnostics.collect()["product"]["deployed_commit"], "unknown")
+        finally:
+            updater.check_update = saved
 
     def test_text_form_contains_no_planted_secret(self):
         blob = json.dumps(diagnostics.collect(), ensure_ascii=False)
