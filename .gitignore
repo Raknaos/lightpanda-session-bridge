@@ -1,20 +1,13 @@
 __pycache__/
-*.py[cod]
-.pytest_cache/
-node_modules/
-neo-upstream/
-.env
-*.cookie
-cookies.json
-storage.sqlite
-*.har
-*.log
-.hermes/
-popup_current.png
-*.png
-!extension/icons/*.png
-!og-image.png
-dist/
-build/
-*.egg-info/
+# Working copies the sabotage harness writes before it edits a tracked file.
+# Committing them would ship a pre-fix copy of the product as a build artifact.
+scripts/artifacts_pristine/
+
+# Machine state that must never enter the tracked tree: the relay log, the build
+# provenance it writes into the installed extension dir (point 15 of
+# release-acceptance-gate - it carries one machine's install history), the
+# screencast frames a harness drops, and an upstream clone kept for reference.
+logs/
 extension/.build-info.json
+scripts/artifacts/
+neo-upstream/

@@ -392,7 +392,12 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
         if parsed_url.scheme != "https" or parsed_url.hostname != host:
             raise ValueError("cookie url does not match target origin")
     # Strip unsupported or risky internal Chrome attributes
-    allowed = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "url"}
+    # `expires_hint` is OURS, not Chrome's: the popup renames Chrome's
+    # `expirationDate` to it (see popup.js), and it feeds /v1/sessions' expiry
+    # report. It has to be on this list or the allow-list strips it on the way in
+    # and the countdown is dead no matter what the popup sends.
+    allowed = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite",
+               "expires", "expires_hint", "url"}
     item = {k: v for k, v in cookie.items() if k in allowed}
 
     # Handle __Host- prefix strict RFC compliance:
@@ -423,9 +428,19 @@ def cookie_for_cdp(cookie: dict, origin: str) -> dict:
     # read `expires` off the stored cookie dict, so popping it made `expires`
     # permanently null and `expired` permanently false - the popup could never
     # warn about a stale session, it just looked like a session cookie.
+    # Accept the popup's `expires_hint` as well as Chrome's own `expires`, and
+    # keep the number even when it is ALREADY IN THE PAST: a negative-looking
+    # timestamp is exactly the signal that makes `expired` true, so dropping it
+    # (as the old `> 0` guard did for any past value) removed the only case the
+    # warning exists for.
     expires_hint = item.pop("expires", None)
-    item["expires_hint"] = float(expires_hint) if (
-        isinstance(expires_hint, (int, float)) and expires_hint > 0) else None
+    if not isinstance(expires_hint, (int, float)) or expires_hint <= 0:
+        expires_hint = item.get("expires_hint")
+    if isinstance(expires_hint, (int, float)) and expires_hint > 0:
+        item["expires_hint"] = float(expires_hint)
+    else:
+        item.pop("expires_hint", None)
+        item["expires_hint"] = None
 
     # Normalize sameSite enum for Lightpanda CDP:
     # Chrome extension API returns lowercase: 'unspecified', 'no_restriction', 'lax', 'strict'

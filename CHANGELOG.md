@@ -7,6 +7,47 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
+## [0.7.18] - la chaine d'expiration de session, reellement cablee
+
+Une session, importee depuis un cookie Chrome, n'affichait jamais son expiration :
+`list_sessions()` calculait `expired`，mais la popup ne recevait jamais la date。La chaine
+etait rompue en quatre points，tous couverts par des tests desormais :
+
+1. `cookie_for_cdp()` rejettait `expires_hint` — la cle etait supprimee a l'entree du
+   relais，donc `expires` revenait toujours a `None`。
+2. `item["expires_hint"]` n'etait ecrit que si l'echeance etait **future** — un cookie
+   expire depuis une heure perdait son nombre，et `expired` ne pouvait jamais devenir vrai。
+3. La popup n'envoyait jamais `expires_hint` : elle envoyait `cookies`，qui porte
+   `expirationDate`，laisse a l'ecart avant d'atteindre le relais。
+4. L'etat `expired` et le mot `cookies` etaient des litteraux anglais dans une popup a
+   dix langues。
+
+Le compte a rebours etait faux dans les deux sens : `Math.floor` sous-estimait (3 h
+lues "~2 h" parce que quelques millisecondes separaient l'horloge du test de celle du
+produit)，et l'arrondi surestimerait des le correctif de ce point (40 min lues "~1 h")。
+Regle appliquee : **les jours arrondissent au plafond，les heures a la tranche，et sous
+une heure on compte en minutes** — un compte a rebours qui s'ecoule ne doit jamais
+promettre plus de temps qu'il n'en reste。Un test a frontiere exacte (3 h 00) est
+instable de quelques millisecondes et a ete remplace par des valeurs avec marge plus
+une assertion de DIRECTION (3 h 35 doit lire "~3 h"，pas "~4 h")。
+
+Prouve par `scripts/proof_red_session_expiry.py` : **8 sabotages，8 rouges nommes**。
+
+Trois defauts de harnais trouves en chemin，qui rendaient la preuve invalide sans la
+faire echouer :
+
+- Le relais appartient a la tache `LightpandaRelayDaemon`，pas `LightpandaBridgeRelay` —
+  le harnais redemarrant la mauvaise tache mesurait le code d'avant，pour toujours。
+- Arreter seulement le PREMIER processus laisse le survivant tenir le port，et le neuf
+  sort en 0 sur "address already in use" : le sabotage ne tournait jamais。
+- Chercher la chaine "Failed to import test module" dans la sortie attrapait la
+  docstring d'un test，et transformait un vrai rouge en faux `HARNESS`。
+
+Et une piege destructive : la copie "pristine" du harnais n'etait prise qu'a la
+premiere execution。Apres un correctif ulterieur，la restauration remit le fichier
+**avant** le correctif — l'assertion du harnais a echoue en detruisant le travail qu'elle
+devait proteger。Le snapshot est desormais pris a chaque sabotage。
+
 ## [0.7.17] - retracting 0.7.16: the wrong-language frame was never painted
 
 v0.7.16 claimed the popup flashed French to English users. It did not. The claim

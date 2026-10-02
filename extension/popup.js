@@ -5,6 +5,9 @@ const I18N = {
   en: {
     clearConfirm: "Click again to clear all",
     clearedToast: "All sessions cleared",
+    sessionCookieUnit: (n) => `${n} cookies`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "expired",
     code: "EN",
     relayChecking: "Checking…",
     relayOnline: "Relay Online",
@@ -66,6 +69,9 @@ const I18N = {
   fr: {
     clearConfirm: "Cliquez encore pour tout effacer",
     clearedToast: "Toutes les sessions effacées",
+    sessionCookieUnit: (n) => `${n} cookies`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "expirée",
     code: "FR",
     relayChecking: "Vérification…",
     relayOnline: "Relais en ligne",
@@ -127,6 +133,9 @@ const I18N = {
   es: {
     clearConfirm: "Pulsa de nuevo para borrar todo",
     clearedToast: "Todas las sesiones borradas",
+    sessionCookieUnit: (n) => `${n} cookies`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "caducada",
     code: "ES",
     relayChecking: "Comprobando…",
     relayOnline: "Relé en línea",
@@ -188,6 +197,9 @@ const I18N = {
   de: {
     clearConfirm: "Erneut klicken, um alles zu löschen",
     clearedToast: "Alle Sitzungen gelöscht",
+    sessionCookieUnit: (n) => `${n} Cookies`,
+    sessionCookieOne: (n) => `${n} Cookie`,
+    sessionExpired: "abgelaufen",
     code: "DE",
     relayChecking: "Prüfe…",
     relayOnline: "Relais online",
@@ -247,6 +259,9 @@ const I18N = {
     sessionRemove: "Diese Sitzung entfernen"
   },
   zh: {
+    sessionCookieUnit: (n) => `${n} 个 Cookie`,
+    sessionCookieOne: (n) => `${n} 个 Cookie`,
+    sessionExpired: "已过期",
     code: "ZH",
     relayChecking: "检查中…",
     relayOnline: "中继在线",
@@ -308,6 +323,9 @@ const I18N = {
     sessionRemove: "移除此会话"
   },
   ja: {
+    sessionCookieUnit: (n) => `${n} Cookie`,
+    sessionCookieOne: (n) => `${n} Cookie`,
+    sessionExpired: "期限切れ",
     code: "JA",
     relayChecking: "確認中…",
     relayOnline: "リレー オンライン",
@@ -371,6 +389,9 @@ const I18N = {
   it: {
     clearConfirm: "Clicca di nuovo per cancellare tutto",
     clearedToast: "Tutte le sessioni cancellate",
+    sessionCookieUnit: (n) => `${n} cookie`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "scaduta",
     code: "IT",
     relayChecking: "Verifica…",
     relayOnline: "Relè Online",
@@ -432,6 +453,9 @@ const I18N = {
   pt: {
     clearConfirm: "Clique novamente para limpar tudo",
     clearedToast: "Todas as sessões apagadas",
+    sessionCookieUnit: (n) => `${n} cookies`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "expirada",
     code: "PT",
     relayChecking: "Verificando…",
     relayOnline: "Relé Online",
@@ -491,6 +515,9 @@ const I18N = {
     sessionRemove: "Remover esta sessão"
   },
   ar: {
+    sessionCookieUnit: (n) => `${n} ملف تعريف ارتباط`,
+    sessionCookieOne: (n) => `${n} ملف تعريف ارتباط`,
+    sessionExpired: "منتهية",
     code: "AR",
     relayChecking: "جاري الفحص…",
     relayOnline: "المرحل متصل",
@@ -554,6 +581,9 @@ const I18N = {
   ru: {
     clearConfirm: "Нажмите ещё раз, чтобы очистить всё",
     clearedToast: "Все сессии удалены",
+    sessionCookieUnit: (n) => `${n} cookie`,
+    sessionCookieOne: (n) => `${n} cookie`,
+    sessionExpired: "истекла",
     code: "RU",
     relayChecking: "Проверка…",
     relayOnline: "Реле онлайн",
@@ -904,13 +934,21 @@ async function fetchSessions() {
 }
 
 function fmtExpiry(ts) {
-  const d = new Date(ts * 1000);
-  const days = Math.floor((ts * 1000 - Date.now()) / 86400000);
-  if (days > 0) return `~${days}d`;
-  const hours = Math.floor((ts * 1000 - Date.now()) / 3600000);
-  if (hours > 0) return `~${hours}h`;
-  return '<1h';
+  // Read the clock ONCE: `Date.now()` called twice in one expression can straddle
+  // a tick and print an hour less than the truth (measured "~3h" for a 3h session).
+  const left = ts * 1000 - Date.now();
+  // Days ROUND UP - a session with 1.5 days left is more usefully "2d" than "1d",
+  // because "1d" reads as if it dies sooner than it does.
+  if (left >= 86400000) return `~${Math.ceil(left / 86400000)}d`;
+  // Hours TRUNCATE - rounding a countdown up promises time that is not there:
+  // 40 minutes left read "~1h". Truncating is the honest direction for a clock
+  // that is running down.
+  if (left >= 3600000) return `~${Math.floor(left / 3600000)}h`;
+  // Under an hour, minutes are the useful unit. The old code clamped everything
+  // below an hour to "<1h", which is true of 40 minutes and useless.
+  return `~${Math.max(1, Math.floor(left / 60000))}m`;
 }
+
 
 function renderSessions(data) {
   const sessions = (data && data.sessions) || [];
@@ -936,9 +974,13 @@ function renderSessions(data) {
     host.textContent = s.host;
     const meta = document.createElement('div');
     meta.className = 'session-meta';
-    meta.textContent = `${s.cookie_count} cookies` +
+    // Both words are translated keys: "cookies" and "expired" were English
+    // literals in a ten-language panel, so a French user read
+    // "1 cookies · expired" - the one line that tells them whether the session
+    // they are relying on is still alive.
+    meta.textContent = t(s.cookie_count === 1 ? 'sessionCookieOne' : 'sessionCookieUnit', s.cookie_count) +
       (s.expires && !s.expired ? ` · ${fmtExpiry(s.expires)}` : '') +
-      (s.expired ? ' · expired' : '');
+      (s.expired ? ` · ${t('sessionExpired')}` : '');
     info.appendChild(host);
     info.appendChild(meta);
 
@@ -1257,6 +1299,17 @@ transferEl.addEventListener('click', async () => {
         throw new Error(t(inScope ? 'errNoCookies' : 'errCookiesOutOfScope'));
       }
     }
+
+    // Forward each cookie's lifetime to the relay. `chrome.cookies` calls the
+    // field `expirationDate`; the relay reads `expires_hint`. Without this
+    // rename the number never left the popup, `/v1/sessions` reported
+    // `expires: null` for every session (measured over 26s of polling), and the
+    // countdown and the expiry warning were unreachable no matter what the
+    // relay did. Only the rename: no cookie VALUE is added or moved.
+    cookies = cookies.map(c => ({
+      ...c,
+      expires_hint: typeof c.expirationDate === 'number' ? c.expirationDate : undefined
+    }));
 
     // 2. Extract localStorage.
     //    Retried once, and its failure is REPORTED instead of swallowed: a
