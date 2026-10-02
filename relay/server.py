@@ -43,6 +43,11 @@ _CDP_TARGET_ID = None
 _CDP_ORIGIN = None
 _DNS_CACHE: dict = {}
 _DNS_CACHE_TTL = 60.0
+# The TTL only decides when an entry is STALE; nothing ever removed it, so the
+# dict grew for the lifetime of the relay - one entry per distinct hostname ever
+# submitted. A single site that mints unique subdomains (asset hosts, tracking
+# domains, cache busters) grows it without bound. Bounded, and pruned on write.
+_DNS_CACHE_MAX = 512
 BLOCKED_IDP_HOSTS = {
     # Actual identity-provider LOGIN endpoints only. Regular sites users log
     # into (github.com, gitlab.com, x.com, ...) are legitimate sync targets —
@@ -298,12 +303,26 @@ def _is_global_hostname(hostname: str) -> bool:
             except ValueError:
                 return False
             if not address.is_global:
-                _DNS_CACHE[hostname] = (now, False)
+                _dns_cache_put(hostname, (now, False))
                 return False
-        _DNS_CACHE[hostname] = (now, True)
+        _dns_cache_put(hostname, (now, True))
         return True
     except socket.gaierror:
         return False
+
+
+def _dns_cache_put(hostname: str, value: tuple) -> None:
+    """Store a DNS verdict, dropping stale entries and capping the size."""
+    now = time.time()
+    for key in [k for k, (at, _v) in _DNS_CACHE.items()
+                if (now - at) >= _DNS_CACHE_TTL]:
+        _DNS_CACHE.pop(key, None)
+    if len(_DNS_CACHE) >= _DNS_CACHE_MAX and hostname not in _DNS_CACHE:
+        # Full: evict the oldest rather than refuse to cache. A stale-free dict
+        # is not worth failing a legitimate origin over.
+        oldest = min(_DNS_CACHE, key=lambda k: _DNS_CACHE[k][0])
+        _DNS_CACHE.pop(oldest, None)
+    _DNS_CACHE[hostname] = value
 
 
 def valid_origin(origin: str) -> bool:

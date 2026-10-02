@@ -1,3 +1,16 @@
+## [0.7.8] - the DNS verdict cache had a TTL but was never pruned
+
+- `_DNS_CACHE` had `_DNS_CACHE_TTL`, but the TTL only decided when an entry was
+  STALE. Nothing ever removed one, so the dict grew for the lifetime of the relay -
+  one entry per distinct hostname ever submitted to the origin check. A single
+  site minting unique subdomains (asset hosts, tracking domains, cache busters)
+  grows it without bound. Writes now go through `_dns_cache_put`, which purges
+  stale entries and caps the dict at 512, evicting the oldest when full.
+- The first version of the test called `_dns_cache_put` directly and stayed green
+  with both production call sites reverted to the raw dict assignment - six
+  decorative tests. Rewritten to drive `valid_origin()`, the function a request
+  actually traverses.
+
 ## [0.7.7] - the undo point could be destroyed before it existed
 
 - `_backup` did `rmtree(backup_root)` BEFORE rebuilding it, so any failure during
