@@ -1,3 +1,22 @@
+## [0.6.1] - /health stops lying about a dead connection
+
+- `CdpTransport` learns when its socket died (OSError, graceful close, or a peer
+  that streams events forever without answering) and reports `alive()`.
+- `_ensure_connection` reopens a transport that proved it is dead. It used to
+  return early on any non-`None` transport, so after a Lightpanda/WSL restart the
+  relay kept a dead socket forever and only an explicit resync recovered. A
+  healthy idle connection is still preserved - Lightpanda scopes its cookie jar
+  per connection, so tearing that down logs the user out of every session.
+- `/health` derives `attached` from the transport instead of a flag never cleared
+  on death, and reports the synced-session count. It answered `200 attached=true`
+  over a connection that could not carry a byte - the same class of lie as
+  v0.5.7's never-ending spinner.
+- `CdpTransport.request` bounds the unsolicited-event skip loop
+  (`MAX_SKIPPED_EVENTS = 2000`) so a page logging hard cannot hold the serving
+  thread until the socket timeout.
+
+Tests: `tests/test_health_truth.py` (9). 147 total, all green.
+
 # Changelog
 
 ## [0.6.0] - 2026-10-02
