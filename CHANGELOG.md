@@ -1,3 +1,25 @@
+## [0.7.12] - a client that never spoke could never be released
+
+- `Handler` had no class-level `timeout`, so `StreamRequestHandler.setup()` left
+  every accepted socket blocking. The `settimeout(10)` inside `do_GET` ran too
+  late: it executed after `handle_one_request` had already read the request line
+  and headers, which is exactly the read a client holds open by sending nothing.
+  Measured: 25 connections that transmitted zero bytes stayed open past 35s
+  while `/health` kept answering 200 - thread and memory exhaustion, not a hang,
+  so nothing ever looked broken.
+- The deadline is per socket operation, NOT a cap on the request's duration.
+  `tests/test_socket_timeout.py` pins both halves: a truncated request is
+  released at the deadline, and a handler that runs 2x past it still receives a
+  complete response. The CDP import path (navigate + 1.5s settle + four
+  injection rounds) legitimately outlives the deadline, and a total-duration cap
+  would have broken it with every unit test still green.
+- New gate check (30th, LIVE): drives a silent socket against the RUNNING relay
+  and reports the measured release time plus `/health` still 200 afterwards.
+- The first version of that test subclassed `Handler` with `timeout = 2` to stay
+  fast, which made it blind to the production constant - sabotaging
+  `Handler.timeout` to 600s left all five tests green. Speed now comes from
+  scaling the wait to the real deadline, never from replacing it.
+
 ## [0.7.11] - a read that a careless writer could still crash
 
 - `list_sessions` snapshotted the sessions dict with `for origin, cookies in

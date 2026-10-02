@@ -1225,6 +1225,14 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "loopback-relay"
     sys_version = ""
 
+    # Read deadline for the WHOLE request, applied by StreamRequestHandler.setup()
+    # before handle_one_request parses anything. The settimeout(10) inside do_GET
+    # was already too late: it ran after the request line and headers had been
+    # read, which is exactly the read a client holds open by sending nothing.
+    # Measured: 25 silent connections stayed open past 35s; /health kept
+    # answering, so this was thread and memory exhaustion rather than a hang.
+    timeout = 15
+
     def log_message(self, _format: str, *_args) -> None:
         return
 

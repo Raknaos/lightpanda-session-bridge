@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -445,6 +446,74 @@ def diagnostic_report_is_origin_only():
     return "ok", "8 URL shapes, no query, no fragment, no value"
 
 
+@check("a silent socket is released at a deadline the relay can still meet")
+def silent_sockets_are_released():
+    """Thread exhaustion, not a hang: 25 connections that sent nothing stayed
+    open past 35s while /health kept answering.
+
+    Measured live against the RUNNING relay, so it reports the deadline the
+    installed code actually enforces - not the one in the repo. The same
+    deadline must be per socket operation, not a cap on the request: the CDP
+    import path (navigate + settle + four injection rounds) legitimately
+    outlives it.
+    """
+    import socket as _socket
+    import urllib.parse as _up
+
+    def _health():
+        with urllib.request.urlopen(RELAY + "/health", timeout=8) as resp:
+            return json.loads(resp.read().decode())
+
+    try:
+        _health()
+    except Exception as err:
+        return "FAIL", "the relay did not answer /health: %s" % type(err).__name__
+    parsed = _up.urlparse(RELAY)
+    try:
+        sock = _socket.create_connection((parsed.hostname, parsed.port or 80),
+                                         timeout=10)
+    except OSError as err:
+        return "FAIL", "cannot reach the relay: %s" % type(err).__name__
+    try:
+        # Headers deliberately truncated: the server blocks mid-request, in the
+        # read that has no deadline.
+        sock.sendall(b"GET /health HTTP/1.1\r\n")
+        sock.settimeout(3)
+        early = b""
+        try:
+            early = sock.recv(1)
+        except _socket.timeout:
+            early = b""  # still open before the deadline: expected
+        if early:
+            return "FAIL", "the relay answered a truncated request"
+        sock.settimeout(45)
+        start = time.time()
+        closed = False
+        while time.time() - start < 40:
+            try:
+                data = sock.recv(4096)
+            except _socket.timeout:
+                continue
+            except OSError:
+                closed = True
+                break
+            if data == b"":
+                closed = True
+                break
+        waited = time.time() - start
+    finally:
+        sock.close()
+    if not closed:
+        return "FAIL", "a silent connection was still open after %ds" % int(waited)
+    # And the relay must still serve real traffic while that happens.
+    try:
+        _health()
+    except Exception as err:
+        return "FAIL", ("the relay stopped answering after a silent socket: %s"
+                        % type(err).__name__)
+    return "ok", "silent socket released in %ds, /health still 200" % int(waited)
+
+
 @check("python files compile")
 def python_compiles():
     bad = []
@@ -827,7 +896,7 @@ LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, id
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible]
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
-        audit_log, double_check_pin, diagnostics_endpoint]
+        audit_log, double_check_pin, diagnostics_endpoint, silent_sockets_are_released]
 
 
 def main():
