@@ -7,7 +7,23 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
-## [0.7.15] - the badge is the first thing read, and the only thing that went stale
+## [0.7.16] - a popup painted one wrong-language frame before any script ran
+
+`#diag-text` shipped `Copier le diagnostic` as its literal. A literal in
+`popup.html` is painted before `popup.js` can translate it, so every English
+install flashed French on every open, then settled correctly a few milliseconds
+later. The product was right and briefly lied about it.
+
+Measured rather than assumed: `scripts/measure_first_paint.py` loads the real
+popup.html in the real Comet twice - once with script execution disabled, which
+is exactly the first frame - and compares six elements. Only `#diag-text` moved,
+so the flash was specific rather than a harness artefact.
+
+New live gate check, proven red on sabotage: `@check` was missing, so the check
+ran without ever recording a result - 17 executed, 16 counted, verdict READY
+while the flash was present.
+
+ - the badge is the first thing read, and the only thing that went stale
 
 `checkRelay()` ran exactly once, in `init()`. The 30s interval refreshed only the
 session counter. So a relay that died after the popup opened - or a Lightpanda

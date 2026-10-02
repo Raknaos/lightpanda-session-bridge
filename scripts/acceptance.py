@@ -1023,10 +1023,33 @@ def installed_popup_translates():
     return "ok", f"{passed.strip()} (installed popup, fr codes resolved)"
 
 
+@check("the popup's first paint is not in the wrong language")
+def first_paint_is_not_the_wrong_language():
+    """A literal in popup.html is painted BEFORE popup.js can translate it.
+
+    Measured in the real Comet, with script execution disabled for the first
+    pass: `Copier le diagnostic` was painted in an English panel, then replaced
+    milliseconds later. Every other element in the control group was identical
+    across both passes, so the flash was specific, not a measurement artefact.
+
+    Reading the repo HTML would not be the same measurement — the installed copy
+    is what a user's browser paints — so this runs the REAL file.
+    """
+    r = subprocess.run([sys.executable, str(REPO / "scripts" / "measure_first_paint.py")],
+                       capture_output=True, text=True, timeout=180)
+    out = (r.stdout or "") + (r.stderr or "")
+    if "SKIP:" in out:
+        return "SKIP", "Comet CDP indisponible - premier rendu non mesurable ici"
+    if r.returncode != 0 or "FLASH" in out:
+        seen = [l.strip() for l in out.splitlines() if "FLASH" in l]
+        return "FAIL", ("litteral peint dans la mauvaise langue: %s" % (seen[0] if seen else "voir la mesure"))[:200]
+    return "ok", next((l for l in out.splitlines() if "flash(s)" in l), "aucun flash mesure")
+
+
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,
         audit_log, double_check_pin, diagnostics_endpoint, silent_sockets_are_released,
-        installed_popup_translates]
+        installed_popup_translates, first_paint_is_not_the_wrong_language]
 
 
 def main():
@@ -1051,6 +1074,17 @@ def main():
 
     failures = [r for r in RESULTS if r[0] == "FAIL"]
     skips = [r for r in RESULTS if r[0] == "SKIP"]
+
+    # A registered check whose decorator is missing runs but never records, so
+    # `todo` and `RESULTS` disagree - and the gate still says READY. Assert the
+    # counts match instead of trusting either number (skill point 13).
+    if len(RESULTS) != len(todo):
+        print("\nFAIL gate integrity - %d checks listed but %d recorded: a check is "
+              "probably registered without @check, so it cannot affect the verdict"
+              % (len(todo), len(RESULTS)))
+        failures.append(("FAIL", "gate integrity",
+                         "%d listed, %d recorded" % (len(todo), len(RESULTS))))
+
     print("\n%d checks: %d ok, %d failed, %d skipped" %
           (len(RESULTS), len(RESULTS) - len(failures) - len(skips), len(failures), len(skips)))
     for _, name, detail in failures:
