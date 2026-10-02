@@ -1,3 +1,28 @@
+## [0.7.6] - the document-start restore scripts stacked, and "Tout retirer" left half the session
+
+- Every import registered a `Page.addScriptToEvaluateOnNewDocument` holding a full
+  copy of the localStorage snapshot, and nothing ever called
+  `Page.removeScriptToEvaluateOnNewDocument`. The scripts therefore stacked for
+  the lifetime of the CDP connection - measured: 3 imports, 3 live scripts - each
+  one re-writing the whole snapshot on every future page load. The relay now keeps
+  the identifier of the live script and retires the previous one on each import.
+- `clear_sessions` deleted the cookies by name but left the restore script
+  registered, so every subsequent page load put the entire localStorage back:
+  "Tout retirer" was a half-wipe, and a partial wipe is indistinguishable from a
+  flaky sync. It now retires the script as well.
+- `_backup()` writes `meta.json` INTO the backup directory and `rollback_update()`
+  mirrors that directory into the live extension, but `_mirror` exempted only
+  `.build-info.json` - so a rollback deposited a stray config file in the shipped
+  tree, which the next update's prune then deleted as "not in the source tree".
+  Both bookkeeping files now come from one `MIRROR_KEEP` constant, and the
+  filename is no longer hard-coded at its two use sites.
+
+The identifier assignment was initially missing its `global`, which wrote a local
+and left the module-level slot empty - caught by the probe showing zero removals
+after the first fix, not by the suite.
+
+203 tests green, acceptance gate 28/28.
+
 ## [0.7.5] - the CDP proxy was handing out cookie values over HTTP
 
 - `POST /v1/cdp {"method": "Network.getCookies"}` answered 200 with the whole

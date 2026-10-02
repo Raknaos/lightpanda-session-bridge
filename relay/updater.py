@@ -52,6 +52,14 @@ ALLOWED_HOSTS = {
 }
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 BUILD_INFO = ".build-info.json"
+# Written by _backup() INTO the backup directory. rollback_update() mirrors
+# that directory into the live extension, so without an exemption the live
+# unpacked tree ends up carrying a stray config file - and the next update's
+# prune pass then deletes it as "not in the source tree".
+BACKUP_META = "meta.json"
+# Files that live in a managed directory but are never part of the shipped
+# source tree. Kept during a prune so the relay's own bookkeeping survives.
+MIRROR_KEEP = (BUILD_INFO, BACKUP_META)
 BACKUP_DIRNAME = "extension-backup"
 AUDIT_FILE = "update.log"
 # 5 minutes, not 60 seconds: every check is up to three anonymous API calls and
@@ -209,7 +217,7 @@ def audit(record: dict) -> None:
 
 
 def backup_meta_path() -> str:
-    return os.path.join(config_dir(), BACKUP_DIRNAME, "meta.json")
+    return os.path.join(config_dir(), BACKUP_DIRNAME, BACKUP_META)
 
 
 def read_backup_meta() -> dict:
@@ -599,7 +607,7 @@ def _mirror(src_root: str, dst_root: str) -> tuple:
         for name in files:
             absolute = os.path.join(folder, name)
             rel = os.path.relpath(absolute, src_root).replace(os.sep, "/")
-            if rel == BUILD_INFO or rel.startswith("__pycache__/"):
+            if rel in MIRROR_KEEP or rel.startswith("__pycache__/"):
                 continue
             src_files[rel] = absolute
 
@@ -616,7 +624,7 @@ def _mirror(src_root: str, dst_root: str) -> tuple:
         for name in files:
             absolute = os.path.join(folder, name)
             rel = os.path.relpath(absolute, dst_root).replace(os.sep, "/")
-            if rel in src_files or rel == BUILD_INFO or rel.startswith("__pycache__/"):
+            if rel in src_files or rel in MIRROR_KEEP or rel.startswith("__pycache__/"):
                 continue
             os.unlink(absolute)
             remove.append(rel)
@@ -631,7 +639,7 @@ def _backup(ext_dir: str) -> str:
     info = installed_info(ext_dir)
     meta = {key: info.get(key) for key in ("version", "commit", "tag", "source")}
     meta["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    with open(os.path.join(backup_root, "meta.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(backup_root, BACKUP_META), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
     return backup_root
 

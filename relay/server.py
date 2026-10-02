@@ -630,6 +630,7 @@ def _register_storage_restore(storage: dict) -> bool:
     document-start restore is the durable fix: the snapshot is re-applied on
     each new document instead of relying on one lucky injection.
     """
+    global _STORAGE_RESTORE_ID
     entries = _storage_entries(storage)
     if not entries:
         return False
@@ -637,19 +638,55 @@ def _register_storage_restore(storage: dict) -> bool:
               ";for(var k in d){try{localStorage.setItem(k,d[k]);}catch(e){}}"
               "}catch(e){}})();")
     try:
-        _CDP_TRANSPORT.request(
+        added = _CDP_TRANSPORT.request(
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": source},
             session_id=_CDP_SESSION_ID,
         )
-        return True
     except Exception:
         return False
+    # Remember the identifier so the NEXT registration can retire the previous
+    # one. Nothing ever called Page.removeScriptToEvaluateOnNewDocument, so every
+    # import stacked another document-start script on the same target: each one
+    # re-writes the whole snapshot on every future page load, and they accumulate
+    # for the lifetime of the CDP session (measured: 3 imports -> 3 live scripts).
+    # Worse, after "Tout retirer" the cookies are gone but the scripts survive and
+    # put the localStorage back on the next navigation.
+    identifier = str((added or {}).get("identifier") or "")
+    if identifier:
+        _drop_storage_restore()
+        _STORAGE_RESTORE_ID = identifier
+    return True
+
+
+def _drop_storage_restore() -> int:
+    """Remove the document-start restore registered by the last import."""
+    global _STORAGE_RESTORE_ID
+    identifier = _STORAGE_RESTORE_ID
+    if not identifier:
+        return 0
+    _STORAGE_RESTORE_ID = ""
+    try:
+        _CDP_TRANSPORT.request(
+            "Page.removeScriptToEvaluateOnNewDocument",
+            {"identifier": identifier},
+            session_id=_CDP_SESSION_ID,
+        )
+        return 1
+    except Exception:
+        # A stale identifier (target recreated, session resynced) is not an
+        # error worth surfacing: the next registration supersedes it anyway.
+        return 0
 
 
 # Delay allowed for the page context to settle after a navigation before
 # localStorage is written (tests set it to 0).
 _NAV_SETTLE_SECONDS = 1.5
+
+# Identifier of the live document-start restore script, so a new
+# import (or a clear) can retire the previous one instead of stacking
+# another copy on the same target.
+_STORAGE_RESTORE_ID = ""
 
 # Keys the snapshot still expected / the page still lacked after the last
 # injection. NAMES only - values are session secrets and are never kept here.
@@ -1092,6 +1129,15 @@ def clear_sessions(origin: str | None = None) -> int:
         # not that it comes back at the next restart.
         if globals().get("_LAST_SESSION") is None:
             _persist_session(None)
+        # Retire the document-start restore script as well. Without this the
+        # cookies really were deleted (each one by name, above) but every future
+        # page load re-applied the whole localStorage snapshot from the script
+        # that was registered at import time - so "Tout retirer" left half the
+        # session behind, and a partial wipe looks like a flaky sync.
+        try:
+            _drop_storage_restore()
+        except Exception:
+            pass
         return cleared
 
 
