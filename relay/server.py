@@ -1404,6 +1404,13 @@ def main() -> int:
                         help="print the GitHub update status as JSON and exit")
     parser.add_argument("--apply-update", action="store_true",
                         help="install the newest release/commit into the extension dir")
+    parser.add_argument("--channel", choices=("auto", "release", "main"),
+                        default="auto",
+                        help="with --apply-update: which source to install from. "
+                             "'auto' follows what check_update recommends; "
+                             "'release' installs the tagged zip with its sha256 "
+                             "sidecar enforced, 'main' the latest commit tarball "
+                             "(no sidecar exists for it)")
     parser.add_argument("--rollback-update", action="store_true",
                         help="restore the tree saved by the previous update")
     args = parser.parse_args()
@@ -1413,7 +1420,8 @@ def main() -> int:
         print(json.dumps(updater.check_update(force=True), indent=2, ensure_ascii=True))
         return 0
     if args.apply_update:
-        print(json.dumps(updater.apply_update(), indent=2, ensure_ascii=True))
+        print(json.dumps(updater.apply_update(source=args.channel),
+                         indent=2, ensure_ascii=True))
         return 0
     if args.rollback_update:
         print(json.dumps(updater.rollback_update(), indent=2, ensure_ascii=True))
