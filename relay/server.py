@@ -32,6 +32,10 @@ HOST = "127.0.0.1"
 PORT = 8765
 CDP = "ws://127.0.0.1:9222/"
 CDP_LOCK = threading.RLock()
+# Guards the persisted-session bookkeeping (_PERSISTED_LOADED/_APPLIED/LAST_SESSION),
+# NOT the socket. CDP_LOCK protects the CDP connection; it says nothing about
+# whether the "already restored?" question has been answered yet.
+STATE_LOCK = threading.RLock()
 _CDP_SOCKET = None
 _CDP_TRANSPORT = None
 _CDP_SESSION_ID = None
@@ -857,6 +861,9 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
 
 _PERSISTED_LOADED = False
 _PERSISTED_APPLIED = False
+# A restore is claimed, applied, then resolved. In-flight is what makes the
+# claim exclusive: without it, two HTTP threads both pass the "applied?" test.
+_PERSISTED_INFLIGHT = False
 
 
 def _restore_persisted_session() -> bool:
@@ -868,25 +875,50 @@ def _restore_persisted_session() -> bool:
     a "healthy" relay (attached: false) with an empty cookie jar, and agent
     calls silently ran unauthenticated - the exact failure users saw as
     "the session disappeared between two runs".
+
+    The whole decision runs under STATE_LOCK, not just the CDP call: this is
+    reached from the proxy AND from the import handler, i.e. two HTTP threads.
+    Checking `_PERSISTED_APPLIED` and then setting it were separate steps outside
+    any lock, so both threads applied the same session and the cookie jar got
+    every cookie set twice. CDP_LOCK alone was not enough - it guards the socket,
+    not this flag.
     """
-    global _LAST_SESSION, _PERSISTED_LOADED, _PERSISTED_APPLIED
-    if not _PERSISTED_LOADED:
-        _PERSISTED_LOADED = True
-        if not _LAST_SESSION:
-            state = _load_persisted_session()
-            if state:
-                _LAST_SESSION = state
-                _SYNCED_SESSIONS.setdefault(state["origin"], state["cookies"])
-    if _PERSISTED_APPLIED or not _LAST_SESSION:
-        return False
+    global _LAST_SESSION, _PERSISTED_LOADED, _PERSISTED_APPLIED, _PERSISTED_INFLIGHT
+    with STATE_LOCK:
+        if not _PERSISTED_LOADED:
+            _PERSISTED_LOADED = True
+            if not _LAST_SESSION:
+                state = _load_persisted_session()
+                if state:
+                    _LAST_SESSION = state
+                    _SYNCED_SESSIONS.setdefault(state["origin"], state["cookies"])
+        if _PERSISTED_APPLIED or _PERSISTED_INFLIGHT or not _LAST_SESSION:
+            return False
+        # Claim it HERE, under the lock. Reading the flag and setting it are one
+        # atomic step; setting it only after the CDP call (which happens outside
+        # this lock, because it can block for seconds) left a window where the
+        # second thread saw "not applied" and applied the same session again.
+        _PERSISTED_INFLIGHT = True
+        origin = _LAST_SESSION["origin"]
+        cookies = list(_LAST_SESSION["cookies"])
+        storage = dict(_LAST_SESSION.get("storage") or {})
     try:
         with CDP_LOCK:
-            _apply_session(_LAST_SESSION["origin"], _LAST_SESSION["cookies"],
-                           _LAST_SESSION.get("storage"))
-        _PERSISTED_APPLIED = True
-        return True
+            _apply_session(origin, cookies, storage)
     except Exception:
-        return False
+        # The claim is released so a later call retries. The exception is NOT
+        # swallowed: the previous `except Exception: return False` made a
+        # structurally broken restore look exactly like "Lightpanda is down,
+        # try again later", and the relay went on claiming a session it had
+        # never injected. Transient failures raise the retryable types the
+        # callers already handle; a genuinely broken one is now visible.
+        with STATE_LOCK:
+            _PERSISTED_INFLIGHT = False
+        raise
+    with STATE_LOCK:
+        _PERSISTED_APPLIED = True
+        _PERSISTED_INFLIGHT = False
+    return True
 
 
 def proxy_cdp(method: str, params: dict | None = None) -> dict:

@@ -1,3 +1,30 @@
+## [0.7.3] - the restored session can no longer be injected twice
+
+- `_restore_persisted_session()` is reached from the CDP proxy AND from the
+  session-import handler, i.e. two ThreadingHTTPServer threads. It read
+  `_PERSISTED_APPLIED`, then released every lock, then made the CDP call, then
+  set the flag. Both threads could pass the check in between, and both called
+  `_apply_session` - and `_apply_session` SETS cookies rather than replacing
+  them, so Lightpanda's jar was populated twice. The `StateLock` claim is now
+  taken under the lock before the call, released on success and on failure.
+- `CDP_LOCK` was never the right lock for this: it guards the socket, not the
+  "has this already been done?" question.
+- The `except Exception: return False` is gone. It made a structurally broken
+  restore indistinguishable from "Lightpanda is down, retry later", and the
+  relay went on reporting a session it had never injected. Transient failures
+  still surface as the retryable types both callers already handle; the claim is
+  released either way, so a later call retries.
+- `_LAST_SESSION` is now snapshotted (copied) before use, so a caller cannot
+  change the relay's own copy mid-apply.
+- `tests/test_restore_race.py`: two threads, the first held inside the "CDP
+  call". Proven red both ways - removing the claim gives `_apply_session ran 2
+  times for ONE restored session`, and restoring the old `except` gives
+  `ValueError not raised`.
+
+169 tests green, acceptance gate 28/28, E2E verified after a relay restart
+(import 200, `attached: true`, `cdp_attached: true`, no cookie values in the
+report).
+
 ## [0.7.2] - the archive guard is now proven, not assumed
 
 - `tests/test_archive_windows_paths.py`: the traversal tests only ever asked
