@@ -9,6 +9,16 @@
   and both its unit tests and the acceptance gate plant credentials to prove it.
 - `GET /v1/diagnostics` returns the same report as json + text.
 
+### Fixed (v0.6.0, second pass)
+- `/v1/diagnostics` answered 500 `ModuleNotFoundError` on the live relay while
+  every test was green: `relay/` is not a package, so the running process
+  imports its neighbours flat (`import updater`) and the dotted
+  `from relay import diagnostics` did not resolve. Both spellings now work.
+- Importing flat and then dotted loaded the file twice under two names, so the
+  report read a second, empty copy of the relay module and answered "0 cookies"
+  while the relay held 12. `_sibling()` now reuses the instance already in
+  `sys.modules`. Covered by three new tests, verified red.
+
 ### Fixed
 - **The release archive is now reproducible.** It was rebuilt from the same tree
   into a different sha256, because `ZipFile.write` stamped the build time and OS

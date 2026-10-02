@@ -7,6 +7,7 @@ and then searches the whole rendered report for it.
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import unittest
 
@@ -92,6 +93,41 @@ class ReportIsSanitized(unittest.TestCase):
             self.assertNotIn(FAKE_COOKIE, json.dumps(report))
         finally:
             relay._CDP_TRANSPORT, relay._CDP_SESSION_ID, relay._LAST_SESSION = saved
+
+
+class ImportContext(unittest.TestCase):
+    """The relay is not a package. `relay/server.py` runs with `relay/` as its
+    import root (flat `import updater`), while the test suite imports the
+    package from the repo root (`from relay import updater`). A module reachable
+    only one way passes every unit test and 500s in the live process - which is
+    exactly what happened to /v1/diagnostics: `from relay import diagnostics`
+    raised ModuleNotFoundError on the running relay while 133 tests were green.
+    """
+
+    def test_works_from_the_repo_root(self):
+        r = subprocess.run([sys.executable, "-c",
+                            "import sys; sys.path.insert(0, %r);\n"
+                            "from relay import diagnostics;\n"
+                            "print(diagnostics.collect()['schema'])" % str(ROOT)],
+                           cwd=str(ROOT), capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "1")
+
+    def test_works_from_inside_the_relay_directory(self):
+        """The live process's own cwd and import root."""
+        r = subprocess.run([sys.executable, "-c",
+                            "import diagnostics;\n"
+                            "print(diagnostics.collect()['schema'])"],
+                           cwd=str(ROOT / "relay"), capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "1")
+
+    def test_sibling_import_returns_the_module_not_the_package(self):
+        """__import__("updater") returns the TOP package when relay is a
+        package, so updater.extension_dir raised AttributeError."""
+        mod = diagnostics._sibling("updater")
+        self.assertTrue(hasattr(mod, "extension_dir"),
+                        "_sibling returned %r, not the updater module" % (mod,))
 
 
 class Fingerprint(unittest.TestCase):

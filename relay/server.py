@@ -1041,7 +1041,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(403, {"ok": False, "error": "origin refused"})
                 return
             try:
-                from relay import diagnostics
+                # `import diagnostics`, not `from relay import diagnostics`:
+                # the relay is NOT a package (no __init__.py) and it runs with
+                # relay/ as its import root, so the dotted form raised
+                # ModuleNotFoundError in the live process while every test
+                # passed - the tests import the package from the repo root.
+                # Same convention as `import updater` above.
+                import diagnostics
                 report = diagnostics.collect()
                 self.send_json(200, {"ok": True, "report": report,
                                      "text": diagnostics.to_text(report)})

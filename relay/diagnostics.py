@@ -158,11 +158,41 @@ def _safe(fn, default=None):
 # the report
 # --------------------------------------------------------------------------
 
+def _sibling(name: str):
+    """Return the ALREADY-IMPORTED instance of a module that sits next to us.
+
+    Two traps, both measured here:
+
+    1. ``relay/`` is not a package: the live process runs ``relay/server.py``
+       with ``relay/`` as its import root (flat ``import updater``) while the
+       tests import the package from the repo root (``from relay import
+       updater``). Both spellings must work, from either direction.
+    2. They must resolve to the SAME module object. Importing flat first and
+       dotted second loads the file twice under two names: ``sys.modules`` then
+       holds a ``server`` and a ``relay.server`` with independent globals. A
+       report built from the wrong one reads empty state and answers "0 cookies"
+       while the live relay holds 12.
+
+    So: look in ``sys.modules`` under both names and reuse whichever is already
+    loaded; only fall back to importing, preferring the dotted name when the
+    caller already lives in the package.
+    """
+    dotted = "relay." + name
+    existing = sys.modules.get(dotted) or sys.modules.get(name)
+    if existing is not None:
+        return existing
+    import importlib
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        return importlib.import_module(dotted)
+
+
 def collect() -> dict:
     """Build the report. Public entry point, and the only thing an endpoint
     may return."""
-    import relay.server as relay
-    import relay.updater as updater
+    updater = _sibling("updater")
+    relay = _sibling("server")
 
     ext_dir = _safe(updater.extension_dir, "") or ""
     state_path = _safe(getattr(updater, "session_state_path", None), None)
@@ -197,13 +227,11 @@ def collect() -> dict:
 
 
 def _deployed_version() -> str:
-    import relay.updater as updater
-    return str(updater.check_update().get("current_version", "unknown"))
+    return str(_sibling("updater").check_update().get("current_version", "unknown"))
 
 
 def _deployed_commit() -> str:
-    import relay.updater as updater
-    return str(updater.check_update().get("current_commit", "unknown"))[:12]
+    return str(_sibling("updater").check_update().get("current_commit", "unknown"))[:12]
 
 
 def _state(relay, updater) -> dict:
