@@ -48,38 +48,161 @@ def _sensitive_key(key: str) -> bool:
     return any(needle in low for needle in _SECRET_KEYS)
 
 
-def _looks_sensitive(text: str) -> bool:
-    """A full URL, or a high-entropy credential blob, is never echoed back.
+# --- what counts as a credential, and what provably cannot ------------------
+#
+# Measured 0.7.32, not assumed. Three candidate criteria were tried and two were
+# MEASURED INSUFFICIENT before this one:
+#
+#   * entropy - an all-lowercase passphrase scores 3.36 bits/char and the
+#     product name `lightpanda-session-bridge` scores 3.78. Any threshold that
+#     catches the secret deletes the name, so entropy cannot separate them.
+#   * "uppercase AND lowercase AND digit" - that CONJUNCTION is what the old
+#     code required, and it let five real shapes through: an all-lowercase
+#     passphrase, a lowercase+digit one, a 16-char secret under the old 20-char
+#     floor, an 8-char one, and an AWS key id (upper + digit, no lowercase).
+#   * "contains a non-alphanumeric character" - the report's own sentence has
+#     ten of them and the passphrase has none, so the test pointed backwards.
+#
+# What is left is a PREFIX list (recognisable regardless of alphabet) plus an
+# alphabet DISJUNCTION (two of three classes, or all three) with a length floor,
+# minus the shapes the report is REQUIRED to carry (point 16: over-redaction is
+# a defect with the same severity as a leak).
+#
+# DECLARED NOT CATCHABLE, with the measurement that proves it: a secret made of
+# one alphabet class only (all lowercase letters, no digit, no capital) is
+# character-for-character the same shape as a hyphenated product name. No
+# function of the string can separate them, so this class is documented rather
+# than "fixed" - a rule that caught it would blank the report's own product
+# name on every single run. `test_scrubber_shapes.py` asserts BOTH directions,
+# so the declaration cannot quietly widen into a fiction.
+_CREDENTIAL_PREFIXES = (
+    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_",
+    "AKIA", "ASIA", "AIza", "ya29.", "sk-", "sk_", "xoxb-", "xoxp-",
+    "glpat-", "npm_", "dop_v1_", "hf_", "sk-ant-", "SG.",
+    "-----BEGIN", "eyJ",  # JWT, and any base64-encoded JSON object
+)
+
+# Length floors, per alphabet class, each measured against the shortest BENIGN
+# value that could reach it.
+#   * 3 classes (upper + lower + digit) are distinctive at 7 characters - a
+#     3-class blob of 7 was found by search, and the shortest benign 3-class
+#     value in the report does not exist, so nothing is lost by catching it.
+#   * 2 classes need 16: the benign 2-class values are `e575a99` (7, but a hex
+#     sha, exempted by length below) and the 40-char commit (exempted by the
+#     same rule). Measured, not guessed - at 8 the rule would eat both.
+_MIN_TWO_CLASSES = 16   # 2 of 3 classes: needs real length to be credible
+_MIN_THREE_CLASSES = 7  # all 3 classes: distinctive this short
+
+# Punctuation stripped from a word before deciding whether the WORD is a blob.
+# A literal, not `string.punctuation`: the relay module imports no `string`, and
+# adding an import for one call would be a dependency the product does not need.
+_WORD_PUNCTUATION = ".,;:!?'\"()[]{}<>"
+
+# A pure-hex string of these lengths is a git sha. `04fe08e1...` is 40, `e575a99`
+# is 7. Matching a LENGTH rather than a prefix is what keeps the commit intact.
+_HEX_SHA_LENGTHS = (7, 8, 40)
+
+
+def _is_hex_sha(text: str) -> bool:
+    low = text.lower()
+    return len(low) in _HEX_SHA_LENGTHS and all(c in "0123456789abcdef" for c in low)
+
+
+def _looks_sensitive_blob(text: str) -> bool:
+    """A full URL, a known credential prefix, or a mixed-alphabet blob.
 
     Deliberately NOT "long string": ``lightpanda-session-bridge``, a git SHA
-    and an ISO timestamp are all long, non-secret strings. What separates a
-    cookie value from metadata is entropy, not length.
+    and an ISO timestamp are all long, non-secret strings, and a rule that
+    blanked them removed the report's own payload.
 
-    Values this module (or the audit writer) minted are exempt, checked before
-    the entropy rules:
+    Values this module (or the audit writer) minted are exempt, checked FIRST:
       * file fingerprints - the report's proof that the deployed extension is
         the repo's;
       * ISO-8601 timestamps - ``2026-09-14T18:15:40+0200`` is uppercase + digits
         and was being blanked, which silently removed WHEN each install
         happened, i.e. the ordering a support conversation needs.
+
+    A value containing a SPACE is a sentence, not a blob: the report exists to
+    carry sentences, and point 59 requires "main moved on, but the deployed tree
+    is byte-identical" to reach the reader verbatim. A value containing a PATH
+    separator is a locator (a route, a host), and is kept for the same reason.
     """
+    if not isinstance(text, str) or not text:
+        return False
     if text.startswith(("http://", "https://", "ws://", "wss://")):
         return True
-    if len(text) < 20:
-        return False
-    if "sha256:" in text:
+    if text.startswith(_CREDENTIAL_PREFIXES):
+        return True
+    if "sha256:" in text or _is_hex_sha(text):
         return False
     if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", text):
         return False
-    has_upper = any(c.isupper() for c in text)
-    has_lower = any(c.islower() for c in text)
-    has_digit = any(c.isdigit() for c in text)
-    if has_upper and has_lower and has_digit:
+    if "/" in text:
+        return False  # a locator (a route, a host): kept, it is the report's job
+    # A SENTENCE is kept, but not blindly: measured 0.7.32, "keeping anything
+    # with a space in it" let `refused: Authorization Bearer ghp_A1...Q7r8`
+    # through whole - the 0.7.20 regression, reintroduced by the space rule.
+    # A sentence is scrubbed WORD BY WORD, so the token disappears and the
+    # surrounding prose still reaches the reader.
+    if " " in text:
+        return _sentence_has_a_secret(text)
+    classes = (any(c.isupper() for c in text),
+               any(c.islower() for c in text),
+               any(c.isdigit() for c in text))
+    if sum(classes) == 3 and len(text) >= _MIN_THREE_CLASSES:
         return True
-    # base64-ish padding on a string that is not a plain identifier
-    if any(c in "+/=~%@" for c in text) and not text.isidentifier():
+    if sum(classes) == 2 and len(text) >= _MIN_TWO_CLASSES:
         return True
     return False
+
+
+def _sentence_has_a_secret(text: str) -> bool:
+    """True when one WORD of a sentence is itself a credential blob.
+
+    The sentence is never blanked wholesale - the report exists to carry prose,
+    and point 59 requires a note like "main moved on, but the deployed tree is
+    byte-identical" to reach the reader verbatim - so the DECISION is taken per
+    word and `scrub_text()` replaces only the offending word.
+
+    Measured 0.7.32 against three notes, both directions in one table:
+      * "refused: Authorization Bearer ghp_A1...Q7r8" -> word redacted, prose kept
+      * "main moved on, but the deployed tree is byte-identical" -> untouched
+      * "Applied update 0.7.31" -> untouched
+    """
+    for word in text.split():
+        stripped = word.strip(_WORD_PUNCTUATION)
+        if stripped and _looks_sensitive_blob(stripped):
+            return True
+    return False
+
+
+def scrub_text(text: str) -> str:
+    """Redact only the credential WORDS of a sentence, keeping its prose.
+
+    This is the fix for the space rule: `to_text()` renders the report line by
+    line, and a line like `update_note = refused: Authorization Bearer ghp_...`
+    is a sentence. Blanking the whole line would satisfy the leak assertion and
+    destroy the report's only explanation of WHY the update was refused, so the
+    credential is masked in place and the sentence around it survives.
+    """
+    out = []
+    for word in text.split(" "):
+        stripped = word.strip(_WORD_PUNCTUATION)
+        if stripped and _looks_sensitive_blob(stripped):
+            out.append(REDACTED)
+        else:
+            out.append(word)
+    return " ".join(out)
+
+
+def _looks_sensitive(text: str) -> bool:
+    """Is this value secret? Entry point for `scrub()` and for the suites.
+
+    A value is either a BLOB (decide here) or a SENTENCE that hides one
+    (decided word by word, above). Callers that must PRESERVE prose should use
+    `scrub_text()` rather than acting on this boolean.
+    """
+    return _looks_sensitive_blob(text)
 
 
 def scrub(value: Any) -> Any:
@@ -93,7 +216,17 @@ def scrub(value: Any) -> Any:
     are chosen by us and are safe by construction.
     """
     if isinstance(value, str):
-        return REDACTED if _looks_sensitive(value) else value
+        # A SENTENCE is decided by scrub_text, which masks the credential WORDS
+        # and keeps the prose. Deciding it here would replace the whole note,
+        # destroying the report's only explanation of WHY the update was refused
+        # - measured 0.7.32, and the difference between "the token is hidden" and
+        # "the reader learns nothing". Checked FIRST, because `_looks_sensitive_blob`
+        # delegates to `_sentence_has_a_secret` and would answer True.
+        if " " in value:
+            return scrub_text(value)
+        if _looks_sensitive_blob(value):
+            return REDACTED
+        return value
     if isinstance(value, dict):
         return {str(k): scrub(v) for k, v in value.items()
                 if not _sensitive_key(str(k))}

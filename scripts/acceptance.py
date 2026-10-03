@@ -1455,6 +1455,71 @@ def clear_button_never_keeps_an_armed_confirmation():
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
 
+@check("a credential is redacted whatever its alphabet, and prose survives")
+def scrubber_catches_any_alphabet():
+    """The scrubber's own rule, measured in 0.7.32 against its own limits.
+
+    `_looks_sensitive` required an uppercase AND a lowercase AND a digit in the
+    SAME string, so five credential shapes passed it untouched: an all-lowercase
+    passphrase, a lowercase+digit one, a 16-char secret under the old 20-char
+    floor, an 8-char one, and an AWS key id (upper + digit, no lowercase).
+
+    Two candidate criteria were tried and MEASURED INSUFFICIENT before this one,
+    which is why the rule is not "entropy" and not "three classes":
+      * entropy - an all-lowercase passphrase scores 3.36 bits/char and the
+        product name 3.78, so any threshold catching the secret deletes the name;
+      * "contains a non-alphanumeric character" - the report's own sentence has
+        ten of them and the passphrase none, so the test pointed backwards.
+    The rule is now a PREFIX list plus an alphabet DISJUNCTION with two length
+    floors, each measured against the shortest benign value it could reach.
+
+    DECLARED UNCATCHABLE, in the source and in the suite: a blob of ONE alphabet
+    class is character-for-character the same shape as a hyphenated product name,
+    so no function of the string separates them. The suite asserts both sides of
+    that pair agree, which is what keeps the declaration a measurement.
+
+    Over-redaction is a defect of the same severity as a leak (point 16), so the
+    suite runs both directions: 11 credential shapes must be redacted, 10 benign
+    values must survive - including a report SENTENCE and a route path.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_scrubber.py")],
+                       cwd=str(REPO), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=1200)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    if "HARNESS" in out:
+        return "FAIL", "scrubber proof refused to run: " + next(
+            (l.strip() for l in lines if "HARNESS" in l), "?")
+    m = re.search(r"(\d+) named red, (\d+) unnamed, (\d+) invalid", out)
+    if not m:
+        return "FAIL", ("no tally from the scrubber proof - the harness may have "
+                        "failed: %s" % (lines[-1:] or ["no output"]))
+    named, unnamed, invalid = (int(x) for x in m.groups())
+    if unnamed or invalid:
+        return "FAIL", ("%d named red, %d UNNAMED, %d invalid - an unnamed red or a "
+                        "PATCH-MISS means the proof did not run"
+                        % (named, unnamed, invalid))
+    if "PROOF-RED REFUSE" in out:
+        return "FAIL", "the proof refused: %d/%d named red" % (named, named + unnamed)
+    r2 = subprocess.run([str(py), str(REPO / "scripts" / "test_scrubber_shapes.py")],
+                        cwd=str(REPO), capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=600)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        bad = next((l.strip() for l in lines2
+                    if l.strip().startswith(("LEAK", "ERASED", "FAIL"))), "?")
+        return "FAIL", bad[:88]
+    ok_lines = sum(1 for l in lines2 if l.strip().startswith("ok"))
+    if not ok_lines:
+        return "FAIL", ("the scrubber suite printed no ok row: %s"
+                        % (lines2[-1:] or ["no output"]))
+    return "ok", ("%d/%d named red; %d rows green covering 11 credential shapes, "
+                  "10 benign values and a credential inside a sentence"
+                  % (named, named + unnamed, ok_lines))
+
 
 @check("no rendered value outlives the state that set it")
 def no_value_outlives_its_state():
@@ -1712,6 +1777,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          every_state_owns_the_button_wording,
          clear_button_never_keeps_an_armed_confirmation,
          no_value_outlives_its_state,
+         scrubber_catches_any_alphabet,
          card_names_the_installed_version_on_the_first_frame,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]

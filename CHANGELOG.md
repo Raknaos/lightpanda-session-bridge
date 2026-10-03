@@ -1,3 +1,40 @@
+## [0.7.32] - 2026-10-03
+
+### Fixed
+- The diagnostic scrubber required an uppercase AND a lowercase AND a digit in
+  the same string, so five credential shapes passed it untouched: an
+  all-lowercase passphrase, a lowercase+digit one, a 16-char secret under the
+  old 20-char floor, an 8-char one, and an AWS access key id. The rule is now a
+  list of known credential prefixes plus an alphabet DISJUNCTION with two length
+  floors, each measured against the shortest benign value that could reach it.
+- Reverting the alphabet test to a conjunction reintroduced the 0.7.20 leak:
+  keeping any value containing a space let `Bearer ghp_...` reach the report
+  whole. A sentence is now scrubbed WORD BY WORD - the credential word is masked
+  and the prose around it survives, so the report still says WHY.
+
+### Measured, and why the rule is not entropy
+- An all-lowercase passphrase scores 3.36 bits/char and the product name 3.78, so
+  every entropy threshold that catches the secret deletes the report's subject.
+- "Contains a non-alphanumeric character" pointed backwards: the report's own
+  sentence has ten, the passphrase none. Both candidates were rejected on
+  measurement, not preference.
+- DECLARED UNCATCHABLE, in the source and asserted by the suite: a blob of ONE
+  alphabet class is character-for-character the same shape as a hyphenated
+  product name. The suite asserts both sides of that pair still agree, so the
+  declaration cannot widen into a fiction.
+
+### Verification
+- `scripts/test_scrubber_shapes.py` - 28 rows green, both directions: 11
+  credential shapes redacted, 10 benign values survive (sha, fingerprint,
+  timestamp, product name, cookie count, host, commit, route path, a report
+  sentence, an update note), plus a credential hiding inside a note.
+- `scripts/proof_red_scrubber.py` - 3/3 named red, 0 unnamed, 0 invalid,
+  restored byte for byte, idempotent. Two of the three sabotages were dead on
+  the first attempt and were fixed toward a defect the audit can see.
+- Gate check `a credential is redacted whatever its alphabet, and prose
+  survives`, registered in LOCAL with its decorator; sabotaging the prefix rule
+  turns it red and the gate reports NOT READY.
+
 ## [0.7.31] - 2026-10-03
 
 ### Fixed
