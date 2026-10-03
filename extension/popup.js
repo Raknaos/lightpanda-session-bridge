@@ -1299,6 +1299,13 @@ function renderUpdateCard() {
   // only ever refuse it deliberately: the same rule as seeding `shipped_tree` in
   // the relay's result dict (points 64/66), applied to the DOM.
   updateMeta.title = '';
+  // Same rule for the button's own wording, measured 0.7.28: it was written ONLY
+  // in the `update_available` branch, so the three other exits left it holding
+  // the version a previous render offered - "Installer v0.7.28" - on a button
+  // they hide. A branch update has its OWN wording (`updateBtnMain`, which names
+  // no version at all), and it inherits the release wording when it arrives
+  // second. Seed it here so the wording is owned by the state, never inherited.
+  updateBtn.textContent = '';
   const deployed = chrome.runtime.getManifest().version;
   updateVersion.textContent = 'v' + deployed;
 

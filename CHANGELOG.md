@@ -1,3 +1,38 @@
+## [0.7.28] - chaque etat possede le libelle du bouton
+
+Sorti de la regle que 0.7.27 vient d'etablir - un libelle est une propriete d'un
+ETAT. `updateBtn.textContent` n'etait ecrit que dans la branche
+`update_available` ; les trois autres sorties - relais muet, GitHub en erreur,
+rien a installer - laissaient le bouton porter la version qu'un rendu precedent
+proposait.
+
+Le cas reellement visible n'est pas « relais muet », ou le bouton est masque :
+c'est RELEASE PUIS BRANCHE. Une mise a jour de branche a son propre libelle,
+qui ne nomme AUCUNE version, et il heritait de celui d'une release - donc
+« Installer v0.7.28 » sur une mise a jour de commit, sur le noeud que
+l'utilisateur clique. Le correctif seme `updateBtn.textContent = ''` a cote de
+`updateMeta.title = ''`.
+
+Une fois qu'un correctif ajoute une graine, c'est une affirmation que la classe
+est fermee : le passage immediat est de compter, par fonction de rendu, combien
+de sorties ecrivent chaque propriete - toute propriete dont le compte est
+inferieur au nombre de sorties est le meme defaut. Passe sur `renderSessions`,
+`checkRelay`, `applyTranslations` et `copyDiagnostic` : propres.
+
+`tests/node/test_button_wording_truth.js` 12 verts. `scripts/proof_red_button_wording.py`
+3/3 rouges nommes, 0 invalide, restaure a l'octet. Nouveau check LOCAL
+`every_state_owns_the_button_wording`, influent : produit sabote -> `29 checks,
+NOT READY` exit 1.
+
+Harnais, deux fautes. Mon `expect` disait « does not keep » et le runner imprime
+« keeps » : rouge correct, preuve refusee - troisieme fois que le nom recopie
+diverge du nom reel. Et mon stub de `t()` concaténait inconditionnellement au
+lieu d'appeler une fonction ou de formater un `{0}` : il rendait
+`updateBtn\0v0.7.28` avec un caractere NUL REELLEMENT ecrit dans le fichier et
+invisible dans toutes les diffs. Un harnais peut donc epingler un defaut que le
+produit n'a pas - le mode d'echec du point 65, arrive par le stub plutot que par
+un litteral ecrit a la main.
+
 ## [0.7.27] - chaque etat de la carte possede son infobulle
 
 `updateMeta.title` etait ecrit dans DEUX de ses trois sorties, et dans aucune
