@@ -137,7 +137,21 @@ def main():
         sc.frames.clear()
 
         sc.cmd("Page.navigate", {"url": url})
-        sc.pump(4.0)
+        sc.pump(3.0)
+
+        # The session row ships COLLAPSED, so the expiry meta line - the thing
+        # v0.7.18 rewrote - is never painted. Expand it through the real control
+        # (a click, not a style override) so what the screencast records is a
+        # state the user can actually reach.
+        expanded = sc.evaluate(
+            "(function(){var els=document.querySelectorAll('[aria-expanded],"
+            ".session-toggle,#sessions-toggle,.card-head,.collapse-head');"
+            "for (var i=0;i<els.length;i++){"
+            " if (els[i].getAttribute('aria-expanded')==='false'){"
+            "   els[i].click(); return 'clicked '+i;} }"
+            "return 'aucun controle replie trouve';})()", need=False)
+
+        sc.pump(1.2)
         sc.cmd("Page.stopScreencast")
 
         # What the INSTALLED popup itself says it resolved - not what storage holds.
@@ -147,6 +161,7 @@ def main():
             " lang: (document.querySelector('.lang-value')||document.querySelector('.lang-current')||{}).textContent})")
         print("popup INSTALLE : %s" % url)
         print("langue demandee : %s | localStorage lu : %s" % (lang, stored))
+        print("ligne sessions deploiee : %s" % expanded)
         print("ce que le popup a resolu : %s" % resolved)
 
         frames = list(sc.frames)
