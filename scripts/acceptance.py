@@ -999,50 +999,121 @@ def double_check_pin():
     return "ok", "relay accepts %s...%s" % (pinned_id()[:4], pinned_id()[-4:])
 
 
-@check("every popup relay call carries a deadline")
-def popup_calls_are_bounded():
-    """A client that can wait forever has no honest state to be in.
+@check("every relay call in the SHIPPED extension carries a deadline")
+def every_shipped_relay_call_is_bounded():
+    """The bound was proved for popup.js and assumed for the rest of the extension.
 
-    The popup had 8 fetch() calls and ONE AbortController, on the import path
-    only. /v1/bootstrap in particular runs before anything else, so a relay
-    that accepted the socket and went silent left the badge on "Checking…"
-    forever and /health was never even tried.
+    Measured 0.7.38: the check it replaces asserted "every fetch( in the file
+    lives inside relayFetch" - and it read ONE file. `background.js`, shipped and
+    installed with the same manifest, had a bare `fetch("/v1/update/check")` with
+    no AbortController and no timeout. A relay that accepted the socket and went
+    silent left the service worker pending until Chrome killed it, so the update
+    badge froze with no error shown. Nothing in the gate read that file: the gate
+    opens `extension/popup.js` three times and `extension/background.js` zero.
 
-    Asserts on the real helper, not on a count: a bare `signal:` grep passes
-    while a call bypasses relayFetch entirely.
+    So this check does not list files either - it walks every shipped `.js` under
+    `extension/` and applies the same rule to each one. A fourth client file
+    added next year is covered by construction rather than by remembering to
+    extend a tuple (points 102/106).
+
+    The rule per file: a bare `fetch(` is only allowed inside that file's own
+    deadline helper, and the helper must exist, use AbortController, pass
+    `signal:`, and name a non-zero timeout.
     """
-    import shutil as _shutil
-    node = _shutil.which("node")
+    import shutil as _sh
+    node = _sh.which("node")
     if not node:
         return "SKIP", "node is absent"
-    src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
-    # Every fetch( in the file must live inside relayFetch (the helper itself).
-    helper_start = src.find("async function relayFetch")
-    helper_end = src.find("\n}", helper_start)
-    helper = src[helper_start:helper_end] if helper_start >= 0 else ""
-    strays = []
-    offset = 0
-    while True:
-        i = src.find("fetch(", offset)
-        if i < 0:
-            break
-        if not (helper_start <= i <= helper_end):
-            strays.append(src[:i].count("\n") + 1)
-        offset = i + 6
-    if not helper:
-        return "FAIL", "relayFetch is absent: the popup has no deadline helper"
-    if strays:
-        return "FAIL", f"{len(strays)} fetch() outside relayFetch (lines {strays[:4]})"
-    if "AbortController" not in helper or "signal:" not in helper:
-        return "FAIL", "relayFetch carries no cancellable signal"
-    deadline = re.search(r"RELAY_TIMEOUT_MS = (\d+)", src)
-    ms = int(deadline.group(1)) if deadline else 0
-    # The client must outlast the relay's own cut-off (body reads at 10s, class
-    # deadline 15s) or the user sees a bare "Failed to fetch" instead of the
-    # translated reason the relay actually sent.
-    if ms <= 15000:
-        return "FAIL", f"RELAY_TIMEOUT_MS={ms}ms fires before the relay's 15s deadline"
-    return "ok", f"all fetch() go through relayFetch, {ms} ms > 15 s relay deadline"
+    ext = REPO / "extension"
+    files = sorted(p for p in ext.rglob("*.js")
+                   if "_locales" not in p.parts and "node_modules" not in p.parts)
+    if not files:
+        return "FAIL", "no shipped .js found under extension/ to check"
+    problems, bounded = [], []
+    for path in files:
+        rel = path.relative_to(REPO).as_posix()
+        src = path.read_text(encoding="utf-8")
+        # THE RULE: a `fetch(` is legitimate ONLY inside a function that itself
+        # performs the bounded fetch. Not "inside some function named like a
+        # fetcher" - measured, that blessed background.js's bare fetch before
+        # the product was fixed. Spans come from real top-level `function`
+        # declarations closed by their own `^}` at column 0.
+        spans = []
+        for m in re.finditer(r"^(?:async )?function (\w+)\(", src, re.M):
+            nxt = re.search(r"^\}", src[m.end():], re.M)
+            spans.append((m.start(), m.end() + (nxt.start() if nxt else 0), m.group(1)))
+
+        def enclosing(pos):
+            inside = [s for s in spans if s[0] <= pos <= s[1]]
+            return inside[-1] if inside else None
+
+        # A helper is not a name and not a keyword count. It is a function whose
+        # four structural parts are all present and wired to EACH OTHER:
+        # the controller it creates, the deadline that aborts THAT controller,
+        # the signal handed to fetch from THAT controller, and a returned fetch.
+        # Structural, because the two regexes tried first both failed on measured
+        # cases: `[^;]*?` cannot cross the `;` ending `setTimeout(...);`, so a
+        # 0 ms timeout passed, and a `[^)]*` clause cannot cross the `()` of
+        # `() =>`, so the healthy file went red.
+        helpers = []
+        for hstart, hend, hname in spans:
+            body = src[hstart:hend]
+            ctl = re.search(r"\bconst\s+(\w+)\s*=\s*new\s+AbortController\s*\(", body)
+            if not ctl:
+                continue
+            ctrl = ctl.group(1)
+            deadline = re.search(r"setTimeout\s*\(\s*\(\s*\)\s*=>\s*%s\.abort\s*\(\s*\)\s*,"
+                                 r"\s*RELAY_TIMEOUT_MS\s*\)" % re.escape(ctrl), body)
+            signal = re.search(r"\bsignal\s*:\s*%s\.signal\b" % re.escape(ctrl), body)
+            returned = re.search(r"\breturn\s+(?:await\s+)?fetch\s*\(", body)
+            if deadline and signal and returned:
+                helpers.append((hstart, hend, hname))
+
+        strays, used = [], []
+        for m in re.finditer(r"\bfetch\(", src):
+            pos = m.start()
+            line = src[:pos].count("\n") + 1
+            owner = enclosing(pos)
+            # `any(h[0] <= pos <= h[1] for h in helpers)` - the POSITION must be
+            # tested against each helper's own span. My first version wrote
+            # `owner[0] <= pos <= owner[1] for h in helpers`: the clause never
+            # mentions `h`, so `any()` answered "is some helper in this file?"
+            # for every fetch in it. One healthy relayFetch therefore blessed a
+            # bare `fetch(` in a function that never bounded anything.
+            inside = [h for h in helpers if h[0] <= pos <= h[1]]
+            if inside:
+                used.append(inside[0][2])
+                continue
+            why = ("no enclosing function" if owner is None
+                   else "%s does not carry a deadline" % owner[2])
+            strays.append("L%d in %s (%s)" % (line, owner[2] if owner else "top level", why))
+        if strays:
+            problems.append("%s: %s" % (rel, "; ".join(strays[:4])))
+            continue
+        if not helpers and re.search(r"\bfetch\(", src):
+            problems.append("%s calls fetch() with no deadline helper at all" % rel)
+            continue
+        if not used and not re.search(r"\bfetch\(", src):
+            bounded.append("%s (no relay call)" % rel)
+            continue
+        names = []
+        for h in used:
+            if h not in names:
+                names.append(h)
+        # Naming RELAY_TIMEOUT_MS is not honouring it: `RELAY_TIMEOUT_MS = 0`
+        # makes the abort fire immediately, which is a relay call with no wait
+        # at all. Measured - my version reported "0ms via relayFetch" as OK.
+        declared = re.search(r"RELAY_TIMEOUT_MS\s*=\s*(\d+)", src)
+        if not declared or int(declared.group(1)) < 1:
+            problems.append("%s: %s is %s - a deadline of 0 is no deadline"
+                            % (rel, "RELAY_TIMEOUT_MS", declared.group(1) if declared else "absent"))
+            continue
+        bounded.append("%s (%sms via %s)" % (rel, declared.group(1),
+                                             ", ".join(names) or "none"))
+        continue
+    if problems:
+        return "FAIL", "; ".join(problems[:4])
+    return "ok", "%d shipped client file(s) bounded: %s" % (len(files), ", ".join(bounded))
 
 
 def relay_error_translation_report():
@@ -2251,7 +2322,8 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
-         popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
+         every_shipped_relay_call_is_bounded, relay_errors_are_translated,
+         badge_is_refreshed,
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
          upstream_failure_is_not_reported_as_offline,
          update_failure_names_its_cause,

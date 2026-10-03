@@ -1,3 +1,23 @@
+## [0.7.38] - 2026-10-03
+
+### Fixed
+- `extension/background.js` was the only caller of the relay with no deadline: a
+  bare `fetch` with no `AbortController`, where a relay that accepted the
+  connection and then went silent left the service worker pending until Chrome
+  killed it, and the update badge froze with no visible error. It now routes
+  through its own `relayFetch`, bounded at 10s, and reports a named
+  `RelayTimeoutError` distinct from an offline relay.
+- The gate no longer proves a bound for one file and assumes it for the rest.
+  `every_shipped_relay_call_is_bounded` walks every shipped `.js` under
+  `extension/` and recognises a deadline helper structurally - the controller it
+  creates, the deadline aborting that controller, the signal handed to fetch
+  from that controller, a returned fetch - never by the helper's name. A timeout
+  of 0 is now reported as no timeout at all.
+
+### Notes
+- `extension/background.js` was opened by the gate zero times, while it shipped
+  and installed under the same manifest as `popup.js`.
+
 ## [0.7.37] - 2026-10-03
 
 ### Fixed

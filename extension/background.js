@@ -8,10 +8,37 @@
 const RELAY = "http://127.0.0.1:8765";
 const ALARM_NAME = "lpBridgeUpdateCheck";
 const PERIOD_MINUTES = 180;
+// Measured 0.7.38: this file was the ONLY caller of the relay with no deadline.
+// popup.js routes every fetch through relayFetch (45s); here the fetch was bare,
+// so a relay that accepted the socket and went silent left the service worker
+// pending until Chrome killed it - the badge froze with no visible error, and
+// nothing in the gate read this file to notice. The worker is short-lived, so it
+// does not need the popup's 45s; it needs a bound at all.
+const RELAY_TIMEOUT_MS = 10000;
+
+async function relayFetch(path, options) {
+  const opts = options || {};
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+  try {
+    return await fetch(`${RELAY}${path}`, Object.assign({}, opts, {
+      signal: controller.signal
+    }));
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      const timeout = new Error("relay deadline exceeded");
+      timeout.name = "RelayTimeoutError";
+      throw timeout;
+    }
+    throw err;
+  } finally {
+    clearTimeout(deadline);
+  }
+}
 
 async function refreshUpdateBadge() {
   try {
-    const res = await fetch(`${RELAY}/v1/update/check`, { cache: "no-store" });
+    const res = await relayFetch("/v1/update/check", { cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
     if (data && data.ok && data.update_available) {
@@ -27,8 +54,12 @@ async function refreshUpdateBadge() {
       await chrome.action.setBadgeText({ text: "" });
       await chrome.action.setTitle({ title: "Transfer session to Lightpanda" });
     }
-  } catch (_) {
-    // Relay offline: keep the badge as it was, never claim "up to date".
+  } catch (err) {
+    // Relay offline OR past the deadline: keep the badge as it was, never claim
+    // "up to date". The distinction is not cosmetic - a timeout means the relay
+    // accepted the request and went quiet, which is exactly the state this badge
+    // must not paper over.
+    void err;
   }
 }
 
