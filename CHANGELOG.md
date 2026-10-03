@@ -1,3 +1,10 @@
+## [0.7.36] - 2026-10-03
+
+### Fixed
+- A stored pristine copy can no longer become a false reference: a check binds
+  every copy in `scripts/artifacts_pristine/` to a version this repo actually
+  committed, discovered by construction rather than a written-out list.
+
 ## [0.7.35] - 2026-10-03
 ### Fixed
 - The fence that catches a sabotage left behind by a proof-red harness could

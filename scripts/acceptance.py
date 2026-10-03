@@ -1574,6 +1574,137 @@ def clear_button_never_keeps_an_armed_confirmation():
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
 
+@check("no stored 'pristine' copy can become a false reference")
+def pristine_copies_match_the_committed_product():
+    """A harness that self-heals its own pristine will heal it toward DAMAGE.
+
+    Measured 0.7.36: a dozen harnesses keep a byte copy of a source file under
+    `scripts/artifacts_pristine/`, and when the copy differs they REFRESH it from
+    the file on disk. That is the right defence against a stale copy (point 45)
+    and it is the hole: a killed run can leave the PRODUCT sabotaged, the next
+    run refreshes the pristine from that sabotage, and from then on every
+    restore-verification compares against a false base and passes. The 0.7.35
+    fence cannot see it either - that fence hashes the product, and the pristine
+    is not the product.
+
+    Measured both directions: pristine poisoned + healthy product heals
+    CORRECTLY; healthy pristine + sabotaged product heals to the SABOTAGE.
+
+    The invariant is NOT "the copy equals HEAD". Measured: five copies held an
+    older build, each byte-identical to some real commit (8e22d1ea, 4892f9f3,
+    2b7d2a52) - a harness that ran before a release wrote them, and an old copy
+    is harmless because the next run refreshes it. Requiring HEAD made the check
+    fail on a perfectly healthy tree, which is worse than no check.
+
+    The invariant that survives: a copy must hold a version of its source that
+    was ACTUALLY COMMITTED. Content that never existed in any commit can only
+    come from a sabotage, so it is the false reference - and it is exactly what a
+    self-healing harness would install as its base.
+
+    ORDER MATTERS: run this BEFORE the harnesses. A self-healing harness repairs
+    the very evidence this check reads, so placed after it measures 5/5 correct
+    while the copy is poisoned.
+
+    The copy list is DISCOVERED, never written out. The first version of this
+    check hard-coded five (name, product) pairs and answered "5 pristine copies
+    all equal the committed product" - 13 of the 18 copies on disk were never
+    examined, and the confident count of a partial set read as a whole. A guard
+    that enumerates a subset publishes a number nobody can trust (point 101).
+    """
+    import hashlib
+
+    pr_dir = REPO / "scripts" / "artifacts_pristine"
+    if not pr_dir.is_dir():
+        return "SKIP", "no pristine directory yet (copies are made per run)"
+
+    def resolve(name):
+        """The repo file this stored copy backs up, or None if unrecognised.
+
+        The four conventions are READ OUT OF THE HARNESSES, not invented here:
+          * `artifacts_pristine / "<name>.pristine"`  - popup.js.pristine (4),
+            diagnostics.py.pristine
+          * `artifacts_pristine / "<name>"`          - popup.js, updater.py
+          * `PRISTINE / rel.replace("/", "__")`      - relay__server.py,
+            extension__popup.js  (built, so no literal name in the source)
+          * `popup.js.proof_red_<harness>`            - rollback / update_failure
+        A name matching none of them is reported by name, never skipped: a guard
+        that enumerates a subset publishes a count nobody can trust.
+        """
+        flat = name[:-len(".pristine")] if name.endswith(".pristine") else name
+        # built by rel.replace("/", "__") -> try the flattened path directly
+        if "__" in flat:
+            cand = flat.replace("__", "/")
+            if (REPO / cand).is_file():
+                return cand
+        if flat.startswith("popup.js.proof_red_"):
+            return "extension/popup.js"
+        if flat.startswith("diag"):
+            return "relay/diagnostics.py"
+        # a bare file name: the same name under a known source directory
+        for cand in ("extension/" + flat, "relay/" + flat, "scripts/" + flat,
+                     flat):
+            if (REPO / cand).is_file():
+                return cand
+        return None
+
+    try:
+        def committed_hashes(rel):
+            """Every sha256 this path has ever held in a commit on this branch."""
+            out = set()
+            revs = subprocess.run(["git", "rev-list", "--all", "--", rel],
+                                  cwd=str(REPO), capture_output=True, text=True,
+                                  timeout=120).stdout.split()
+            for rev in revs:
+                blob = subprocess.run(["git", "rev-parse", "%s:%s" % (rev, rel)],
+                                       cwd=str(REPO), capture_output=True, text=True,
+                                       timeout=60).stdout.strip()
+                if not blob:
+                    continue
+                data = subprocess.run(["git", "cat-file", "blob", blob],
+                                      cwd=str(REPO), capture_output=True,
+                                      timeout=60).stdout
+                if data:
+                    out.add(hashlib.sha256(data).hexdigest())
+            return out
+
+        allowed = {}
+        for rel in {r for r in (resolve(f.name) for f in pr_dir.iterdir() if f.is_file())
+                    if r}:
+            seen_hashes = committed_hashes(rel)
+            if seen_hashes:
+                allowed[rel] = seen_hashes
+        if not allowed:
+            return "SKIP", "git cannot read any committed source, no reference"
+    except (OSError, subprocess.SubprocessError):
+        return "SKIP", "git unavailable, cannot read the committed sources"
+
+    wrong, unknown, seen = [], [], 0
+    for f in sorted(p for p in pr_dir.iterdir() if p.is_file()):
+        target = resolve(f.name)
+        if target is None:
+            unknown.append(f.name)
+            continue
+        if target not in allowed:
+            unknown.append("%s (no committed %s to compare)" % (f.name, target))
+            continue
+        seen += 1
+        if hashlib.sha256(f.read_bytes()).hexdigest() not in allowed[target]:
+            wrong.append("%s holds bytes no commit ever held for %s"
+                         % (f.name, target))
+    if wrong:
+        return "FAIL", ("%d stored cop(y|ies) hold bytes NO commit ever held: %s - a harness "
+                        "refreshes these from the file on disk, so a killed run "
+                        "can install the damage as the base it verifies against"
+                        % (len(wrong), "; ".join(sorted(wrong))))
+    if not seen:
+        return "SKIP", "no pristine copy maps to a committed source yet"
+    if unknown:
+        return "FAIL", ("%d stored cop(y|ies) name no file I can resolve, so they are "
+                        "unchecked: %s - resolve every name or delete the copy"
+                        % (len(unknown), ", ".join(sorted(unknown))))
+    return "ok", ("%d/%d copies hold a version this repo actually committed"
+                  % (seen, len(list(p for p in pr_dir.iterdir() if p.is_file()))))
+
 @check("the product is byte-identical after every proof-red harness has run")
 def product_survives_the_proof_red_harnesses():
     """Seventeen harnesses EDIT product files. Nothing required them to restore.
@@ -2035,7 +2166,7 @@ def unreadable_branch_is_reported():
 LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuation,
          shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
-         secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
+         secret_absent, i18n_parity, dom_ids_exist, python_compiles, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
@@ -2051,7 +2182,17 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing,
          proof_red_harnesses_are_required,
-         product_survives_the_proof_red_harnesses]
+         pristine_copies_match_the_committed_product,
+         product_survives_the_proof_red_harnesses,
+         # ORDER, measured 0.7.36: the unit suite runs LAST. Eleven of its test
+         # files read the same four product files the harnesses sabotage, so a
+         # suite placed BEFORE the fence measures whatever sabotage was live at
+         # that instant. It reported test_socket_timeout failing with "class
+         # deadline 45s" while the shipped deadline is 15s - the harness had the
+         # tree, the suite read it, and a real green turned into a false red.
+         # A test that shares mutable ground with a saboteur cannot be trusted
+         # before the fence proves the ground is clean.
+         unit_suite]
 
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():
