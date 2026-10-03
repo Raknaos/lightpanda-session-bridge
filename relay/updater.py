@@ -588,12 +588,25 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
                     tree_state = "same" if identical_tree else "differs"
                 result["shipped_tree_sha"] = remote_sha
                 result["local_tree_sha"] = local_sha
-                result["shipped_tree"] = tree_state
+            # Reported on BOTH paths: the popup reads it to decide whether it can
+            # claim the bytes are identical, so "unknown" has to be visible, not
+            # a missing key.
+            result["shipped_tree"] = tree_state
             if same_shipped_commit or identical_tree:
+                # The NOTE must say what was MEASURED. Reusing the slow path's
+                # wording on the fast path claimed "byte-identical" while
+                # shipped_tree / shipped_tree_sha / local_tree_sha were all None -
+                # nothing had been hashed at all. Measured live on 0.7.20.
+                # An unmeasured fact gets an unmeasured sentence, and the popup
+                # keys its explanation off `shipped_tree`, so a False here would
+                # send the user back to a bare commit sha.
                 result.update({
                     "update_available": False,
-                    "note": "main moved to %s, but the deployed tree is byte-identical"
-                            % head["short"],
+                    "shipped_tree": tree_state,
+                    "note": ("main moved to %s, but the deployed tree is "
+                             "byte-identical" % head["short"]) if identical_tree
+                            else ("deployed commit %s is the latest that touched "
+                                  "extension/" % head["short"]),
                 })
             else:
                 result.update({

@@ -681,6 +681,17 @@ qui ne rend rien echoue sur une sortie deja correcte.
 
 Trois sabotages rouges, chacun nommant son propre defaut.
 
+**Le relais mentait sur le meme point** (trouve en interrogeant le relais vivant
+apres publication): `shipped_tree`, `shipped_tree_sha` et `local_tree_sha` valaient
+tous `None`, et la note disait quand meme « the deployed tree is byte-identical ».
+Le chemin rapide reutilisait le texte du chemin lent, ou le hachage avait eu lieu.
+Corrige: chemin rapide -> `shipped_tree: "unknown"` et une note qui ne pretend rien
+mesurer; `shipped_tree` desormais publie sur les DEUX chemins, puisque c'est lui que
+le popup interroge. Un test preexistant pinnait l'ancien mensonge - migre vers le
+contrat mesure. 2 nouveaux tests, 2 sabotages rouges. 11/11 nommes, 0 invalide.
+
+Trois sabotages rouges, chacun nommant son propre defaut.
+
 **Preuve visuelle** sur l'extension reelle (compositeur, pas un DOM snapshot):
 avec un commit anterieur installe et `main` ayant avance, le relais renvoie
 `shipped_tree: "same"` et le popup affiche

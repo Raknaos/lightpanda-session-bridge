@@ -29,8 +29,8 @@ SABOTAGES = [
        "            if same_shipped_commit:")],
      "octets identiques"),
     ("la note ne dit plus pourquoi rien n'est a installer",
-     [('"main moved to %s, but the deployed tree is byte-identical"',
-       '"main moved to %s, but the deployed tree looks the same"')],
+     [('"byte-identical" % head["short"]) if identical_tree',
+       '"looks the same" % head["short"]) if identical_tree')],
      "byte-identical"),
     ("le hash local utilise un autre schema que le distant",
      [("            entries.append((rel, hashlib.sha1(\n"
@@ -64,6 +64,17 @@ SABOTAGES = [
        "            if False:\n"
        "                if installed and published and installed[:3] <= published[:3]:")],
      "different bytes IS an install worth making"),
+    # Le chemin rapide (commit installe == dernier commit livre) reutilisait le
+    # texte du chemin lent et annoncait "byte-identical" sans avoir hache quoi que
+    # ce soit - mesure vivant sur 0.7.20: shipped_tree, shipped_tree_sha et
+    # local_tree_sha valaient tous None.
+    ("la note du chemin rapide affirme une comparaison jamais faite",
+     [('if identical_tree\n                            else ("deployed commit %s is the latest that touched "',
+       'if True\n                            else ("deployed commit %s is the latest that touched "')],
+     "unexpectedly found in"),
+    ("le chemin rapide ne publie pas le state 'unknown'",
+     [("            result[\"shipped_tree\"] = tree_state", "            pass")],
+     "the only evidence available"),
     ("un downgrade vers la release redevient possible",
      [("                if installed and published and installed[:3] <= published[:3]:",
        "                if installed and published:")],

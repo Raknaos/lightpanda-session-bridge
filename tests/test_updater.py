@@ -655,7 +655,15 @@ class TestCheckUpdate(UpdateTestCase):
         status = updater.check_update(force=True)
         self.assertFalse(status["update_available"])
         self.assertIsNone(status["source"])
-        self.assertIn("byte-identical", status.get("note") or "",
+        # Fast path: the installed commit IS the last one to touch extension/,
+        # so nothing is hashed and nothing may claim it was. The note used to
+        # read "byte-identical" here, which the popup then had to trust (0.7.20).
+        self.assertEqual(status.get("shipped_tree"), "unknown")
+        self.assertIsNone(status.get("shipped_tree_sha"))
+        self.assertNotIn("byte-identical", status.get("note") or "",
+                         "la note affirme une comparaison que ce chemin n'a pas "
+                         "faite: %r" % (status.get("note"),))
+        self.assertIn("latest that touched extension/", status.get("note") or "",
                       "la note doit dire POURQUOI il n'y a rien a installer")
 
     def test_a_commit_that_shipped_something_is_offered_at_that_commit(self):
@@ -1015,6 +1023,79 @@ class TestNoProvenanceChannel(unittest.TestCase):
         self.assertNotEqual(
             result["source"], "release",
             "a version newer than the release must not be pulled back to it")
+
+
+class TestNoteOnlyClaimsWhatWasMeasured(unittest.TestCase):
+    """A note must not assert a measurement that was skipped.
+
+    Measured live on 0.7.20: main had moved to a docs-only commit, the installed
+    commit WAS the last one to touch extension/, so the fast path returned
+    `shipped_tree: None`, `shipped_tree_sha: None`, `local_tree_sha: None` - and
+    a note reading "the deployed tree is byte-identical". Nothing had been
+    hashed. The popup keys its explanation off `shipped_tree`, so a False there
+    is the difference between an honest panel and a misleading one.
+    """
+
+    def setUp(self):
+        self._real = (updater.installed_info, updater.shipped_commit,
+                      updater.shipped_tree_sha, updater.local_tree_sha,
+                      updater.latest_commit, updater.latest_release)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (updater.installed_info, updater.shipped_commit, updater.shipped_tree_sha,
+         updater.local_tree_sha, updater.latest_commit,
+         updater.latest_release) = self._real
+        updater.clear_cache()
+
+    def test_fast_path_never_claims_bytes_were_compared(self):
+        # main moved on (head != installed), but the installed commit IS the last
+        # one that touched extension/. Head differs, so the branch is entered;
+        # shipped == installed, so nothing is hashed. That combination is the
+        # live 0.7.20 case, and it used to report "byte-identical".
+        # Fast path = head moved on, but the installed commit IS the last one
+        # that touched extension/. Both hashes are UNREACHABLE here, so if the
+        # note says "byte-identical" it is claiming a comparison it skipped.
+        # head != installed (so the branch IS entered) AND shipped == installed
+        # (so nothing is hashed). Both hash readers must also be unreachable,
+        # so any "byte-identical" wording is provably unearned.
+        head = {"sha": "b" * 40, "short": "bbbbbbb", "message": "docs",
+                "date": "2026-01-01T00:00:00Z", "html_url": "u"}
+        updater.latest_commit = lambda repo=None, branch=None, tag=None: head
+        updater.shipped_commit = lambda repo=None, branch=None: {
+            "sha": "a" * 40, "short": "aaaaaaa", "message": "extension",
+            "date": "2026-01-01T00:00:00Z", "html_url": "u"}
+        updater.latest_release = lambda repo=None: None
+        updater.installed_info = lambda ext_dir=None: {
+            "version": "0.7.20", "commit": "a" * 40, "tag": None}
+        result = updater.check_update(force=True)
+        self.assertFalse(result["update_available"])
+        self.assertEqual(
+            result.get("shipped_tree"), "unknown",
+            "nothing was hashed on the fast path, so the state must say so "
+            "instead of claiming the trees are identical")
+        self.assertIsNone(result.get("shipped_tree_sha"))
+        self.assertNotIn(
+            "byte-identical", result.get("note") or "",
+            "the note claimed a comparison that was never performed: %r"
+            % (result.get("note"),))
+
+    def test_slow_path_reports_the_hashes_it_measured(self):
+        head = {"sha": "b" * 40, "short": "bbbbbbb", "message": "docs",
+                "date": "2026-01-01T00:00:00Z", "html_url": "u"}
+        updater.latest_commit = lambda repo=None, branch=None, tag=None: head
+        updater.shipped_commit = lambda repo=None, branch=None: {
+            "sha": "c" * 40, "short": "ccccccc", "message": "ext",
+            "date": "2026-01-01T00:00:00Z", "html_url": "u"}
+        updater.latest_release = lambda repo=None: None
+        updater.shipped_tree_sha = lambda repo=None, ref=None: "same"
+        updater.local_tree_sha = lambda ext_dir=None: "same"
+        updater.installed_info = lambda ext_dir=None: {
+            "version": "0.7.20", "commit": "a" * 40, "tag": None}
+        result = updater.check_update(force=True)
+        self.assertEqual(result.get("shipped_tree"), "same")
+        self.assertEqual(result.get("shipped_tree_sha"), "same")
+        self.assertIn("byte-identical", result.get("note") or "")
 
 
 if __name__ == "__main__":
