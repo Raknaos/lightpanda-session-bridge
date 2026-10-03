@@ -1045,24 +1045,33 @@ def popup_calls_are_bounded():
     return "ok", f"all fetch() go through relayFetch, {ms} ms > 15 s relay deadline"
 
 
-@check("every relay error code has a translation")
-def relay_errors_are_translated():
+def relay_error_translation_report():
     """The relay answers in short English codes; the popup shipped in 10
     languages. Rendering a code verbatim put "origin refused" inside a French
     popup.
 
-    The codes are read out of relay/server.py, so a NEW relay error fails here
-    instead of shipping untranslated.
+    The codes are read out of BOTH relay files, because the update path raises
+    its own: measured 0.7.25, `server.py` alone showed 3 codes while
+    `updater.py` held 19 more — every one of them unmapped, and the popup's
+    catch threw them all away anyway. A guard that reads half the surface is a
+    guard that cannot see half the bug.
+
+    Two shapes are read per file: `{"error": "code"}` and `RuntimeError("code")`,
+    because the first is what the route emits and the second is what it raises.
     """
     src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
-    server = (REPO / "relay" / "server.py").read_text(encoding="utf-8")
     block = re.search(r"const RELAY_ERROR_KEYS = \{([\s\S]*?)\n\};", src)
     if not block:
         return "FAIL", "RELAY_ERROR_KEYS is absent from popup.js"
-    mapped = set(re.findall(r"'([a-z ]+)':\s*'err\w+'", block.group(1)))
-    emitted = set(re.findall(r'"error":\s*"([a-z ]+)"', server))
-    emitted |= set(re.findall(r'"error":\s*str\(err\)\s*or\s*"([a-z ]+)"', server))
-    missing = sorted(emitted - mapped)
+    mapped = set(re.findall(r"'([^']+)':\s*'err\w+'", block.group(1)))
+
+    emitted: set[str] = set()
+    for rel in ("server.py", "updater.py"):
+        relay_src = (REPO / "relay" / rel).read_text(encoding="utf-8")
+        emitted |= set(re.findall(r'"error":\s*"([a-z0-9 :\-\.]+)"', relay_src))
+        emitted |= set(re.findall(r'RuntimeError\(\s*"([a-z0-9 :\-\.]+)"', relay_src))
+
+    missing = sorted(e for e in emitted - mapped if not e.startswith("error"))
     if missing:
         return "FAIL", f"{len(missing)} relay code(s) untranslated: {missing[:4]}"
     if not emitted:
@@ -1071,6 +1080,18 @@ def relay_errors_are_translated():
         # future code would pass silently.
         return "FAIL", "no relay error code could be read: the guard is blind"
     return "ok", f"{len(emitted)} relay error codes, all mapped to an i18n key"
+
+
+@check("every relay error code has a translation")
+def relay_errors_are_translated():
+    """Thin @check wrapper over `relay_error_translation_report`.
+
+    The report is a plain function so another check can call it and read its
+    (status, detail) tuple. Calling the decorated one returns a bool AND
+    re-registers a second result for the same name, so a check that needs the
+    verdict must use the unwrapped body.
+    """
+    return relay_error_translation_report()
 
 
 def _node_pass_count(out):
@@ -1214,6 +1235,49 @@ def update_tip_is_not_reported_as_a_moved_branch():
     return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
 
 
+@check("a failed update names its cause instead of blaming the relay")
+def update_failure_names_its_cause():
+    """Measured on 0.7.24 (found while fixing 0.7.25): `runUpdate` threw the
+    relay's refusal with its code attached, and then its own catch replaced the
+    message UNCONDITIONALLY with "Relay Offline (is it running?)". A refused
+    checksum, a refused origin, an unauthenticated extension, a rate limit, a
+    dead relay and a timeout were six situations wearing one sentence.
+
+    `relayErrorText()` had existed since long before and was never called from
+    here - the second unread function after `error_kind` (0.7.24). The same
+    surface also carried 19 `RuntimeError` codes in `relay/updater.py` that no
+    guard could see, because the translation check only read `relay/server.py`.
+
+    Two distinct faults, so two distinct sabotages: A collapses every refusal
+    back onto "unreachable", B stops `t()` formatting `{0}` so an unmapped code
+    renders as a literal brace and the code itself never reaches the user.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_update_failure.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) named red, (\d+) invalid", out)
+    if not m:
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, invalid = (int(x) for x in m.groups())
+    if got != total or invalid:
+        return "FAIL", ("%d/%d named red, %d invalid - a PATCH-MISS or harness "
+                        "failure means the proof did not run" % (got, total, invalid))
+    if "popup.js restaure a l'octet : True" not in out:
+        return "FAIL", "popup.js was not restored byte for byte by the harness"
+    # The guard must also hold NOW, not only in the reverted state: every code the
+    # relay can raise needs a translation, and updater.py is part of that surface.
+    # The decorated check returns a bool and re-registers itself; the plain
+    # report is what answers with a (status, detail) tuple.
+    status, detail = relay_error_translation_report()
+    if status != "ok":
+        return "FAIL", "relay error codes went untranslated: %s" % detail
+    return "ok", "%d sabotage(s) go red, all codes translated (%s)" % (total, detail)
+
+
 @check("an upstream GitHub failure is not reported as 'Relay Offline'")
 def upstream_failure_is_not_reported_as_offline():
     """Measured live on 0.7.23: `/health` answered 200 with `ok: true` and the
@@ -1291,6 +1355,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
          upstream_failure_is_not_reported_as_offline,
+         update_failure_names_its_cause,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 

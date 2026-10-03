@@ -58,6 +58,17 @@ const I18N = {
     updateRollback: "Undo the last update",
     updateRolledBack: (x) => `Restored v${x} — reloading…`,
     updateBaseline: "Exact commit tracking is off: install once so the deployed commit is recorded.",
+    errExtDirMissing: 'Extension folder not found',
+    errExtDirReadonly: 'Extension folder is read-only',
+    errNothingToInstall: 'Nothing to install: already up to date',
+    errChecksumMismatch: 'Checksum mismatch: the download was refused',
+    errArtifactTooLarge: 'The downloaded artifact is too large',
+    errRedirectRefused: 'The update server refused the redirect',
+    errUpdateSourceRefused: 'Unknown update source',
+    errReleaseNotFound: 'No published release found',
+    errMainNotFound: 'No main branch found',
+    errNoBackup: 'No backup to restore',
+    errArchiveRefused: 'The downloaded archive is not a valid extension',
     updateGitHubDown: 'GitHub did not answer',
     updateRateLimited: 'GitHub rate limit reached · try again later',
     updateBranchUnknown: 'Branch state unreadable · only the release was compared',
@@ -126,6 +137,17 @@ const I18N = {
     updateRollback: "Annuler la dernière mise à jour",
     updateRolledBack: (x) => `v${x} restaurée — rechargement…`,
     updateBaseline: "Suivi exact désactivé : lancez une installation pour enregistrer le commit déployé.",
+    errExtDirMissing: 'Dossier d\'extension introuvable',
+    errExtDirReadonly: 'Le dossier d\'extension est en lecture seule',
+    errNothingToInstall: 'Rien à installer : déjà à jour',
+    errChecksumMismatch: 'Somme de contrôle incorrecte : le téléchargement a été refusé',
+    errArtifactTooLarge: 'L\'artefact téléchargé est trop volumineux',
+    errRedirectRefused: 'Le serveur de MAJ a refusé la redirection',
+    errUpdateSourceRefused: 'Source de mise à jour inconnue',
+    errReleaseNotFound: 'Aucune release publiée trouvée',
+    errMainNotFound: 'Branche main introuvable',
+    errNoBackup: 'Aucune sauvegarde à restaurer',
+    errArchiveRefused: 'L\'archive téléchargée n\'est pas une extension valide',
     updateGitHubDown: 'GitHub n\'a pas répondu',
     updateRateLimited: 'Limite GitHub atteinte · réessaie plus tard',
     updateBranchUnknown: 'État de la branche illisible · seule la release a été comparée',
@@ -194,6 +216,17 @@ const I18N = {
     updateRollback: "Deshacer la última actualización",
     updateRolledBack: (x) => `v${x} restaurada — recargando…`,
     updateBaseline: "El seguimiento exacto está desactivado: instala una vez para registrar el commit desplegado.",
+    errExtDirMissing: 'No se encontró la carpeta de la extensión',
+    errExtDirReadonly: 'La carpeta de la extensión es de solo lectura',
+    errNothingToInstall: 'Nada que instalar: ya está actualizado',
+    errChecksumMismatch: 'Suma de control incorrecta: se rechazó la descarga',
+    errArtifactTooLarge: 'El artefacto descargado es demasiado grande',
+    errRedirectRefused: 'El servidor de actualización rechazó la redirección',
+    errUpdateSourceRefused: 'Fuente de actualización desconocida',
+    errReleaseNotFound: 'No se encontró ninguna release publicada',
+    errMainNotFound: 'No se encontró la rama main',
+    errNoBackup: 'No hay copia de seguridad que restaurar',
+    errArchiveRefused: 'El archivo descargado no es una extensión válida',
     updateGitHubDown: 'GitHub no respondió',
     updateRateLimited: 'Límite de GitHub alcanzada · inténtalo más tarde',
     updateBranchUnknown: 'Estado de la rama ilegible · sólo se comparó la release',
@@ -262,6 +295,17 @@ const I18N = {
     updateRollback: "Letztes Update rückgängig machen",
     updateRolledBack: (x) => `v${x} wiederhergestellt — Neuladen…`,
     updateBaseline: "Genaue Commit-Verfolgung ist aus: einmal installieren, um den Commit zu erfassen.",
+    errExtDirMissing: 'Erweiterungsordner nicht gefunden',
+    errExtDirReadonly: 'Erweiterungsordner ist schreibgeschützt',
+    errNothingToInstall: 'Nichts zu installieren: bereits aktuell',
+    errChecksumMismatch: 'Prüfsumme falsch: Download wurde abgelehnt',
+    errArtifactTooLarge: 'Das heruntergeladene Artefakt ist zu groß',
+    errRedirectRefused: 'Der Update-Server hat die Weiterleitung abgelehnt',
+    errUpdateSourceRefused: 'Unbekannte Update-Quelle',
+    errReleaseNotFound: 'Keine veröffentlichte Release gefunden',
+    errMainNotFound: 'Main-Branch nicht gefunden',
+    errNoBackup: 'Keine Sicherung zum Wiederherstellen',
+    errArchiveRefused: 'Das heruntergeladene Archiv ist keine gültige Erweiterung',
     updateGitHubDown: 'GitHub hat nicht geantwortet',
     updateRateLimited: 'GitHub-Limit erreicht · später erneut versuchen',
     updateBranchUnknown: 'Zweigzustand nicht lesbar · nur die Release wurde verglichen',
@@ -328,6 +372,17 @@ const I18N = {
     updateRollback: "撤销上次更新",
     updateRolledBack: (x) => `已恢复 v${x} — 正在重新加载…`,
     updateBaseline: "提交跟踪未启用：安装一次即可记录当前提交。",
+    errExtDirMissing: '未找到扩展文件夹',
+    errExtDirReadonly: '扩展文件夹为只读',
+    errNothingToInstall: '无需安装：已是最新',
+    errChecksumMismatch: '校验和不匹配：下载已被拒绝',
+    errArtifactTooLarge: '下载的构件过大',
+    errRedirectRefused: '更新服务器拒绝了重定向',
+    errUpdateSourceRefused: '未知的更新来源',
+    errReleaseNotFound: '未找到已发布版本',
+    errMainNotFound: '未找到 main 分支',
+    errNoBackup: '没有可恢复的备份',
+    errArchiveRefused: '下载的压缩包不是有效的扩展',
     updateGitHubDown: 'GitHub 未响应',
     updateRateLimited: '已达 GitHub 限额 · 请稍后再试',
     updateBranchUnknown: '无法读取分支状态 · 仅比较了已发布版本',
@@ -396,6 +451,17 @@ const I18N = {
     updateRollback: "最後の更新を元に戻す",
     updateRolledBack: (x) => `v${x} を復元しました — 再読み込み中…`,
     updateBaseline: "コミット追跡は未設定です: 一度インストールすると記録されます。",
+    errExtDirMissing: '拡張機能フォルダが見つかりません',
+    errExtDirReadonly: '拡張機能フォルダは読み取り専用です',
+    errNothingToInstall: 'インストールするものがありません：すでに最新です',
+    errChecksumMismatch: 'チェックサムの不一致：ダウンロードは拒否されました',
+    errArtifactTooLarge: 'ダウンロードしたアーティファクトが大きすぎます',
+    errRedirectRefused: '更新サーバーがリダイレクトを拒否しました',
+    errUpdateSourceRefused: '不明な更新ソース',
+    errReleaseNotFound: '公開されたリリースが見つかりません',
+    errMainNotFound: 'main ブランチが見つかりません',
+    errNoBackup: '復元するバックアップがありません',
+    errArchiveRefused: 'ダウンロードしたアーカイブは有効な拡張機能ではありません',
     updateGitHubDown: 'GitHub が応答しませんでした',
     updateRateLimited: 'GitHub の上限に達しました · 後で再試行',
     updateBranchUnknown: 'ブランチの状態が読めません · リリースのみ比較しました',
@@ -466,6 +532,17 @@ const I18N = {
     updateRollback: "Annulla l'ultimo aggiornamento",
     updateRolledBack: (x) => `v${x} ripristinata — ricarica…`,
     updateBaseline: "Tracciamento esatto disattivato: installa una volta per registrare il commit.",
+    errExtDirMissing: 'Cartella dell\'estensione non trovata',
+    errExtDirReadonly: 'La cartella dell\'estensione è in sola lettura',
+    errNothingToInstall: 'Niente da installare: già aggiornato',
+    errChecksumMismatch: 'Checksum non corrispondente: download rifiutato',
+    errArtifactTooLarge: 'L\'artefatto scaricato è troppo grande',
+    errRedirectRefused: 'Il server di aggiornamento ha rifiutato il reindirizzamento',
+    errUpdateSourceRefused: 'Sorgente di aggiornamento sconosciuta',
+    errReleaseNotFound: 'Nessuna release pubblicata trovata',
+    errMainNotFound: 'Ramo main non trovato',
+    errNoBackup: 'Nessun backup da ripristinare',
+    errArchiveRefused: 'L\'archivio scaricato non è un\'estensione valida',
     updateGitHubDown: 'GitHub non ha risposto',
     updateRateLimited: 'Limite GitHub raggiunto · riprova più tardi',
     updateBranchUnknown: 'Stato del ramo illeggibile · solo la release è stata confrontata',
@@ -534,6 +611,17 @@ const I18N = {
     updateRollback: "Desfazer a última atualização",
     updateRolledBack: (x) => `v${x} restaurada — recarregando…`,
     updateBaseline: "Rastreamento exato desativado: instale uma vez para registrar o commit.",
+    errExtDirMissing: 'Pasta da extensão não encontrada',
+    errExtDirReadonly: 'A pasta da extensão é somente leitura',
+    errNothingToInstall: 'Nada para instalar: já está atualizado',
+    errChecksumMismatch: 'Soma de verificação incompatível: download recusado',
+    errArtifactTooLarge: 'O artefato baixado é muito grande',
+    errRedirectRefused: 'O servidor de atualização recusou o redirecionamento',
+    errUpdateSourceRefused: 'Fonte de atualização desconhecida',
+    errReleaseNotFound: 'Nenhuma release publicada encontrada',
+    errMainNotFound: 'Ramo main não encontrado',
+    errNoBackup: 'Nenhum backup para restaurar',
+    errArchiveRefused: 'O arquivo baixado não é uma extensão válida',
     updateGitHubDown: 'O GitHub não respondeu',
     updateRateLimited: 'Limite do GitHub atingido · tente mais tarde',
     updateBranchUnknown: 'Estado da branch ilegível · apenas a release foi comparada',
@@ -600,6 +688,17 @@ const I18N = {
     updateRollback: "تراجع عن آخر تحديث",
     updateRolledBack: (x) => `تمت استعادة v${x} — جارٍ إعادة التحميل…`,
     updateBaseline: "تتبّع الالتزام غير مفعّل: ثبّت مرة واحدة لتسجيل الالتزام المنشور.",
+    errExtDirMissing: 'مجلد الامتداد غير موجود',
+    errExtDirReadonly: 'مجلد الامتداد للقراءة فقط',
+    errNothingToInstall: 'لا شيء لتثبيته: محدث بالفعل',
+    errChecksumMismatch: 'عدم تطابق المجموع الاختباري: تم رفض التنزيل',
+    errArtifactTooLarge: 'حجم الملف الذي نُزّل كبير جدًا',
+    errRedirectRefused: 'رفض خادم التحديث إعادة التوجيه',
+    errUpdateSourceRefused: 'مصدر تحديث غير معروف',
+    errReleaseNotFound: 'لم يُعثر على إصدار منشور',
+    errMainNotFound: 'لم يُعثر على فرع main',
+    errNoBackup: 'لا يوجد نسخة احتياطية للاستعادة',
+    errArchiveRefused: 'الأرشيف المنزّل ليس امتدادًا صالحًا',
     updateGitHubDown: 'لم يستجب GitHub',
     updateRateLimited: 'تم بلوغ حد GitHub · أعد المحاولة لاحقاً',
     updateBranchUnknown: 'حالة الفرع غير قابلة للقراءة · تمت مقارنة الإصدار المنشور فقط',
@@ -670,6 +769,17 @@ const I18N = {
     updateRollback: "Отменить последнее обновление",
     updateRolledBack: (x) => `v${x} восстановлена — перезагрузка…`,
     updateBaseline: "Точное отслеживание коммита выключено: установите один раз, чтобы записать коммит.",
+    errExtDirMissing: 'Папка расширения не найдена',
+    errExtDirReadonly: 'Папка расширения доступна только для чтения',
+    errNothingToInstall: 'Нечего устанавливать: уже обновлено',
+    errChecksumMismatch: 'Несовпадение контрольной суммы: загрузка отклонена',
+    errArtifactTooLarge: 'Загруженный файл слишком велик',
+    errRedirectRefused: 'Сервер обновлений отклонил перенаправление',
+    errUpdateSourceRefused: 'Неизвестный источник обновления',
+    errReleaseNotFound: 'Опубликованный релиз не найден',
+    errMainNotFound: 'Ветка main не найдена',
+    errNoBackup: 'Нет резервной копии для восстановления',
+    errArchiveRefused: 'Загруженный архив не является корректным расширением',
     updateGitHubDown: 'GitHub не ответил',
     updateRateLimited: 'Лимит GitHub исчерпан · попробуйте позже',
     updateBranchUnknown: 'Состояние ветки не прочитано · сравнен только релиз',
@@ -835,7 +945,33 @@ const RELAY_ERROR_KEYS = {
   'cdp call refused': 'errRefused',
   'update refused': 'errUpdateRefused',
   'update check failed': 'errUpdateRefused',
-  'rollback refused': 'errUpdateRefused'
+  'rollback refused': 'errUpdateRefused',
+  // The update path's own codes, read out of relay/updater.py. Measured
+  // 0.7.25: nineteen of them were unmapped, and `relayErrorText` was never
+  // called from `runUpdate` anyway - so a refused checksum, a refused origin
+  // and a dead relay all rendered "Relay Offline (is it running?)". Mapped by
+  // CAUSE, not one key per string: eight archive refusals are one problem
+  // (the artifact is not a valid MV3 extension), and telling a user their
+  // download "was not a Manifest V3 extension" teaches them nothing.
+  'extension directory not found': 'errExtDirMissing',
+  'extension directory is not writable': 'errExtDirReadonly',
+  'nothing to install: already up to date': 'errNothingToInstall',
+  'checksum mismatch: artifact refused': 'errChecksumMismatch',
+  'update artifact too large': 'errArtifactTooLarge',
+  'update redirect refused': 'errRedirectRefused',
+  'update source refused': 'errUpdateSourceRefused',
+  'release not found': 'errReleaseNotFound',
+  'main branch not found': 'errMainNotFound',
+  'no backup to restore': 'errNoBackup',
+  'archive refused: absolute path': 'errArchiveRefused',
+  'archive refused: incomplete tree': 'errArchiveRefused',
+  'archive refused: no extension/manifest.json inside': 'errArchiveRefused',
+  'archive refused: not a Manifest V3 extension': 'errArchiveRefused',
+  'archive refused: path traversal': 'errArchiveRefused',
+  'archive refused: unexpected extension name': 'errArchiveRefused',
+  'archive refused: unparsable version': 'errArchiveRefused',
+  'archive refused: unreadable manifest.json': 'errArchiveRefused',
+  'refused: write outside the extension directory': 'errArchiveRefused'
 };
 
 function relayErrorText(code) {
@@ -868,7 +1004,17 @@ async function relayFetch(path, options) {
 function t(key, ...args) {
   const dict = I18N[currentLanguage] || I18N.en;
   const val = dict[key] || I18N.en[key] || "";
-  return typeof val === 'function' ? val(...args) : val;
+  // Measured 0.7.25: only FUNCTION values got their arguments substituted, so a
+  // string written as "Relay error: {0}" reached the screen with the literal
+  // {0} still in it - the code was NEVER shown. `unknownRelayError` was the
+  // only key in that shape, so this is its second fault, not a first.
+  // Both shapes work from here on: a function is called, a string is formatted.
+  // `{0}` is the only placeholder - no key needs more than one.
+  if (typeof val === 'function') return val(...args);
+  if (args.length && typeof val === 'string' && val.includes('{0}')) {
+    return val.replace('{0}', args[0]);
+  }
+  return val;
 }
 
 function applyTranslations() {
@@ -1267,7 +1413,17 @@ async function runUpdate(path, label, doneKey) {
       body: JSON.stringify({ source: 'auto' })
     });
     const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || t('errRefused'));
+    // Keep the relay's CODE on the Error so the catch below can translate it.
+    // Measured 0.7.25: `new Error(data.error || ...)` was correct here, but the
+    // catch replaced the message with "relay unreachable" unconditionally - so a
+    // refused checksum, a refused origin, a rate limit and a dead relay all
+    // rendered the SAME sentence, and `relayErrorText()` existed but was never
+    // called from here (second unread function after `error_kind`).
+    if (!res.ok || !data.ok) {
+      const err = new Error(data.error || t('errRefused'));
+      err.relayCode = data.error || '';
+      throw err;
+    }
     updateBusy = false;
     setStatus(t(doneKey, data.version || ''), 'success');
     // The new files are on disk; reload so Comet serves them. The popup goes
@@ -1277,7 +1433,19 @@ async function runUpdate(path, label, doneKey) {
     updateBusy = false;
     updateBtn.disabled = false;
     rollbackBtn.disabled = false;
-    setStatus(t('updateFailed', (error && error.name === 'RelayTimeoutError') ? t('errRelayTimeout') : t('errRelayUnreachable')), 'error');
+    // Three distinct failures, one shape of catch:
+    //   - the relay never answered        -> errRelayUnreachable / timeout
+    //   - the relay answered and refused  -> translate ITS code
+    //   - the relay answered, code unknown -> framed, never silently dropped
+    let reason;
+    if (error && error.name === 'RelayTimeoutError') {
+      reason = t('errRelayTimeout');
+    } else if (error && error.relayCode) {
+      reason = relayErrorText(error.relayCode);
+    } else {
+      reason = t('errRelayUnreachable');
+    }
+    setStatus(t('updateFailed', reason), 'error');
     refreshUpdateStatus();
   }
 }

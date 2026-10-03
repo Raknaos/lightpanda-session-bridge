@@ -1,3 +1,32 @@
+## [0.7.25] - Un echec d'installation nomme sa cause
+
+`runUpdate` levait correctement l'erreur du relais, puis son propre `catch`
+reecrivait le message inconditionnellement en « Impossible de joindre le relais
+(est-il demarre ?) ». Mesure sur le vrai popup.js : **1 texte distinct pour 11
+situations** - somme de controle refusee, archive invalide, rien a installer,
+dossier d'extension absent, origine refusee, extension non appariee, limite
+GitHub, relais eteint, delai depasse. Seule la derniere meritait ce message, et
+elle demandait de redemarrer une installation saine. `relayErrorText()`
+existait et n'etait jamais appelee depuis ce chemin : deuxieme fonction non lue
+apres `error_kind` (0.7.24).
+
+Second defaut trouve en corrigeant le premier : `unknownRelayError` etait ecrit
+`"Erreur du relais : {0}"` dans les dix langues, alors que `t()` ne substituait
+ses arguments que dans les valeurs de type fonction. Le `{0}` litteral arrivait a
+l'ecran et le code du relais jamais. `t()` accepte desormais les deux formes.
+
+Le check `relay_errors_are_translated` ne lisait que `relay/server.py`, et
+seulement sous la forme litterale `"error": "..."`, alors que le chemin de mise a
+jour leve ses propres erreurs dans `relay/updater.py` : 19 codes, tous non
+mappes, invisibles pour la garde. Surface lisible portee de **9 a 20 codes**.
+
+Onze cles i18n dans les dix langues (les huit refus d'archive regroupes sous une
+cause : dire « n'est pas une extension Manifest V3 » n'apprend rien).
+`tests/node/test_update_failure_text.js` 32 verts sur le vrai `runUpdate`, le
+vrai `relayErrorText` et le vrai `t()`. `scripts/proof_red_update_failure.py`
+2/2 rouges nommes. Nouveau check LOCAL `update_failure_names_its_cause`, preuve
+dans les deux sens : check aveugle -> READY, produit sabote -> NOT READY.
+
 ## [0.7.24] - « GitHub m'a refuse » n'est pas « le relais est mort »
 
 `/health` repondait 200 avec `ok: true` et la carte affichait quand meme
