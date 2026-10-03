@@ -99,15 +99,25 @@ def main():
     print(f"\nrun sans sabotage: {'GREEN' if green else 'RED'}")
 
     all_red = True
+    named_n = unnamed_n = invalid_n = 0
     print("\n--- par sabotage ---")
     for label, red, out in results:
         status = "RED (nomme)" if red else "NON PROUVE"
+        if red:
+            named_n += 1
+        else:
+            # Not red and not attributable: the sabotage did not prove anything,
+            # which is INVALID, not a red that happened to be unnamed (point 44).
+            invalid_n += 1
         if not red:
             all_red = False
         print(f"  {status:14} {label}")
         if not red:
             print("\n".join("      " + l for l in out.strip().splitlines()[-6:]))
 
+    # Tally line is a CONTRACT with scripts/acceptance.py (points 44/58/78).
+    print("\n%d/%d named red, %d unnamed, %d invalid"
+          % (named_n, len(results), unnamed_n, invalid_n))
     print(f"\nPROOF RED: {'yes' if (all_red and green) else 'NO'}")
     return 0 if (all_red and green) else 1
 

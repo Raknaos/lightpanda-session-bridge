@@ -109,14 +109,26 @@ def main():
 
     print("\n--- per sabotage ---")
     all_red = True
+    named_n = unnamed_n = invalid_n = 0
     for label, nonzero, named, out in results:
         status = "RED (named)" if (nonzero and named) else "NOT PROVEN"
+        if nonzero and named:
+            named_n += 1
+        elif nonzero:
+            # A red the harness could not attribute to this defect proves only
+            # that SOMETHING broke (point 24) - its own column, never the red one.
+            unnamed_n += 1
+        else:
+            invalid_n += 1
         if not (nonzero and named):
             all_red = False
         print(f"  {status:12} {label}")
         if not (nonzero and named):
             print("\n".join("      " + l for l in out.strip().splitlines()[-8:]))
 
+    # Tally line is a CONTRACT with scripts/acceptance.py (points 44/58/78).
+    print("\n%d/%d named red, %d unnamed, %d invalid"
+          % (named_n, len(results), unnamed_n, invalid_n))
     print(f"\nPROOF RED: {'yes' if (all_red and green) else 'NO'}")
     return 0 if (all_red and green) else 1
 

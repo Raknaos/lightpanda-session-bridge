@@ -1094,6 +1094,125 @@ def relay_errors_are_translated():
     return relay_error_translation_report()
 
 
+# ---------------------------------------------------------------------------
+# Reading a proof-red harness's verdict
+# ---------------------------------------------------------------------------
+# Five distinct spellings of the same three numbers were in this file by the time
+# the fifth harness was written - `(\d+) named red, (\d+) unnamed, (\d+) invalid`,
+# `(\d+) nomm\S* rouge, ...`, `(\d+)/(\d+) named red, (\d+) invalid`,
+# `(\d+)/(\d+) rouges nommes, ...`, and three harnisses that printed NONE of
+# them. A check that reads one spelling measures its own regex, not the harness:
+# the other four would fail with "no tally" and the suite would blame them.
+# So the tally is parsed ONCE, here, over every spelling measured so far - and a
+# harness with no recognisable tally is INVALID, never a silent pass (point 58:
+# a check that reports `?` measures nothing; here it must FAIL).
+
+# Each pattern is written so that EVERY match yields the SAME four named
+# groups - `named`, `total`, `unnamed`, `invalid`. Dispatching on the number of
+# positional groups was my first attempt and it was wrong: the "named red,
+# unnamed, invalid" shape captures 3 while the "n/N rouges nommes" shape captures
+# 4, so one branch read the unnamed count as the invalid count and every such
+# verdict came back (3, 0, 0, 0). Named groups make the shape impossible to
+# confuse.
+#
+# `total` is ALWAYS the denominator the harness itself printed - the number of
+# sabotages it claims to have run - never `named + unnamed`. Reading
+# `proof_red_unreadable_branch.py` showed `named == len(SABOTAGES)` as the
+# acceptance condition, so on a run where one sabotage is dead and one is
+# unnamed the denominator is the truth and the sum is a smaller number that
+# makes the caller compare `named < total` against a fiction.
+#
+# Two of the four shapes print NO denominator at all ("3 named red, 0 unnamed,
+# 0 invalid"). There `total = named + unnamed` is the only reading available,
+# and it is correct: every sabotage either proved or was unnamed - a sabotage
+# that did not run is counted in `invalid`, which is its own column.
+_TALLY_PATTERNS = (
+    # "8 sabotage(s), 8 rouge(s), 8 nomme(s), 0 invalide(s)"
+    #   n1 = sabotages run (TOTAL), n2 = reds, n3 = named, n4 = invalid
+    re.compile(r"(?P<total>\d+)\s+sabotage\S*\s*,\s*(?P<red>\d+)\s+rouge\S*\s*,\s*"
+               r"(?P<named>\d+)\s+nomm\S*\s*,\s*(?P<invalid>\d+)\s+invalid\S*", re.I),
+    # "3/3 rouges nommes, 0 sans nom, 0 invalides, 0 morts"
+    re.compile(r"(?P<named>\d+)\s*/\s*(?P<total>\d+)\s+rouges nommes\s*,"
+               r"\s*(?P<unnamed>\d+)\s+sans nom\s*,\s*(?P<invalid>\d+)\s+invalides?", re.I),
+    # "3 named red, 0 unnamed, 0 invalid" / "4 nomme(s) rouge, 0 non nomme(s), 0 invalide"
+    re.compile(r"(?P<named>\d+)\s+(?:named red|nomm\S* rouge)\s*,"
+               r"\s*(?P<unnamed>\d+)\s+(?:unnamed|non nomm\S*)\s*,"
+               r"\s*(?P<invalid>\d+)\s+(?:invalid|invalide)", re.I),
+    # "3/3 named red, 0 invalid" - no unnamed term, so unnamed is 0 BY the shape.
+    re.compile(r"(?P<named>\d+)\s*/\s*(?P<total>\d+)\s+named red\s*,"
+               r"\s*(?P<invalid>\d+)\s+invalid", re.I),
+)
+
+
+def proof_red_tally(out):
+    """-> (named, total, unnamed, invalid), or None when no tally is present.
+
+    `total` is what the harness CLAIMED and `named` is what it PROVED; the
+    difference is the unnamed column, which the caller must refuse. Returns None
+    rather than zeros so "no tally" stays distinguishable from "all green"
+    (point 58: a check that reports `?` measures nothing; here it must FAIL).
+    """
+    for pattern in _TALLY_PATTERNS:
+        m = pattern.search(out)
+        if not m:
+            continue
+        g = m.groupdict()
+        named = int(g["named"])
+        unnamed = int(g["unnamed"]) if g.get("unnamed") else 0
+        invalid = int(g["invalid"])
+        if g.get("total"):
+            total = int(g["total"])
+        elif g.get("red") is not None:
+            # n1 is the sabotage count, n2 the reds: unnamed = reds - named.
+            total = int(g["red"])
+        else:
+            total = named + unnamed
+        return named, total, unnamed, invalid
+    return None
+
+
+def run_proof_red(name, timeout=1800):
+    """Run one harness and return (status, detail) for a gate check.
+
+    Every refusal is NAMED, and the three are never merged (points 44/78):
+      * HARNESS   - the harness itself refused, or the child died on an import;
+      * INVALID   - no tally, or a tally reporting unnamed/invalid sabotages;
+      * FAIL      - the harness ran and reported a red that is not all-named.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    try:
+        r = subprocess.run([str(py), str(REPO / "scripts" / name)],
+                           cwd=str(REPO), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "FAIL", "%s: timed out after %ss - a sabotage whose value is large " \
+                       "must have its own budget sized to it (point 41)" % (name, timeout)
+    out = (r.stdout or "") + (r.stderr or "")
+    lines = out.strip().splitlines()
+    if re.search(r"ModuleNotFoundError|Failed to import test module|"
+                 r"unittest\.loader\._FailedTest", out):
+        return "FAIL", ("%s: the child failed to IMPORT - that is a harness "
+                        "failure, not evidence (point 57)" % name)
+    tally = proof_red_tally(out)
+    if tally is None:
+        return "FAIL", ("%s printed no tally - the check cannot tell a named red "
+                        "from an unnamed one (points 58/78); last line: %s"
+                        % (name, (lines[-1:] or ["no output"])[0][:60]))
+    named, total, unnamed, invalid = tally
+    if invalid:
+        return "FAIL", ("%s: %d invalid (a PATCH-MISS or a dead sabotage means the "
+                        "proof did not run), %d/%d named red"
+                        % (name, invalid, named, total))
+    if unnamed:
+        return "FAIL", ("%s: %d/%d named red, %d UNNAMED - an unnamed red proves "
+                        "only that something broke" % (name, named, total, unnamed))
+    if named < total:
+        return "FAIL", ("%s: only %d of %d sabotage(s) proved" % (name, named, total))
+    return "ok", "%d/%d named red" % (named, total)
+
+
 def _node_pass_count(out):
     """The Node suites print "18 passed, 0 failed" - a line that ENDS in
     "failed". Matching `.endswith("passed")` therefore found nothing and the
@@ -1455,6 +1574,56 @@ def clear_button_never_keeps_an_armed_confirmation():
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
 
+@check("every proof-red harness is REGISTERED and every sabotage is NAMED")
+def proof_red_harnesses_are_required():
+    """A proof-red harness nobody runs is a comment about a bug.
+
+    Measured 0.7.33: `scripts/` held 17 harnesses and the gate named 12. Five were
+    never executed by any commit - `update_channel` alone carries 11 sabotages,
+    `session_expiry` 8 - so 27 sabotage proofs had never been required to be red.
+    Three of the seventeen printed NO tally at all, so even a wired check could
+    not tell "4/4 named" from "4 reds of which 2 are unnamed".
+
+    One check, one parser, every harness: `proof_red_tally` reads all four
+    spellings and returns None when it recognises none, which is a FAIL and not a
+    silent pass (points 58/78). The companion audit proves the other half - that
+    no harness can exist without a check naming it - because a harness that is
+    added and not wired reads exactly like one that is wired and passes.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    harnesses = sorted(p.name for p in (REPO / "scripts").glob("proof_red_*.py"))
+    if not harnesses:
+        return "FAIL", "no proof-red harness found where scripts/ was expected"
+    ran = green = 0
+    bad = []
+    for name in harnesses:
+        status, detail = run_proof_red(name)
+        if status == "SKIP":
+            continue
+        ran += 1
+        if status == "ok":
+            green += 1
+        else:
+            bad.append(detail)
+    if bad:
+        return "FAIL", ("%d of %d harness(es) did not prove cleanly: %s"
+                        % (len(bad), ran, bad[0][:96]))
+    r = subprocess.run([str(py), str(REPO / "scripts" / "audit_proof_red_coverage.py")],
+                       cwd=str(REPO), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=300)
+    lines = (r.stdout or r.stderr).strip().splitlines()
+    if r.returncode != 0:
+        why = next((l.strip() for l in lines if l.strip()
+                    and not l.strip().startswith(("ORPHAN", "===", "PROOF-RED"))),
+                   "?")
+        return "FAIL", ("coverage audit is red: %s" % why[:88])
+    orphans = sum(1 for l in lines if l.strip().startswith("ORPHAN"))
+    return "ok", ("%d/%d harnesses proved every sabotage named red; %d harness(es) "
+                  "registered by name, 0 orphan" % (green, ran, len(harnesses)))
+
+
 @check("a credential is redacted whatever its alphabet, and prose survives")
 def scrubber_catches_any_alphabet():
     """The scrubber's own rule, measured in 0.7.32 against its own limits.
@@ -1780,7 +1949,8 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          scrubber_catches_any_alphabet,
          card_names_the_installed_version_on_the_first_frame,
          unreadable_branch_is_reported,
-         update_report_says_why_and_leaks_nothing]
+         update_report_says_why_and_leaks_nothing,
+         proof_red_harnesses_are_required]
 
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():

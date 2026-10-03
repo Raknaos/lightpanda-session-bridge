@@ -1,3 +1,17 @@
+## [0.7.33] - 2026-10-03
+### Fixed
+- Five proof-red harnesses were never executed by any commit, carrying 27 sabotage
+  proofs that had never been required to be red (`update_channel` alone carries 11,
+  `session_expiry` 8). The gate now discovers every `scripts/proof_red_*.py` by glob
+  and runs it, and a companion audit fails if a harness exists that no check requires.
+- Three of the seventeen harnesses printed no tally at all, so a check could not tell
+  "4/4 named red" from "4 reds of which 2 are unnamed". All three now print the named,
+  unnamed and invalid counters separately, and `proof_red_socket_timeout.py` also
+  refuses an import failure instead of counting it as evidence.
+- A harness whose tally the gate could not read was reported as a bare "no tally",
+  which merges two different states. It now names the harness and the state, so a
+  sabotage reports `proof_red_scrubber.py printed no tally` rather than a dead regex.
+
 ## [0.7.32] - 2026-10-03
 
 ### Fixed

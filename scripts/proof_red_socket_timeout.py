@@ -79,20 +79,39 @@ def main() -> int:
     stuck = [ln for ln in fails
              if "test_a_silent_connection_is_open_before_and_closed_after" in ln]
 
+    # An import failure or a failed PATCH-MISS means the PROOF never ran; it is
+    # INVALID, never a red (points 56/57/70).
+    import_broke = [ln for ln in out.splitlines()
+                    if "unittest.loader._FailedTest" in ln
+                    or ln.startswith(("ModuleNotFoundError", "ImportError"))]
+
     print("--- sabotage: class timeout 15 -> 45 ---")
     for ln in summary:
         print(" ", ln)
     for ln in fails:
         print("  ", ln)
-    ok = (proc.returncode != 0 and stuck and not harness_noise)
+    ok = (proc.returncode != 0 and stuck and not harness_noise and not import_broke)
     print("PROOF RED:", "yes" if ok else "NO")
     if not ok:
         if not stuck:
             print("  -> the failure does not NAME the defect (stuck socket)")
+        if import_broke:
+            print("  -> the suite could not be imported - harness failure, not a red")
+            for ln in import_broke[:5]:
+                print("     ", ln)
         if harness_noise:
             print("  -> harness noise present:")
             for ln in harness_noise[:5]:
                 print("     ", ln)
+    # Tally line is a CONTRACT with scripts/acceptance.py (points 44/58/78):
+    # one sabotage, so the tally is 1/1 named or the two refuse columns explain why.
+    if ok:
+        named_n, unnamed_n, invalid_n = 1, 0, 0
+    elif stuck and not harness_noise and not import_broke:
+        named_n, unnamed_n, invalid_n = 0, 1, 0
+    else:
+        named_n, unnamed_n, invalid_n = 0, 0, 1
+    print("\n%d/1 named red, %d unnamed, %d invalid" % (named_n, unnamed_n, invalid_n))
     return 0 if ok else 1
 
 
