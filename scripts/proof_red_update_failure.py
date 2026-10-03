@@ -106,8 +106,15 @@ def main() -> int:
             continue
 
         POPUP.write_text(text.replace(old, new, 1), encoding="utf-8", newline="")
-        code, out = run_test()
-        POPUP.write_bytes(original)
+        # `finally`, not an inline restore: this is a LOOP over sabotages, so the
+        # one call between the write and the restore is `run_test()` - the exact
+        # call that hangs or raises (point 31). If it throws, an inline restore
+        # never runs and popup.js keeps the sabotage while the next iteration
+        # snapshots it as its own "original".
+        try:
+            code, out = run_test()
+        finally:
+            POPUP.write_bytes(original)
 
         hit = expected in out
         if code == 0:

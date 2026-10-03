@@ -1,3 +1,20 @@
+## [0.7.34] - 2026-10-03
+### Fixed
+- A killed proof run leaves its sabotage on disk, because a killed process never
+  runs its `finally`. Three leftovers survived one session, none caught by the
+  gate: a `pyproject.toml` at a version nobody shipped, a `popup.js` with its
+  translation block replaced, and a `relay/diagnostics.py` whose `scrub()` was
+  swapped for a literal - which turns "the report masks credentials" into "the
+  report prints them".
+- Two of the seventeen harnesses had no `try` around their write/restore pair, so
+  an exception in the test run between the two leaked the sabotage permanently.
+  Both restores now sit in a `finally` whose only content is the call that can
+  hang.
+- The gate now fingerprints every file a proof-red harness edits, before and
+  after running the family, and refuses any difference. A per-harness promise is
+  not a fence: the check is independent of the restorations it fences, so a
+  harness that restores wrongly fails loudly instead of poisoning the next run.
+
 ## [0.7.33] - 2026-10-03
 ### Fixed
 - Five proof-red harnesses were never executed by any commit, carrying 27 sabotage

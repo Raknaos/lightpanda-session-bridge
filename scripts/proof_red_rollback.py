@@ -74,8 +74,16 @@ def main() -> int:
 
     POPUP.write_text(text.replace(SABOTAGE[0], SABOTAGE[1], 1),
                      encoding="utf-8", newline="")
-    code, out = run_test()
-    POPUP.write_bytes(original)
+    # The restore is inside `finally` because the ONLY thing between the sabotage
+    # and the restore is the test run, and that is exactly what can hang or raise
+    # (point 31: a killed process never runs its `finally`). Written inline, a
+    # failure here leaves popup.js carrying a dead `rollbackBtn.style.display`
+    # and no test in the suite can tell, because the suite is also sabotaged.
+    try:
+        code, out = run_test()
+    finally:
+        POPUP.write_bytes(original)
+        restored = POPUP.read_bytes() == original
 
     red = [ln for ln in out.splitlines() if ln.startswith("  FAIL")]
     print("\nA. l'ecrasement du bouton est retabli")

@@ -1574,6 +1574,63 @@ def clear_button_never_keeps_an_armed_confirmation():
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
 
+@check("the product is byte-identical after every proof-red harness has run")
+def product_survives_the_proof_red_harnesses():
+    """Seventeen harnesses EDIT product files. Nothing required them to restore.
+
+    Measured 0.7.33, three times in one session: a proof run was killed at its
+    timeout with a live edit still on disk, so its `finally` never ran. The three
+    leftovers were `pyproject.toml` at a version nobody shipped, `popup.js`
+    without its translation block, and `relay/diagnostics.py` with `scrub()`
+    replaced by a literal - a report that would have printed `[redacted]` where
+    the update reason belongs, or a truncated token where the whole secret was
+    before. None was caught by the gate: the harnesses that had already run
+    reported green, and the next harness took the sabotage as its own "original".
+
+    The structural fix is a fence around the whole family: hash the files the
+    harnesses touch BEFORE running them, run them, hash again, and refuse any
+    difference. A harness that restores wrongly then fails loudly instead of
+    leaving the tree dirty for the next run - and the check is independent of
+    each harness's own restoration, which is the part that can be skipped.
+    """
+    targets = ("extension/popup.js", "relay/server.py", "relay/updater.py",
+               "relay/diagnostics.py")
+    import hashlib
+
+    def fingerprint():
+        out = {}
+        for rel in targets:
+            f = REPO / rel
+            out[rel] = hashlib.sha256(f.read_bytes()).hexdigest() if f.exists() else None
+        return out
+
+    before = fingerprint()
+    ran, bad = 0, []
+    for name in sorted(p.name for p in (REPO / "scripts").glob("proof_red_*.py")):
+        status, detail = run_proof_red(name)
+        if status == "SKIP":
+            continue
+        ran += 1
+        if status != "ok":
+            bad.append(detail)
+    after = fingerprint()
+    drifted = [r for r in targets if before[r] != after[r]]
+    if bad:
+        return "FAIL", "%d harness(es) failed: %s" % (len(bad), bad[0][:70])
+    if drifted:
+        # Reached only when every harness itself reported cleanly, which is the
+        # case worth naming: the harnesses say they restored, and the fingerprint
+        # says they did not. Reported on its own line because a leftover sabotage
+        # is a LIVE defect in the tree, while a harness verdict is a statement
+        # about the proof (points 78 and 24 read together).
+        return "FAIL", ("%d product file(s) left MODIFIED by a proof-red harness: "
+                        "%s - the tree now carries a defect, and the next harness "
+                        "will snapshot it as its own 'original'"
+                        % (len(drifted), ", ".join(drifted)))
+    return "ok", ("%d harness(es) ran, %d product file(s) byte-identical before "
+                  "and after" % (ran, len(targets)))
+
+
 @check("every proof-red harness is REGISTERED and every sabotage is NAMED")
 def proof_red_harnesses_are_required():
     """A proof-red harness nobody runs is a comment about a bug.
@@ -1950,7 +2007,8 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          card_names_the_installed_version_on_the_first_frame,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing,
-         proof_red_harnesses_are_required]
+         proof_red_harnesses_are_required,
+         product_survives_the_proof_red_harnesses]
 
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():
