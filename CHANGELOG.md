@@ -1,3 +1,9 @@
+## [0.7.37] - 2026-10-03
+
+### Fixed
+- A check can no longer sit in LOCAL/LIVE without its `@check` decorator, and a
+  check written but never wired is now named instead of passing unnoticed.
+
 ## [0.7.36] - 2026-10-03
 
 ### Fixed

@@ -1574,6 +1574,89 @@ def clear_button_never_keeps_an_armed_confirmation():
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
 
+@check("every registered check is decorated and resolvable")
+def the_gate_cannot_contain_a_check_that_cannot_be_seen():
+    """A check whose name sits in LOCAL/LIVE but which no @check decorator wraps
+    is not a check: `@check` is what prints the line and appends to RESULTS, so an
+    undecorated function either raises NameError or - worse - resolves to a plain
+    callable the loop calls and whose verdict nobody reads. Point 13 recorded that
+    hazard in prose; nothing PROVED it.
+
+    Measured 0.7.37: this audit existed only as ad-hoc runs in a notebook, and a
+    regex version of it was wrong twice before it was right - it matched
+    `ast.Name` for the decorator, but `@check("x")` is an `ast.Call`, so the
+    audit reported all 52 checks as undecorated, and an earlier line-slicing
+    version counted 191 names because it ran past the closing bracket into the
+    next function body. So the check parses with `ast`, not with regexes.
+
+    The AST also answers the question a name list cannot: are there checks
+    DEFINED but never REGISTERED (they can never influence the verdict), and
+    registered names with no definition (the gate would raise NameError)?
+    """
+    import ast
+    path = REPO / "scripts" / "acceptance.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError) as err:
+        return "SKIP", "cannot parse the gate: %s" % type(err).__name__
+
+    lists, defs, decorators = {}, {}, {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            nm = node.targets[0].id
+            if nm in ("LOCAL", "LIVE") and isinstance(node.value, ast.List):
+                lists[nm] = [e.id for e in node.value.elts if isinstance(e, ast.Name)]
+        elif isinstance(node, ast.FunctionDef):
+            defs[node.name] = True
+            seen = None
+            for dec in node.decorator_list:
+                if isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
+                    seen = dec.func.id
+                elif isinstance(dec, ast.Name):
+                    seen = dec.id
+            decorators[node.name] = seen
+
+    if "LOCAL" not in lists or "LIVE" not in lists:
+        return "FAIL", "the gate no longer declares LOCAL/LIVE as list literals"
+    registered = lists["LOCAL"] + lists["LIVE"]
+
+    ghosts = sorted(n for n in registered if n not in defs)
+    if ghosts:
+        return "FAIL", ("%d registered name(s) have no function: %s - the gate would "
+                        "raise NameError instead of reporting" % (len(ghosts), ", ".join(ghosts[:6])))
+    naked = sorted(n for n in registered if decorators.get(n) != "check")
+    if naked:
+        return "FAIL", ("%d registered check(s) carry no @check decorator: %s - "
+                        "nothing prints their verdict, so they cannot fail the gate"
+                        % (len(naked), ", ".join(naked[:6])))
+    # The reverse question needs care: a function that is neither registered nor
+    # decorated is usually a HELPER (`record`, `relay_call`, `project_python`), and
+    # my first version flagged all twelve of them and reddened on a healthy tree -
+    # a check that refuses the correct state measures nothing. A helper is
+    # identified by being CALLED, not by how it is named, so a function no other
+    # top-level code calls is the only real orphan: a check written and never wired.
+    called = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            fn = node.func
+            name = fn.id if isinstance(fn, ast.Name) else (
+                fn.attr if isinstance(fn, ast.Attribute) else None)
+            if name:
+                called.add(name)
+    unwired = sorted(n for n in defs
+                     if n not in registered
+                     and decorators.get(n) != "check"
+                     and n not in called
+                     and n != "main")
+    if unwired:
+        return "FAIL", ("%d function(s) are never registered, never decorated and never "
+                        "called: %s - a check written and never wired is a comment "
+                        "about a bug" % (len(unwired), ", ".join(unwired[:6])))
+    return "ok", ("%d checks: every registered name resolves and is decorated; %d "
+                  "helpers are all called; nothing is neither"
+                  % (len(registered), len(defs) - len(registered)))
+
+
 @check("no stored 'pristine' copy can become a false reference")
 def pristine_copies_match_the_committed_product():
     """A harness that self-heals its own pristine will heal it toward DAMAGE.
@@ -2184,6 +2267,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          proof_red_harnesses_are_required,
          pristine_copies_match_the_committed_product,
          product_survives_the_proof_red_harnesses,
+         the_gate_cannot_contain_a_check_that_cannot_be_seen,
          # ORDER, measured 0.7.36: the unit suite runs LAST. Eleven of its test
          # files read the same four product files the harnesses sabotage, so a
          # suite placed BEFORE the fence measures whatever sabotage was live at
