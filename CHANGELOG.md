@@ -1,3 +1,19 @@
+## [0.7.39] - 2026-10-03
+
+### Fixed
+- Nine checks reported a Node failure as the literal `?` whenever the suite died
+  before printing a `FAIL` line, so the verdict could not tell "no cause found"
+  from "here is the cause". They now name a measured one: the exit code, how
+  many lines came out, and the last line that did.
+- The rule is now asserted on the AST over every returned verdict and every
+  helper that returns a string, so a tenth `next(..., "?")` is caught rather
+  than left for someone to notice. Eleven sibling checks already did this
+  correctly, which is what made the nine visible.
+
+### Notes
+- A `?` inside a docstring that documents the old bug is not a defect, and the
+  guard says so: it audits expression leaves, so documentation is never flagged.
+
 ## [0.7.38] - 2026-10-03
 
 ### Fixed

@@ -1284,6 +1284,35 @@ def run_proof_red(name, timeout=1800):
     return "ok", "%d/%d named red" % (named, total)
 
 
+def _node_failure(out, returncode, suite):
+    """Name the cause of a Node suite's non-zero exit, from what it printed.
+
+    Measured 0.7.39: nine checks read the failure line as
+    `next((l for l in out if l.startswith("FAIL")), "?")`. When the suite
+    crashed before printing one - `Cannot find module`, a syntax error, a
+    missing binary - the gate reported the literal `?`. Eleven sibling checks
+    in this same file already did it right (`printed no tally: %s` over
+    `lines[-1:] or ["no output"]`), so the placeholder was not a convention,
+    it was nine sites that never got the fix.
+
+    `?` is the worst possible FAIL detail: the verdict cannot tell "I found no
+    cause" from "here is the cause", so a reader - or the next agent - has
+    nothing to act on. So this helper never returns a placeholder. It returns
+    the FAIL line when there is one, and otherwise a MEASURED description of
+    the silence: the exit code, how many lines came out, and the last line
+    that did.
+    """
+    named = next((l.strip() for l in out if l.strip().startswith("FAIL")), "")
+    if named:
+        return named[:88]
+    empty = next((l.strip() for l in out if l.strip()), "")
+    if not empty:
+        return "%s printed NOTHING and exited %d - it produced no FAIL line to read" % (
+            suite, returncode)
+    return "%s printed no FAIL line and exited %d (%d line(s)); last: %s" % (
+        suite, returncode, len([l for l in out if l.strip()]), empty[:60])
+
+
 def _node_pass_count(out):
     """The Node suites print "18 passed, 0 failed" - a line that ENDS in
     "failed". Matching `.endswith("passed")` therefore found nothing and the
@@ -1311,7 +1340,7 @@ def badge_is_refreshed():
                        cwd=str(REPO), capture_output=True, text=True)
     out = (r.stdout or r.stderr).strip().splitlines()
     if r.returncode != 0:
-        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(out, r.returncode, "test_badge_refresh.js")
         return "FAIL", failed[:88]
     passed = _node_pass_count(out)
     if passed is None:
@@ -1339,7 +1368,7 @@ def update_card_is_honest():
                        cwd=str(REPO), capture_output=True, text=True)
     out = (r.stdout or r.stderr).strip().splitlines()
     if r.returncode != 0:
-        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(out, r.returncode, "test_update_card_truth.js")
         return "FAIL", failed[:88]
     passed = _node_pass_count(out)
     if passed is None:
@@ -1480,7 +1509,7 @@ def undo_is_reachable_after_install():
                         timeout=300)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_rollback_reachable.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
@@ -1534,7 +1563,7 @@ def every_update_state_owns_its_tooltip():
                         timeout=300)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_tooltip_state_truth.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
@@ -1585,7 +1614,7 @@ def every_state_owns_the_button_wording():
                         timeout=300)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_button_wording_truth.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
@@ -1638,12 +1667,166 @@ def clear_button_never_keeps_an_armed_confirmation():
                         timeout=300)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_clear_button_truth.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
         return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
     return "ok", "%s; one shared reset owns all four button properties" % count
+
+@check("every FAIL names a measured cause, never a placeholder")
+def every_fail_names_a_cause():
+    """A FAIL whose detail is `?` tells the reader nothing, and the verdict
+    cannot tell it apart from a real cause.
+
+    Measured 0.7.39: I fixed nine checks that reported the literal `?` when a
+    Node suite died before printing a `FAIL` line. Fixing nine call sites is a
+    cleanup, not an invariant - the tenth `next(..., "?")` was one careless
+    afternoon away. So the rule is asserted here, on the AST, over every
+    returned verdict in this file rather than over a list of strings I typed.
+
+    Three ways to fail a reader, all checked:
+      1. the placeholder itself, as a constant detail;
+      2. a detail that is empty or only punctuation - `failed[:88]` where
+         `failed` can be `""` prints nothing at all;
+      2b. the placeholder reached through a VARIABLE rather than the returned
+         expression - `bad = next(..., "?")` then `return bad[:88]` - which is why
+         the scan walks the whole function body. Its own first pattern was
+         a negated class that cannot cross the ")" closing the generator, which
+         comes before the placeholder - the identical shape that made the 0.7.38
+         timeout regex pass a zero deadline. The form that matches all three
+         real shapes is a non-greedy ".*?" up to the quoted question mark.
+         same reason the 0.7.38 timeout regex failed: `[^)]*` cannot cross the
+         `)` that closes the generator, which comes before the placeholder.
+         a non-greedy any-char run up to the quoted question mark is the form
+         that matches all three real shapes, measured before it was wired in.
+      3. a detail that subscripts a LIST with [-1] and no fallback, because an
+         empty list raises IndexError instead of reporting. Narrow on purpose:
+         `url.rsplit("/", 1)[-1]` looks identical in the text and can never
+         raise, because `rsplit` always returns at least one element - my first
+         version of this clause flagged it and taught me to ignore my own check,
+         which is worse than having no check at all.
+    """
+    import ast as _ast
+    path = REPO / "scripts" / "acceptance.py"
+    tree = _ast.parse(path.read_text(encoding="utf-8"))
+    # Skip THIS function. It must contain the literal `next(..., "?")` in order to
+    # recognise one, so auditing itself is a self-reference, not a finding - the
+    # same reason a spell-checker may contain misspellings. Measured: the first
+    # version flagged its own regex and reported a defect in the defect-finder.
+    me = __name__ + ".every_fail_names_a_cause"
+    placeholders, empties, unguarded = [], [], []
+    banned = {"?", "??", "...", "-", "n/a", "N/A", "unknown", "None", "?"}
+    for fn in [n for n in tree.body if isinstance(n, _ast.FunctionDef)]:
+        if fn.name == "every_fail_names_a_cause":
+            continue
+        # Which returns count? A check returns ("FAIL", detail) - but the
+        # DETAIL is often built in a helper that returns a bare string, and
+        # gating on the tuple is how the first version of this check audited
+        # zero of the four sites it was written for: `_node_failure` returns a
+        # string, so every placeholder it could produce was invisible. So a
+        # function is audited if it returns a verdict tuple OR if it can hand a
+        # string back to something that builds one.
+        for node in _ast.walk(fn):
+            if not isinstance(node, _ast.Return):
+                continue
+            value = node.value
+            if isinstance(value, _ast.Tuple) and len(value.elts) == 2:
+                status, detail = value.elts
+                if not (isinstance(status, _ast.Constant) and status.value == "FAIL"):
+                    continue
+            elif fn.name.startswith("_"):
+                # a helper returning a bare string: its whole body can reach a
+                # verdict, so treat the body as the detail under audit
+                detail = value
+                if detail is None:
+                    continue
+            else:
+                continue
+            where = "L%d in %s" % (node.lineno, fn.name)
+            if isinstance(detail, _ast.Constant):
+                if str(detail.value).strip() in banned:
+                    placeholders.append("%s: detail is the placeholder %r" % (where, detail.value))
+                elif not str(detail.value).strip(" \t"):
+                    empties.append("%s: detail is blank" % where)
+                continue
+            # A computed detail: reject one that can silently produce nothing.
+            # The scan has to see the WHOLE FUNCTION, not just the returned
+            # expression: two of the four sites I fixed assigned the placeholder
+            # to a variable first (`bad = next(..., "?")` then `return
+            # bad[:88]`), so a check that only unparsed the returned tuple found
+            # two of the four. So the placeholder is looked for in every
+            # `next(...)` call and every string built in the function body.
+            text = _ast.unparse(detail)
+            # EXECUTABLE code only. `ast.unparse` re-emits docstrings as string
+            # constants, and a docstring that documents the old bug quotes the very
+            # pattern being hunted - so the first version of this check went red
+            # on its own helper, which is exactly how a checker teaches you to
+            # ignore it. Comments are already dropped by the parser. So the
+            # function's own docstring, and every nested one, is excluded.
+            # only the node types that CAN hold one: get_docstring raises
+            # TypeError on `arguments`, which walk visits, and a check that
+            # crashes reports a FAIL detail of its own exception type
+            _with_docs = (_ast.Module, _ast.FunctionDef, _ast.AsyncFunctionDef,
+                          _ast.ClassDef)
+            _docs = set()
+            for _n in _ast.walk(fn):
+                if isinstance(_n, _with_docs):
+                    _d = _ast.get_docstring(_n, clean=False)
+                    if _d is not None:
+                        _docs.add(_d)
+            # Only EXPRESSION nodes are unparsed, never the containers.
+            # `ast.walk` also yields the FunctionDef and the Module, and
+            # unparsing either re-renders the entire function - docstring
+            # included - so the audit kept matching its own documentation
+            # through three successive filters. Measured: the offending nodes
+            # were FunctionDef(L1287), Expr(L1288) and Constant(L1288, the
+            # docstring itself). Containers and docstring-bearing Expr are
+            # dropped by name; what remains is code that can actually run.
+            _containers = (_ast.Module, _ast.FunctionDef, _ast.AsyncFunctionDef,
+                           _ast.ClassDef, _ast.Expr, _ast.Return, _ast.Assign,
+                           _ast.AugAssign, _ast.AnnAssign, _ast.If, _ast.For,
+                           _ast.While, _ast.With, _ast.Try)
+            _nodes = [n for n in _ast.walk(fn)
+                      if not isinstance(n, _containers)
+                      and not (isinstance(n, _ast.Constant)
+                               and isinstance(n.value, str) and n.value in _docs)]
+            body = "\n".join(_ast.unparse(n) for n in _nodes)
+            if '"?"' in text or "'?'" in text:
+                placeholders.append("%s: computed detail still yields a placeholder" % where)
+            elif re.search(r"next\(.*?[\'\"]\?[\'\"]\s*[,)]", body, re.S):
+                # find WHICH line, so the message names a location not a function.
+                # The SAME docstring filter applies here: the reporting loop
+                # re-walks the function, and unparsing the Module node re-emits
+                # the docstring that `body` had just excluded - so the check
+                # found its own documentation. Filter the node set once and use
+                # it for both.
+                for node in _nodes:
+                    frag = _ast.unparse(node)
+                    if 'next(' in frag and re.search(r"[\'\"]\?[\'\"]", frag):
+                        placeholders.append("%s via next(..., <question mark>) at L%d in %s"
+                                            % (where, getattr(node, "lineno", 0), fn.name))
+                        break
+            # a subscript slice with no `or` fallback anywhere in the expression
+            # only a LIST subscript counts: `x[-1]` where x is a name bound to a
+            # list comprehension or splitlines() can raise on empty input.
+            # `x.rsplit(...)[-1]` and `x.split(...)[-1]` cannot - str methods
+            # always return a non-empty list - so a str call disqualifies the
+            # whole expression rather than flagging a safe line.
+            if "[-1]" in text and " or " not in text and ".split" not in text and ".rsplit" not in text:
+                unguarded.append("%s: %s - subscripts a possibly-empty list" % (where, text[:60]))
+    problems = placeholders + empties + unguarded
+    if problems:
+        return "FAIL", "%d FAIL verdict(s) that name no cause: %s" % (
+            len(problems), "; ".join(problems[:4]))
+    return "ok", ("no FAIL verdict in this file falls back to a placeholder; "
+                  "%d FAIL detail(s) are computed and none can go empty" %
+                  sum(1 for n in _ast.walk(tree) if isinstance(n, _ast.Return)
+                      and isinstance(n.value, _ast.Tuple) and len(n.value.elts) == 2
+                      and isinstance(n.value.elts[0], _ast.Constant)
+                      and n.value.elts[0].value == "FAIL"
+                      and not isinstance(n.value.elts[1], _ast.Constant)))
+
 
 @check("every registered check is decorated and resolvable")
 def the_gate_cannot_contain_a_check_that_cannot_be_seen():
@@ -2001,8 +2184,9 @@ def proof_red_harnesses_are_required():
     lines = (r.stdout or r.stderr).strip().splitlines()
     if r.returncode != 0:
         why = next((l.strip() for l in lines if l.strip()
-                    and not l.strip().startswith(("ORPHAN", "===", "PROOF-RED"))),
-                   "?")
+                    and not l.strip().startswith(("ORPHAN", "===", "PROOF-RED"))), "") or (
+            "the coverage audit printed only banner lines; last: %s"
+            % (lines[-1:] or ["no output"])[0][:52])
         return "FAIL", ("coverage audit is red: %s" % why[:88])
     orphans = sum(1 for l in lines if l.strip().startswith("ORPHAN"))
     return "ok", ("%d/%d harnesses proved every sabotage named red; %d harness(es) "
@@ -2045,8 +2229,9 @@ def scrubber_catches_any_alphabet():
     out = (r.stdout or r.stderr).strip()
     lines = out.splitlines()
     if "HARNESS" in out:
-        return "FAIL", "scrubber proof refused to run: " + next(
-            (l.strip() for l in lines if "HARNESS" in l), "?")
+        return "FAIL", "scrubber proof refused to run: %s" % (
+            next((l.strip() for l in lines if "HARNESS" in l),
+                 (lines[-1:] or ["no output"])[0]))
     m = re.search(r"(\d+) named red, (\d+) unnamed, (\d+) invalid", out)
     if not m:
         return "FAIL", ("no tally from the scrubber proof - the harness may have "
@@ -2064,7 +2249,9 @@ def scrubber_catches_any_alphabet():
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
         bad = next((l.strip() for l in lines2
-                    if l.strip().startswith(("LEAK", "ERASED", "FAIL"))), "?")
+                    if l.strip().startswith(("LEAK", "ERASED", "FAIL"))), "") or (
+            "scrubber suite printed no LEAK/ERASED/FAIL line and exited %d; last: %s"
+            % (r2.returncode, (lines2[-1:] or ["no output"])[0][:48]))
         return "FAIL", bad[:88]
     ok_lines = sum(1 for l in lines2 if l.strip().startswith("ok"))
     if not ok_lines:
@@ -2120,8 +2307,9 @@ def no_value_outlives_its_state():
     m = re.search(r"(\d+) nomm\S* rouge, (\d+) non nomm\S*, (\d+) invalide", out)
     if not m:
         if "HARNESS FAIL" in out:
-            return "FAIL", "audit harness refused to run: " + next(
-                (l.strip() for l in lines if "HARNESS FAIL" in l), "?")
+            return "FAIL", "audit harness refused to run: %s" % (
+                next((l.strip() for l in lines if "HARNESS FAIL" in l),
+                     (lines[-1:] or ["no output"])[0]))
         return "FAIL", ("no tally from the state-ownership proof - the harness may "
                         "have failed: %s" % (lines[-1:] or ["no output"]))
     got, unnamed, invalid = (int(x) for x in m.groups())
@@ -2142,7 +2330,7 @@ def no_value_outlives_its_state():
                         encoding="utf-8", errors="replace", timeout=600)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_no_value_outlives_its_state.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
@@ -2197,7 +2385,7 @@ def card_names_the_installed_version_on_the_first_frame():
                         timeout=300)
     lines2 = (r2.stdout or r2.stderr).strip().splitlines()
     if r2.returncode != 0:
-        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(lines2, r2.returncode, "test_card_identity_immediate.js")
         return "FAIL", failed[:88]
     count = _node_pass_count(lines2)
     if not count:
@@ -2340,6 +2528,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          pristine_copies_match_the_committed_product,
          product_survives_the_proof_red_harnesses,
          the_gate_cannot_contain_a_check_that_cannot_be_seen,
+         every_fail_names_a_cause,
          # ORDER, measured 0.7.36: the unit suite runs LAST. Eleven of its test
          # files read the same four product files the harnesses sabotage, so a
          # suite placed BEFORE the fence measures whatever sabotage was live at
@@ -2372,7 +2561,7 @@ def installed_popup_translates():
     out = (r.stdout or r.stderr).strip().splitlines()
     passed = _node_pass_count(out)
     if r.returncode != 0:
-        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        failed = _node_failure(out, r.returncode, "test_relay_deadline.js")
         return "FAIL", failed[:90]
     if passed is None:
         return "FAIL", "the suite ran green but printed no pass count"
