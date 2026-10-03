@@ -1136,6 +1136,20 @@ function fmtExpiry(ts) {
 }
 
 
+// Every property the clear button owns, in one place. Measured 0.7.29: the
+// empty-list branch reset `style.display` alone while this one reset four
+// properties, so an ARMED button ("Confirm?") survived a refresh that emptied
+// the list and the next click wiped every synced session with no confirmation.
+// The two-step confirmation is a SAFETY property, so its state must be owned by
+// the list's state and never inherited - and with one function, a future branch
+// cannot forget the third property either.
+function resetClearButton(display = 'none') {
+  delete sessionsClear.dataset.armed;
+  sessionsClear.removeAttribute('title');
+  clearText.textContent = labelClear();
+  sessionsClear.style.display = display;
+}
+
 function renderSessions(data) {
   const sessions = (data && data.sessions) || [];
   sessionsCount.textContent = String(sessions.length);
@@ -1146,7 +1160,15 @@ function renderSessions(data) {
     empty.className = 'sessions-empty';
     empty.textContent = t('sessionsEmpty');
     sessionsList.appendChild(empty);
-    sessionsClear.style.display = 'none';
+    // This branch owns the WHOLE button state, not just its visibility.
+    // Measured 0.7.29: it reset `style.display` alone, so a button the user had
+    // already ARMED for confirmation kept `dataset.armed`, its `title` and its
+    // "Confirm?" wording across a refresh that emptied the list - and the next
+    // click then wiped every synced session with no confirmation at all. The
+    // full-list branch below resets all four; this one must too. Same rule as
+    // 0.7.27 (title) and 0.7.28 (button wording): a value belongs to a state,
+    // and every branch must own it or deliberately leave it alone.
+    resetClearButton();
     return;
   }
 
@@ -1186,10 +1208,7 @@ function renderSessions(data) {
     sessionsList.appendChild(row);
   });
 
-  sessionsClear.style.display = 'inline-flex';
-  delete sessionsClear.dataset.armed;
-  sessionsClear.removeAttribute('title');
-  clearText.textContent = labelClear();
+  resetClearButton('inline-flex');
 }
 
 async function clearSessionsOnRelay(origin = null) {

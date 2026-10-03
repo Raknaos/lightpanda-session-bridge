@@ -1403,6 +1403,59 @@ def every_state_owns_the_button_wording():
     return "ok", "%s; the wording is seeded, so no state inherits a version" % count
 
 
+@check("the clear button never keeps an armed confirmation across a refresh")
+def clear_button_never_keeps_an_armed_confirmation():
+    """Measured on 0.7.29, third of the family 0.7.27/0.7.28 opened: a value
+    belongs to a STATE.
+
+    `renderSessions` reset FOUR properties of the clear button in its "a list
+    exists" branch - `style.display`, `dataset.armed`, `title`, `clearText` -
+    and only ONE in its "the list is empty" branch. So a button the user had
+    already armed for the two-step confirmation kept `dataset.armed`, its
+    "Confirm?" wording and its tooltip across a refresh that emptied the list,
+    and the NEXT click then wiped every synced session with no confirmation.
+
+    The confirmation is a SAFETY property, so its state must be owned by the
+    list's state and never inherited. `resetClearButton()` now owns all four, so
+    neither branch can forget the third one - the shape of fix that survives
+    the next branch somebody adds.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_clear_button.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) named red, (\d+) invalid", out)
+    if not m:
+        if "ECHEC : popup.js est rouge" in out:
+            return "FAIL", ("popup.js is red on disk: %s" % next(
+                (l.strip() for l in lines if l.strip().startswith("ECHEC")), "(voir sortie)"))
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, invalid = (int(x) for x in m.groups())
+    if got != total or invalid:
+        return "FAIL", ("%d/%d named red, %d invalid - a PATCH-MISS or harness "
+                        "failure means the proof did not run" % (got, total, invalid))
+    if "restored byte for byte: True" not in out:
+        return "FAIL", "popup.js was not restored byte for byte by the harness"
+    import shutil as _sh
+    node_bin = _sh.which("node")
+    if not node_bin:
+        return "SKIP", "node is absent"
+    r2 = subprocess.run([node_bin, str(REPO / "tests" / "node" / "test_clear_button_truth.js"),
+                         str(REPO)], cwd=str(REPO), capture_output=True, text=True,
+                        timeout=300)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    count = _node_pass_count(lines2)
+    if not count:
+        return "FAIL", "clear button suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
+    return "ok", "%s; one shared reset owns all four button properties" % count
+
+
 @check("a failed update names its cause instead of blaming the relay")
 def update_failure_names_its_cause():
     """Measured on 0.7.24 (found while fixing 0.7.25): `runUpdate` threw the
@@ -1527,6 +1580,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          undo_is_reachable_after_install,
          every_update_state_owns_its_tooltip,
          every_state_owns_the_button_wording,
+         clear_button_never_keeps_an_armed_confirmation,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 

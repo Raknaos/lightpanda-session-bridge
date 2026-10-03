@@ -1,3 +1,40 @@
+## [0.7.29] - un bouton arme ne survit pas a un rafraichissement
+
+`renderSessions` reinitialisait QUATRE proprietes du bouton « tout effacer » dans
+sa branche « une liste existe » (`style.display`, `dataset.armed`, `title`,
+`clearText`) et UNE SEULE dans sa branche « la liste est vide ». Un bouton deja
+arme pour la confirmation en deux temps gardait donc son drapeau, son libelle
+« Confirmer ? » et son infobulle a travers un rafraichissement qui vidait la
+liste ; le clic SUIVANT effacait alors toutes les sessions synchronisees, sans
+confirmation. Troisieme membre de la famille ouverte en 0.7.27, et le seul qui
+detruit des donnees au lieu d'afficher une phrase fausse.
+
+Le correctif n'est pas une graine mais un proprietaire partage :
+`resetClearButton()` possede les quatre proprietes et les deux branches y
+passent. Une graine en tete de fonction ne peut pas corriger une ASYMETRIE entre
+deux branches ; un proprietaire partage ne peut pas oublier une troisieme
+propriete quand on ajoutera la prochaine branche.
+
+Consequence pour l'audit : il doit couvrir les controles de DESARMEMENT -
+CONFIRMER, ANNULER, RETOUR, TOUT SUPPRIMER - pas seulement libelles et
+infobulles ; et un etat masque par `display: none` reste un etat, donc la preuve
+montre l'effet du CLIC SUIVANT, pas seulement l'attribut masque. Verifie au
+passage : le balisage livre `<span id="clear-text">Clear all</span>`, un litteral
+anglais que seule la branche « liste pleine » remplace.
+
+`tests/node/test_clear_button_truth.js` 10 verts. `scripts/proof_red_clear_button.py`
+3/3 rouges nommes, 0 invalide, restaure a l'octet. Nouveau check LOCAL
+`clear_button_never_keeps_an_armed_confirmation`, influent : produit sabote ->
+`30 checks, NOT READY` exit 1.
+
+Deux fautes de harnais qui auraient epingle des defauts inexistants : mon
+`removeAttribute` etait `delete this.__attr`, donc le test « l'infobulle de
+confirmation a disparu » mesurait mon stub et aurait continue de passer apres
+n'importe quel vrai correctif ; et j'ai appele `renderSessions(null)` pour
+verifier l'etat « liste illisible », qui appartient a `refreshSessions` - le test
+signalait un defaut dans la mauvaise fonction, et sa tranche de source
+n'incluait pas meme l'helper que le code teste appelle.
+
 ## [0.7.28] - chaque etat possede le libelle du bouton
 
 Sorti de la regle que 0.7.27 vient d'etablir - un libelle est une propriete d'un
