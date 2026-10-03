@@ -1,3 +1,40 @@
+## [0.7.30] - la carte nomme la version installee des le premier cadre
+
+`init()` ecrivait la version du PIED de page de facon synchrone, mais ne rendait
+la carte de mise a jour qu'APRES `await loadBridgeToken()`, le bootstrap et la
+sonde du relais. `/v1/update/check` repond en 864 ms sur le relais en service :
+pendant toute cette fenetre la carte affichait `v0.5.0`, le litteral de
+`popup.html`, sur une extension installee en 0.7.29 - vingt-neuf versions de
+retard, sur le panneau dont le seul but est de dire de quelle version vous etes.
+Le footer, lui, disait la bonne version : les deux noeuds etaient en desaccord,
+et celui qui mentait etait le plus visible.
+
+Ce n'etait pas necessaire : `chrome.runtime.getManifest()` est une connaissance
+LOCALE. Le correctif rend la carte tout de suite, avec `updateInfo` encore null.
+La puce est honnete entre-temps - « Relais hors ligne » signifie « je n'ai pas
+encore ete prevenu », la meme regle que les points 64/67 cote relais.
+
+Le test amorce chaque noeud avec le contenu initial du BALISAGE et execute le
+VRAI `init()` avec un `loadBridgeToken` qui ne resout jamais : c'est exactement
+la fenetre mesuree. Appeler `renderUpdateCard()` directement aurait mesure un
+etat qu'aucun utilisateur ne voit. 6 verts.
+`scripts/proof_red_card_identity.py` 2/2 rouges nommes, 0 invalide, restaure a
+l'octet. Nouveau check LOCAL `card_names_the_installed_version_on_the_first_frame`,
+influent : produit sabote -> `31 checks, NOT READY` exit 1.
+
+Deux fautes qui ont retarde la preuve : mon premier sabotage reecrivait
+`appVersion`, la version du PIED, alors que l'assertion lit `updateVersion` -
+noeud different, suite verte, preuve correctement refusee ; et trancher une
+fonction du source avec `indexOf('\n}\n')` la tronque a la premiere ligne
+commencant par une accolade fermante, qui dans un corps imbrique est une
+accolade INTERIEURE - symptome : un `SyntaxError: Unexpected end of input` sans
+rapport avec la tranche.
+
+Regle generale : quand un point d'entree ecrit un noeud A de facon synchrone et
+un noeud B seulement apres une chaine d'`await`, verifier si B est dans la meme
+CLASSE DE CONNAISSANCE que A. Un litteral de remplacement dans le balisage est un
+ETAT, pas une valeur neutre : le premier rendu doit le posseder.
+
 ## [0.7.29] - un bouton arme ne survit pas a un rafraichissement
 
 `renderSessions` reinitialisait QUATRE proprietes du bouton « tout effacer » dans

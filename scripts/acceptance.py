@@ -1456,6 +1456,61 @@ def clear_button_never_keeps_an_armed_confirmation():
     return "ok", "%s; one shared reset owns all four button properties" % count
 
 
+@check("the card names the installed version on the first frame, before any await")
+def card_names_the_installed_version_on_the_first_frame():
+    """Measured on 0.7.30: `init()` wrote the FOOTER version synchronously but
+    rendered the update card only after `await loadBridgeToken()`, the bootstrap
+    and the relay probe. `/v1/update/check` answers in 864 ms on the running
+    relay, so for that whole window the card showed `v0.5.0` - the literal in
+    `popup.html` - on an extension installed at 0.7.29: twenty-nine versions
+    stale, on the panel whose whole purpose is to say which version you are on.
+
+    The version is LOCAL knowledge (`chrome.runtime.getManifest()`), so it never
+    had to wait for the network. The fix renders the card immediately, with
+    `updateInfo` still null; the chip is honest meanwhile, since "Relay Offline"
+    means "I have not been told yet" (the relay-side rule of points 64/67).
+
+    The suite runs the REAL `init()` and reads the card before any promise
+    resolves: calling `renderUpdateCard()` directly would measure a state no user
+    ever sees (points 37/73). It seeds each node from the markup's own initial
+    content, so the "first frame" is the one a user actually gets.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_card_identity.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) named red, (\d+) invalid", out)
+    if not m:
+        if "ECHEC : popup.js est rouge" in out:
+            return "FAIL", ("popup.js is red on disk: %s" % next(
+                (l.strip() for l in lines if l.strip().startswith("ECHEC")), "(voir sortie)"))
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, invalid = (int(x) for x in m.groups())
+    if got != total or invalid:
+        return "FAIL", ("%d/%d named red, %d invalid - a PATCH-MISS or harness "
+                        "failure means the proof did not run" % (got, total, invalid))
+    if "restored byte for byte: True" not in out:
+        return "FAIL", "popup.js was not restored byte for byte by the harness"
+    import shutil as _sh
+    node_bin = _sh.which("node")
+    if not node_bin:
+        return "SKIP", "node is absent"
+    r2 = subprocess.run([node_bin, str(REPO / "tests" / "node" / "test_card_identity_immediate.js"),
+                         str(REPO)], cwd=str(REPO), capture_output=True, text=True,
+                        timeout=300)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    count = _node_pass_count(lines2)
+    if not count:
+        return "FAIL", "card identity suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
+    return "ok", "%s; the card is rendered before the first await" % count
+
+
 @check("a failed update names its cause instead of blaming the relay")
 def update_failure_names_its_cause():
     """Measured on 0.7.24 (found while fixing 0.7.25): `runUpdate` threw the
@@ -1581,6 +1636,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          every_update_state_owns_its_tooltip,
          every_state_owns_the_button_wording,
          clear_button_never_keeps_an_armed_confirmation,
+         card_names_the_installed_version_on_the_first_frame,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 

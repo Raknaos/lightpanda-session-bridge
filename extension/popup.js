@@ -1504,6 +1504,17 @@ async function init() {
   applyTranslations();
   // The footer version is read from the manifest: no hand-edit on each bump.
   if (appVersion) appVersion.textContent = 'v' + chrome.runtime.getManifest().version;
+  // Measured 0.7.30: the update card's own identity is LOCAL knowledge, but
+  // `renderUpdateCard` only ran after `await loadBridgeToken()`, the bootstrap
+  // and the relay probe - and `/v1/update/check` answers in 864 ms on the
+  // running relay. For that whole window the card showed `v0.5.0`, the literal
+  // in `popup.html`, on an extension installed at 0.7.29: twenty-nine versions
+  // stale, on the panel whose whole purpose is to say which version you are on.
+  // Render it now, with `updateInfo` still null, so the version is right on the
+  // first frame; the relay-dependent part arrives when it arrives. The chip is
+  // honest meanwhile - "Relay Offline" means "I have not been told yet", the
+  // same rule as points 64/67 on the relay side.
+  renderUpdateCard();
   await loadBridgeToken();
   if (!bridgeToken) {
     // First run: auto-pair with the local relay (fetch shared secret).
