@@ -224,5 +224,98 @@ class Fingerprint(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(listing).lower())
 
 
+class UpdateFactsAreMeasured(unittest.TestCase):
+    """The report must say WHY the update chip is quiet, not just that it is.
+
+    Measured on 0.7.20: the report carried `update_available = False` and
+    nothing else, so a user pasting it could not tell "nothing new" from "an
+    update is pending but unreachable". The relay now measures the deployed
+    tree against the shipped one (`shipped_tree`) and says so (`note`).
+    """
+
+    def _with_update(self, payload):
+        saved = diagnostics._check_update
+        diagnostics._check_update = lambda: dict(payload)
+        self.addCleanup(lambda: setattr(diagnostics, "_check_update", saved))
+        return diagnostics._update_facts()
+
+    def test_facts_carry_the_reason_not_only_the_verdict(self):
+        facts = self._with_update({
+            "update_available": False, "shipped_tree": "same",
+            "note": "main moved to cb4bdf5, but the deployed tree is byte-identical",
+            "current_version": "0.7.20", "current_commit": "a" * 40,
+            "latest_commit": "b" * 40})
+        self.assertFalse(facts["update_available"])
+        self.assertEqual(
+            facts["update_state"], "same",
+            "a quiet chip with no stated reason is unexplainable in a bug report")
+        self.assertIn("byte-identical", facts["update_note"])
+
+    def test_an_unmeasured_state_is_reported_as_unknown_not_none(self):
+        facts = self._with_update({"update_available": False, "shipped_tree": None,
+                                   "note": None, "current_version": "0.7.20",
+                                   "current_commit": "a" * 40, "latest_commit": "b" * 40})
+        self.assertIsNone(facts["update_state"])
+        self.assertIsNone(facts["update_note"])
+
+    def test_a_credential_in_the_note_is_still_scrubbed(self):
+        """The note comes from the relay; if it ever carried a token, the report
+        must not echo it. The scrubber runs over the rendered text, so prove it
+        there rather than trusting the key name."""
+        self._with_update({
+            "update_available": False, "shipped_tree": "same",
+            "note": "refused: Authorization Bearer ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8",
+            "current_version": "0.7.20", "current_commit": "a" * 40,
+            "latest_commit": "b" * 40})
+        text = diagnostics.to_text(diagnostics.collect())
+        self.assertNotIn(
+            "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8", text,
+            "a git sha is metadata, a credential is not: the report must keep "
+            "the first and drop the second")
+        self.assertNotIn(
+            "ghp_A1", text,
+            "a truncated secret is still a leak: ghp_A1...Q7r8 shipped 12 "
+            "characters of the token in a report meant to be pasted in public")
+
+    def test_the_report_publishes_the_reason_keys_at_all(self):
+        """Presence, not just correctness. A missing key reads as "None" in the
+        rendered report, which is indistinguishable from "not measured"."""
+        report = diagnostics.collect()
+        for key in ("update_available", "update_state", "update_note",
+                    "update_version", "update_commit", "update_latest"):
+            self.assertIn(
+                key, report["state"],
+                "%s is absent: the report then shows an empty value and a user "
+                "cannot tell which part of the update state is unknown" % key)
+        text = diagnostics.to_text(report)
+        self.assertIn("update_state", text)
+
+    def test_a_sha_in_the_note_survives_the_scrubber(self):
+        """The opposite guard: the scrubber must not eat the note that makes
+        this report useful. `lightpanda-session-bridge`, a git SHA and an ISO
+        timestamp are long but not secret."""
+        facts = self._with_update({
+            "update_available": False, "shipped_tree": "same",
+            "note": "main moved to cb4bdf5, but the deployed tree is byte-identical",
+            "current_version": "0.7.20", "current_commit": "a" * 40,
+            "latest_commit": "b" * 40})
+        self.assertIn("cb4bdf5", facts["update_note"],
+                      "the reason the chip is quiet is the whole point of the "
+                      "field; redacting it would make the report useless")
+        self.assertNotIn("[redacted]", facts["update_note"])
+
+    def test_commit_facts_are_present(self):
+        facts = self._with_update({"update_available": True, "shipped_tree": "differs",
+                                   "note": None, "current_version": "0.7.21",
+                                   "current_commit": "c" * 40, "latest_commit": "d" * 40})
+        self.assertTrue(facts["update_available"])
+        self.assertEqual(facts["update_state"], "differs")
+        self.assertEqual(facts["update_version"], "0.7.21")
+        self.assertTrue(facts["update_commit"])
+        self.assertTrue(facts["update_latest"])
+
+
+
+
 if __name__ == "__main__":
     unittest.main()

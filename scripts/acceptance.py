@@ -53,6 +53,10 @@ RELAY = "http://127.0.0.1:8765"
 COMET_CDP = "http://127.0.0.1:9223"
 LIGHTPANDA_CDP = "http://127.0.0.1:9222"
 LANGS = ["en", "fr", "es", "de", "zh", "ja", "it", "pt", "ar", "ru"]
+# Module constant, not a `main()` local: the @check decorator reads it from a
+# closure, so importing this file as a library (a probe, a test) raised
+# NameError on the first check it ran. Set once here, overridden by --quiet.
+QUIET = False
 
 sys.path.insert(0, str(REPO / "relay"))
 
@@ -194,6 +198,111 @@ def versions_agree():
     if problems:
         return "FAIL", "manifest=%s but %s" % (version, ", ".join(problems))
     return "ok", "v%s in manifest, pyproject, updates.xml, CHANGELOG, notes" % version
+
+
+@check("the CHANGELOG is a file, not a file pasted over itself")
+def changelog_is_not_duplicated():
+    """`versions_agree` asks whether `## [<version>]` appears. It cannot see
+    STRUCTURE, so a changelog that had been pasted over itself - 74 entries for
+    37 versions, 34 byte-identical - passed every run, and an entry welded onto
+    the end of a 0.3.3 bullet passed too.
+
+    Three invariants, all measured, none of them "does the version appear":
+      (a) no entry title appears twice;
+      (b) the version order is descending (an addendum ranks right after its
+          version, since it is the same version twice);
+      (c) no line carries a heading glued onto prose - `text.## [x]` - which is
+          what a lost newline looks like, and which no `in` test can see.
+    """
+    text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    heads = re.findall(r"(?m)^## \[([^\]]+)\]", text)
+    problems = []
+    dupe = sorted({h for h in heads if heads.count(h) > 1})
+    if dupe:
+        problems.append("%d entries appear twice: %s" % (len(dupe), ", ".join(dupe[:4])))
+    def vkey(h):
+        m = re.match(r"([\d.]+)", h)
+        return tuple(int(x) for x in m.group(1).split(".")) if m else (0,)
+    drops = [heads[i] for i in range(len(heads) - 1) if vkey(heads[i]) < vkey(heads[i + 1])]
+    if drops:
+        problems.append("out of order: %s" % ", ".join(drops[:4]))
+    # A welded heading is prose with `## [` glued onto it. It must NOT fire on a
+    # line that STARTS with the heading, nor on a QUOTATION of the broken form
+    # (this file quotes it in its 0.7.21 entry as the documented evidence). A
+    # quote has the backtick IMMEDIATELY before `## [`; a real weld has prose
+    # there. Checking only "the line has backticks anywhere" was too loose - a
+    # sabotaged line carrying an unrelated code span slipped through.
+    glued = [ln for ln in text.splitlines()
+             if re.search(r"(?<!^)(?<!`)## \[", ln)]
+    if glued:
+        problems.append("%d heading(s) welded onto prose: %r" % (len(glued), glued[0][:50]))
+    if problems:
+        return "FAIL", "%d entries - %s" % (len(heads), "; ".join(problems))
+    return "ok", "%d entries, unique, descending, no welded heading" % len(heads)
+
+
+@check("no CJK punctuation sneaks into prose that is not a translation")
+def prose_has_no_cjk_punctuation():
+    """`pop-up.js` and the release notes are written in ten languages, so CJK is
+    legitimate in the locale files and in the popup's translation table. It is
+    NOT legitimate in a French or English sentence: a full-width comma
+    is invisible to every other check and survives every release.
+
+    Measured: the whole 0.7.18 CHANGELOG entry - 14 lines - was written with
+    full-width CJK comma and full stop instead of ASCII ones, and a release
+    note of mine shipped a stray CJK word. Both pass `versions_agree`, the LF
+    check and the secret scan, because neither looks at punctuation.
+
+    Note: this docstring once QUOTED those characters, which made the check
+    fail on its own source. A checker must not carry the evidence it hunts for;
+    describe the shape, do not paste the glyphs.
+
+    Scoped to punctuation and CJK ideographs OUTSIDE the i18n data, so a real
+    Chinese or Japanese translation never trips it.
+    """
+    # Files where CJK text is the POINT, not an accident.
+    allowed_dirs = ("extension/_locales", "scripts/artifacts_pristine")
+    bad = []
+    # A translation line looks like `key: "text"` or
+    # ``key: (a, b) => `text` `` - an IDENTIFIER in column 0, then a colon.
+    # Judging punctuation by that shape is what lets a real Chinese or Japanese
+    # string pass while a full-width comma inside a French sentence is caught; the
+    # `re.match(r'^\s*"key"\s*:')` was too narrow and flagged 46 legitimate
+    # translation lines.
+    i18n_line = re.compile(r"^\s*[A-Za-z_$][\w$]*\s*:\s*")
+    for path in sorted(REPO.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(REPO).as_posix()
+        if rel.startswith(allowed_dirs) or rel.split("/")[0] in (
+                ".venv", "neo-upstream"):
+            continue
+        if ".git/" in rel or "__pycache__" in rel:
+            continue
+        if path.suffix.lower() not in (".md", ".py", ".js", ".json", ".xml", ".toml"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        hits = set()
+        for line in text.splitlines():
+            stripped = line.strip()
+            # Skip an i18n entry, but NOT a French sentence that happens to
+            # start with a word then a colon - require a quoted or templated
+            # value on the same line, which prose does not have.
+            if i18n_line.match(line) and (
+                    '"' in stripped or "`" in stripped or "'" in stripped):
+                continue
+            hits |= {c for c in line
+                     if ("\u3000" <= c <= "\u303f")      # CJK punctuation
+                     or ("\uff00" <= c <= "\uffef")}     # full-width forms
+        if hits:
+            bad.append("%s (%s)" % (rel, "".join(sorted(hits))[:8]))
+    if bad:
+        return "FAIL", "%d file(s) with CJK punctuation in prose: %s" % (
+            len(bad), ", ".join(bad[:4]))
+    return "ok", "no CJK punctuation outside the i18n data"
 
 
 @check("shipped tree is LF everywhere")
@@ -964,6 +1073,14 @@ def relay_errors_are_translated():
     return "ok", f"{len(emitted)} relay error codes, all mapped to an i18n key"
 
 
+def _node_pass_count(out):
+    """The Node suites print "18 passed, 0 failed" - a line that ENDS in
+    "failed". Matching `.endswith("passed")` therefore found nothing and the
+    check reported "?" while green: a check that is green but measures nothing
+    (point 5). Match the count wherever it sits in the line."""
+    return next((l.strip() for l in out if re.search(r"\d+\s+passed", l)), None)
+
+
 @check("the relay badge is re-evaluated, not sampled once")
 def badge_is_refreshed():
     """A badge is the first thing a user reads, and it was the only thing that
@@ -985,10 +1102,12 @@ def badge_is_refreshed():
     if r.returncode != 0:
         failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
         return "FAIL", failed[:88]
-    passed = next((l for l in out if l.strip().endswith("passed")), "?")
+    passed = _node_pass_count(out)
+    if passed is None:
+        return "FAIL", "the suite ran green but printed no pass count"
     src = (REPO / "extension" / "popup.js").read_text(encoding="utf-8")
     gap = re.search(r"RELAY_MIN_CHECK_GAP_MS = (\d+)", src)
-    return "ok", f"{passed.strip()}, min gap {gap.group(1) if gap else '?'}ms"
+    return "ok", f"{passed}, min gap {gap.group(1) if gap else '?'}ms"
 
 
 @check("the update card says WHY nothing is offered")
@@ -1011,16 +1130,56 @@ def update_card_is_honest():
     if r.returncode != 0:
         failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
         return "FAIL", failed[:88]
-    passed = next((l for l in out if l.strip().endswith("passed")), "?")
-    return "ok", passed.strip()
+    passed = _node_pass_count(out)
+    if passed is None:
+        return "FAIL", "the suite ran green but printed no pass count"
+    # NOT `.endswith("passed")`: the suite prints "18 passed, 0 failed", a line
+    # that ends in "failed" - so the match found nothing and the check reported
+    # "?" while green: green but measuring nothing (point 5).
+    return "ok", passed[:88]
 
 
-LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
+@check("the diagnostic report says WHY the update chip is quiet, and leaks nothing")
+def update_report_says_why_and_leaks_nothing():
+    """The report is what a user pastes into a bug. It carried
+    `update_available = False` and nothing else, so "nothing new" and "an update
+    is stuck" looked identical on the page that decides which one it is.
+
+    Adding the reason immediately shipped a worse defect, found only by the
+    proof: `update_note` is written by the RELAY, so it is foreign text, but it
+    sat in a dict this module builds and therefore trusted - and a note reading
+    "Authorization: Bearer ghp_A1...Q7r8" exported 12 characters of the token.
+    The scrubber now runs over the note, and a sha in it still survives.
+
+    Runs the real revert-and-observe harness: four sabotages, each of which must
+    produce a NAMED red.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_update_report.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) rouges nommes, (\d+) sans nom, (\d+) invalides", out)
+    if not m:
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, unnamed, invalid = (int(x) for x in m.groups())
+    if got != total or unnamed or invalid:
+        return "FAIL", ("%d/%d named red, %d unnamed, %d invalid - a PATCH-MISS or "
+                        "harness failure means the proof did not run" %
+                        (got, total, unnamed, invalid))
+    return "ok", "%d/%d sabotages red and named, 0 invalid" % (got, total)
+
+
+LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuation,
+         shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
-         update_card_is_honest]
+         update_card_is_honest, update_report_says_why_and_leaks_nothing]
+
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():
     """The repo copy can be perfect while the DEPLOYED popup is stale, and a
@@ -1041,11 +1200,13 @@ def installed_popup_translates():
     r = subprocess.run([node, str(REPO / "tests" / "node" / "test_relay_deadline.js")],
                        cwd=str(REPO), capture_output=True, text=True)
     out = (r.stdout or r.stderr).strip().splitlines()
-    passed = next((l for l in out if l.strip().endswith("passed")), "")
+    passed = _node_pass_count(out)
     if r.returncode != 0:
         failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
         return "FAIL", failed[:90]
-    return "ok", f"{passed.strip()} (installed popup, fr codes resolved)"
+    if passed is None:
+        return "FAIL", "the suite ran green but printed no pass count"
+    return "ok", f"{passed} (installed popup, fr codes resolved)"
 
 
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
@@ -1101,5 +1262,4 @@ def main():
 
 
 if __name__ == "__main__":
-    QUIET = False
     sys.exit(main())

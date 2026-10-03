@@ -319,7 +319,35 @@ def _state(relay, updater) -> dict:
         "persisted_applied": getattr(relay, "_PERSISTED_APPLIED", False),
         "last_sync_origin": _short(last.get("origin")),
         "last_sync_cookies": len(last.get("cookies") or []),
-        "update_available": _check_update().get("update_available"),
+        # A bare boolean cannot explain a stuck chip: `False` means both
+        # "nothing new" and "an update is pending but unreachable". The relay
+        # now measures WHY (shipped_tree) and says it (note), so the report
+        # carries the reason, not just the verdict.
+        **_update_facts(),
+    }
+
+
+def _update_facts() -> dict:
+    """The measured update state, as facts - never a computed opinion.
+
+    `note` is the relay's own wording and contains a git sha: right for a
+    diagnostic a user pastes into a bug, wrong for a UI (the popup translates
+    `update_state` instead).
+    """
+    data = _check_update()
+    return {
+        "update_available": data.get("update_available"),
+        "update_state": data.get("shipped_tree"),          # same / differs / unknown
+        # `note` is written by the RELAY, not by this module, so it is foreign
+        # text and must go through the scrubber like the install log does.
+        # Measured: a note reading "Authorization: Bearer ghp_A1...Q7r8" shipped
+        # 12 characters of the token in a report meant to be pasted in public,
+        # because a field this module builds is trusted by construction - and
+        # this one is not ours.
+        "update_note": scrub(data.get("note") or "") or None,
+        "update_version": data.get("current_version"),
+        "update_commit": _short(data.get("current_commit")),
+        "update_latest": _short(data.get("latest_commit")),
     }
 
 
