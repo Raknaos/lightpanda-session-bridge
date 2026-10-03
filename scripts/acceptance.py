@@ -1604,6 +1604,22 @@ def product_survives_the_proof_red_harnesses():
             out[rel] = hashlib.sha256(f.read_bytes()).hexdigest() if f.exists() else None
         return out
 
+    def head_bytes(rel):
+        """The COMMITTED bytes of a file, or None when git cannot answer.
+
+        None is never treated as a match: an unmeasurable reference is a SKIP
+        with its reason, not a green that means nothing (point 58). A check that
+        cannot read the truth must say so rather than pass on the absence of a
+        difference - which is exactly the failure this second half exists to
+        prevent.
+        """
+        try:
+            r = subprocess.run(["git", "show", "HEAD:%s" % rel], cwd=str(REPO),
+                               capture_output=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return r.stdout if r.returncode == 0 else None
+
     before = fingerprint()
     ran, bad = 0, []
     for name in sorted(p.name for p in (REPO / "scripts").glob("proof_red_*.py")):
@@ -1615,8 +1631,22 @@ def product_survives_the_proof_red_harnesses():
             bad.append(detail)
     after = fingerprint()
     drifted = [r for r in targets if before[r] != after[r]]
-    if bad:
-        return "FAIL", "%d harness(es) failed: %s" % (len(bad), bad[0][:70])
+    # The second half, and the one the first version was missing: comparing the
+    # tree to its OWN starting state cannot see a sabotage a PREVIOUS session
+    # left behind - it hashes the damage and calls it the reference. Measured:
+    # the fence printed "byte-identical" on a run whose `relay/server.py`
+    # carried a leftover edit. A before/after fence and a committed reference
+    # are different questions, and only asking the second one catches a tree
+    # that was already dirty.
+    uncommitted = []
+    unmeasurable = []
+    for rel in targets:
+        ref = head_bytes(rel)
+        if ref is None:
+            unmeasurable.append(rel)
+            continue
+        if after[rel] != hashlib.sha256(ref).hexdigest():
+            uncommitted.append(rel)
     if drifted:
         # Reached only when every harness itself reported cleanly, which is the
         # case worth naming: the harnesses say they restored, and the fingerprint
@@ -1627,8 +1657,21 @@ def product_survives_the_proof_red_harnesses():
                         "%s - the tree now carries a defect, and the next harness "
                         "will snapshot it as its own 'original'"
                         % (len(drifted), ", ".join(drifted)))
+    if uncommitted:
+        return "FAIL", ("%d product file(s) differ from the COMMITTED tree: %s - "
+                        "a sabotage survived an earlier run, and this one hashed "
+                        "the damage as its reference (restore from a snapshot, "
+                        "never git checkout)" % (len(uncommitted), ", ".join(uncommitted)))
+    if bad:
+        return "FAIL", "%d harness(es) failed: %s" % (len(bad), bad[0][:70])
+    if unmeasurable:
+        return "SKIP", ("%d file(s) could not be compared against HEAD (%s): git "
+                        "is unavailable or the path is untracked - the before/after "
+                        "fence still ran, the committed-reference half did not"
+                        % (len(unmeasurable), ", ".join(unmeasurable)))
     return "ok", ("%d harness(es) ran, %d product file(s) byte-identical before "
-                  "and after" % (ran, len(targets)))
+                  "and after AND equal to the committed tree"
+                  % (ran, len(targets)))
 
 
 @check("every proof-red harness is REGISTERED and every sabotage is NAMED")

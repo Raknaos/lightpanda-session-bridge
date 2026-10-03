@@ -1,3 +1,14 @@
+## [0.7.35] - 2026-10-03
+### Fixed
+- The fence that catches a sabotage left behind by a proof-red harness could
+  only compare the tree to its own starting state, so a tree that was ALREADY
+  dirty passed as "byte-identical" - it hashed the damage and called it the
+  reference. It now also compares every fenced file against the committed tree,
+  and a file git cannot read is a SKIP naming its reason, never a silent match.
+- Branch order corrected so a live defect outranks a statement about a proof:
+  the fence reported the harness verdict while burying the leftover sabotage,
+  twice, before the drift was named first.
+
 ## [0.7.34] - 2026-10-03
 ### Fixed
 - A killed proof run leaves its sabotage on disk, because a killed process never
