@@ -625,6 +625,10 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
                     tree_state = "same" if identical else "differs"
                 result["shipped_tree_sha"] = remote_sha
                 result["local_tree_sha"] = local_sha
+                # The popup reads this to explain WHY nothing is offered. It is
+                # a measured flag, not a message: the note below carries a git sha
+                # and English prose, which is right for a log and wrong for a
+                # ten-language panel - so the popup translates the STATE.
                 result["shipped_tree"] = tree_state
                 if identical:
                     result.update({

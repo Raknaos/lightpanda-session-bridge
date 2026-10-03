@@ -991,11 +991,36 @@ def badge_is_refreshed():
     return "ok", f"{passed.strip()}, min gap {gap.group(1) if gap else '?'}ms"
 
 
+@check("the update card says WHY nothing is offered")
+def update_card_is_honest():
+    """The chip said "Up to date" plus a bare commit sha. That is true and
+    useless: with main moving on for a commit that touched only docs/, a user
+    reading "commit 34827e4" cannot tell "nothing new for you" from "a code
+    change is waiting". The relay now measures it (`shipped_tree: "same"`), so
+    the popup must translate that state - never copy the relay's English
+    diagnostic, which carries a sha and is right for a log, not for a panel.
+    """
+    import shutil as _sh
+    node = _sh.which("node")
+    if not node:
+        return "SKIP", "node is absent"
+    r = subprocess.run([node, str(REPO / "tests" / "node" / "test_update_card_truth.js"),
+                        str(REPO)],
+                       cwd=str(REPO), capture_output=True, text=True)
+    out = (r.stdout or r.stderr).strip().splitlines()
+    if r.returncode != 0:
+        failed = next((l.strip() for l in out if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    passed = next((l for l in out if l.strip().endswith("passed")), "?")
+    return "ok", passed.strip()
+
+
 LOCAL = [versions_agree, shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
-         popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed]
+         popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
+         update_card_is_honest]
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():
     """The repo copy can be perfect while the DEPLOYED popup is stale, and a
