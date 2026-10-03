@@ -1,3 +1,37 @@
+## [0.7.27] - chaque etat de la carte possede son infobulle
+
+`updateMeta.title` etait ecrit dans DEUX de ses trois sorties, et dans aucune
+des deux autres : le noeud conservait ce que le rendu PRECEDENT lui avait
+laisse. Les mots du relais - `API rate limit exceeded for 203.0.113.9` -
+continuaient de flotter au-dessus d'une carte devenue parfaitement saine, et
+survivaient a toute l'installation, car `runUpdate` rend avec `updateBusy` true
+et c'est exactement la branche qui `return` sans toucher au titre. Une
+infobulle est une propriete d'un ETAT ; le correctif seme `updateMeta.title =
+''` en tete de fonction, la regle que `shipped_tree` applique au dict du relais
+depuis 0.7.21, transposee au DOM.
+
+Le defaut etait invisible a un audit d'ecriture en double : `renderUpdateCard`
+ecrit 15 fois `.textContent` et 5 fois `.className`, mais sur des noeuds
+DIFFERENTS. Regroupe par (objet, propriete), le bruit disparait - et `title`
+n'est pas un doublon mais une ABSENCE, qu'un detecteur de doublons ne peut pas
+voir. La bonne question est « chaque sortie ecrit-elle sa valeur ? », pas « est-ce
+ecrit deux fois ? ».
+
+`tests/node/test_tooltip_state_truth.js` 13 verts : le harnais pilote le vrai
+`renderUpdateCard` DEUX fois dans le MEME jeu de noeuds, parce qu'un DOM neuf par
+cas ne peut structurellement pas montrer une survie (ma premiere sonde ne le
+pouvait pas). `scripts/proof_red_tooltip.py` 2/2 rouges nommes, 0 invalide,
+`popup.js` restaure a l'octet. Nouveau check LOCAL
+`every_update_state_owns_its_tooltip`, influent dans les deux sens : check
+aveugle -> `28 ok, READY`, produit sabote -> `NOT READY` exit 1.
+
+Harnais, avant d'avoir la preuve : mon premier `expect` omettait le prefixe que
+le runner imprime, donc le sabotage etait rouge et NON NOMME - un rouge correct,
+une preuve refusee ; et ma premiere version du sabotage referencait un
+identifiant absent du sandbox, ce qui aurait produit un `ReferenceError` habille
+en rouge. Auditer une fonction de rendu, c'est aussi lire ses APPELANTS :
+`updateBusy` n'est pas du code mort.
+
 ## [0.7.26] - L'annulation est de nouveau possible apres une installation
 
 `rollbackBtn.style.display` etait calcule CORRECTEMENT en haut de

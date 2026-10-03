@@ -1298,6 +1298,60 @@ def undo_is_reachable_after_install():
     return "ok", "%s; overwriting line removed" % count
 
 
+@check("every update state owns its tooltip, so none survives the next one")
+def every_update_state_owns_its_tooltip():
+    """Measured on 0.7.27: `renderUpdateCard` wrote `updateMeta.title` in two of
+    its three exits and never in the third, so the node kept whatever the
+    PREVIOUS render gave it.
+
+    The relay's own words - `API rate limit exceeded for 203.0.113.9` - therefore
+    kept hovering over a card that had become perfectly healthy, and survived the
+    whole install: `runUpdate` renders with `updateBusy` true, which is exactly
+    the branch that returns without touching the title. A tooltip is a property
+    of a STATE; the fix seeds the empty title at the top, the same rule as
+    seeding `shipped_tree` in the relay's result dict (points 64/66), applied to
+    the DOM.
+
+    The suite needs ONE node through TWO renders to see this, so each case
+    re-renders into the same node set - a fresh DOM per case would measure
+    nothing.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_tooltip.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) named red, (\d+) invalid", out)
+    if not m:
+        if "ECHEC : popup.js est rouge" in out:
+            return "FAIL", ("popup.js is red on disk: %s" % next(
+                (l.strip() for l in lines if l.strip().startswith("ECHEC")), "(voir sortie)"))
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, invalid = (int(x) for x in m.groups())
+    if got != total or invalid:
+        return "FAIL", ("%d/%d named red, %d invalid - a PATCH-MISS or harness "
+                        "failure means the proof did not run" % (got, total, invalid))
+    if "restored byte for byte: True" not in out:
+        return "FAIL", "popup.js was not restored byte for byte by the harness"
+    import shutil as _sh
+    node_bin = _sh.which("node")
+    if not node_bin:
+        return "SKIP", "node is absent"
+    r2 = subprocess.run([node_bin, str(REPO / "tests" / "node" / "test_tooltip_state_truth.js"),
+                         str(REPO)], cwd=str(REPO), capture_output=True, text=True,
+                        timeout=300)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    count = _node_pass_count(lines2)
+    if not count:
+        return "FAIL", "tooltip suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
+    return "ok", "%s; the empty title is seeded, so no state inherits one" % count
+
+
 @check("a failed update names its cause instead of blaming the relay")
 def update_failure_names_its_cause():
     """Measured on 0.7.24 (found while fixing 0.7.25): `runUpdate` threw the
@@ -1420,6 +1474,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          upstream_failure_is_not_reported_as_offline,
          update_failure_names_its_cause,
          undo_is_reachable_after_install,
+         every_update_state_owns_its_tooltip,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 

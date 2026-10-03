@@ -1289,6 +1289,16 @@ function shortCommit(sha) {
 function renderUpdateCard() {
   if (!updateChip) return;
   labelUpdate.textContent = t('updateLabel');
+  // A tooltip belongs to a STATE, so every state owns it. Measured 0.7.27: only
+  // two of the three exits below wrote `updateMeta.title`, and the node kept
+  // whatever the previous render gave it. The relay's own words ("API rate limit
+  // exceeded for 203.0.113.9") therefore kept hovering over a card that had
+  // become perfectly healthy - and survived the whole install, because
+  // `runUpdate` renders with `updateBusy` true, which is the branch that
+  // returned without touching it. Seed the empty title HERE, so a branch can
+  // only ever refuse it deliberately: the same rule as seeding `shipped_tree` in
+  // the relay's result dict (points 64/66), applied to the DOM.
+  updateMeta.title = '';
   const deployed = chrome.runtime.getManifest().version;
   updateVersion.textContent = 'v' + deployed;
 
