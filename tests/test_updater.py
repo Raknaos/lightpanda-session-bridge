@@ -524,7 +524,9 @@ class TestCheckUpdate(UpdateTestCase):
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertEqual(status["source"], "main")
-        self.assertEqual(status["shipped_tree"], "differs")
+        self.assertEqual(status.get("shipped_tree"), "differs",
+                         "without a recorded commit the tree comparison is the "
+                         "only evidence available")
 
     def test_a_commit_that_ships_identical_bytes_is_not_offered(self):
         """The wolf-crying chip. Measured on 0.7.18: installed commit 045eac3,
@@ -618,12 +620,19 @@ class TestCheckUpdate(UpdateTestCase):
     def test_unknown_baseline_prefers_the_verified_release(self):
         # Deployed 0.5.0 with no provenance, and the release is also 0.5.0:
         # offer the tagged zip (checksum-verifiable), not the main tarball.
+        # The DEPLOYED BYTES DIFFER from the shipped tree, so this is a real
+        # install: an equal version is not on its own a reason to skip it.
         extension_tree(self.ext, version="0.5.0", popup_marker="deployed")
         self._stub("0.5.0", "b" * 40)
+        self._use_real_trees()
+        updater.shipped_tree_sha = lambda repo=None, ref=None: "r" * 40
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertEqual(status["source"], "release")
         self.assertTrue(status["baseline_unknown"])
+        self.assertEqual(status.get("shipped_tree"), "differs",
+                         "without a recorded commit the tree comparison is the "
+                         "only evidence available")
 
     def test_unknown_baseline_never_offers_a_downgrade(self):
         # A dev checkout ahead of the last release: main channel, not the older
@@ -936,6 +945,76 @@ class TestGitHubAcceptHeader(unittest.TestCase):
         self.assertIn('archive_name, archive_url, accept, checksum, tag, commit', apply_body)
         self.assertIn('"application/octet-stream"', apply_body)
         self.assertIn("_fetch(archive_url, accept=accept)", apply_body)
+
+
+class TestNoProvenanceChannel(unittest.TestCase):
+    """No-provenance installs still get the CONTENT test, not just versions.
+
+    Measured on 0.7.19: a hand-installed extension reporting version 0.7.19 with
+    no recorded commit answered `update_available: True, source: release,
+    from 0.7.19 -> to 0.7.19` - a chip reinstalling identical bytes on every
+    check. The commit comparison cannot run without provenance, but the tree
+    comparison is the same question and does not need it.
+    """
+
+    def setUp(self):
+        self._real = (updater.installed_info, updater.local_tree_sha,
+                      updater.shipped_tree_sha, updater.latest_release)
+        self._release = updater.latest_release()
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (updater.installed_info, updater.local_tree_sha,
+         updater.shipped_tree_sha, updater.latest_release) = self._real
+        updater.clear_cache()
+
+    def _install(self, version, commit=None):
+        updater.installed_info = lambda ext_dir=None: {
+            "version": version, "commit": commit, "tag": None}
+
+    def test_equal_version_identical_tree_is_not_an_update(self):
+        self._install(self._release["version_text"])
+        updater.local_tree_sha = lambda ext_dir=None: "same-tree"
+        updater.shipped_tree_sha = lambda repo=None, ref=None: "same-tree"
+        result = updater.check_update(force=True)
+        self.assertFalse(
+            result["update_available"],
+            "equal version + identical bytes must not offer an update, "
+            "otherwise the chip reinstalls the same files forever")
+        self.assertEqual(result.get("shipped_tree"), "same",
+                         "the update check must report that it compared the "
+                         "deployed tree against the shipped one")
+        self.assertIn("byte-identical", result["note"],
+                      "when nothing is offered, the check must say why - an "
+                      "update chip that vanishes silently looks like a bug")
+
+    def test_equal_version_different_tree_is_still_an_update(self):
+        """The inverse must hold too, or the fix hides a real update."""
+        self._install(self._release["version_text"])
+        updater.local_tree_sha = lambda ext_dir=None: "local-tree"
+        updater.shipped_tree_sha = lambda repo=None, ref=None: "shipped-tree"
+        result = updater.check_update(force=True)
+        self.assertTrue(
+            result["update_available"],
+            "same version but different bytes IS an install worth making; "
+            "treating it as up-to-date would ship stale code forever")
+        self.assertEqual(result["source"], "release")
+        self.assertEqual(result.get("shipped_tree"), "differs",
+                         "the deployed bytes differ from the shipped tree, so the "
+                         "check must have measured the tree rather than skipped it")
+
+    def test_older_version_still_offered_from_the_release(self):
+        self._install("0.0.1")
+        result = updater.check_update(force=True)
+        self.assertTrue(result["update_available"])
+        self.assertEqual(result["source"], "release")
+
+    def test_newer_version_is_never_downgraded_to_the_release(self):
+        self._install("99.0.0")
+        result = updater.check_update(force=True)
+        self.assertNotEqual(
+            result["source"], "release",
+            "a version newer than the release must not be pulled back to it")
 
 
 if __name__ == "__main__":

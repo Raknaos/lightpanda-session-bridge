@@ -7,7 +7,7 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
-## [0.7.19] - le canal de mise a jour compare les OCTETS, pas les COMMITS
+## [0.7.19] - le canal de mise a jour compare les OCTETS, pas les COMMITS (et plus: la branche sans provenance non plus)
 
 `check_update` decidait "installe ceci" en comparant des **commits**. Or le commit
 enregistre a l'installation est la pointe du dernier `fetch` - regulierement un commit
@@ -36,6 +36,21 @@ sauvegardes dans `setUp`, pas dans le helper, sinon les tests qui ne l'appellent
 lisent une constante residuelle et la faute tombe sur le produit.
 
 Prouve par `scripts/proof_red_update_channel.py` : **5 sabotages, 5 rouges nommes**.
+
+### le meme defaut survivait sans commit enregistre
+
+Une installation manuelle n'a pas de commit, et cette branche ne comparait que les
+versions. Mesure : version 0.7.19, sans commit, release 0.7.19 ->
+`update_available: True, from 0.7.19 -> to 0.7.19`, c'est-a-dire la pastille
+proposant de reinstaller la version identique a chaque verification. La branche
+compare maintenant l'arbre local a celui du **tag**.
+
+### et le premier correctif produisait l'inverse du defaut
+
+Il sautait aussi la branche qui OFFRE l'installation : un arbre reellement
+different repondait `update_available: False` - une mise a jour manquee derriere
+un "a jour". Les deux sens sont desormais mesures dans la meme sonde et figes
+par des tests.
 
 ## [0.7.18] - la chaine d'expiration de session, reellement cablee
 

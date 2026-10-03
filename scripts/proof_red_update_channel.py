@@ -45,6 +45,29 @@ SABOTAGES = [
      [('            if rel == "extension/" + BUILD_INFO or rel.endswith("/.DS_Store"):',
        '            if rel.endswith("/.DS_Store"):')],
      "build-info.json change"),
+    # La branche SANS PROVENANCE : elle ne comparait que les versions, donc une
+    # version egale se lisait comme une MAJ a faire (mesure : from 0.7.19 ->
+    # to 0.7.19, update_available True).
+    ("la branche sans provenance ignore les octets deposes",
+     [("            if installed and published and installed == published:",
+       "            if False:")],
+     "identical bytes must not offer an update"),
+    ("la branche sans provenance ne dit pas ce qu'elle a refuse",
+     [('"note": "release %s is byte-identical to the deployed "',
+       '"note": "release %s matches the installed "')],
+     "byte-identical"),
+    # L'inverse exact : si on saute la comparaison d'arbre DANS le sens qui
+    # offre la MAJ, on masque une vraie mise a jour derriere un 'a jour'.
+    ("la branche sans provenance masque une vraie MAJ",
+     [("            if not identical:\n"
+       "                if installed and published and installed[:3] <= published[:3]:",
+       "            if False:\n"
+       "                if installed and published and installed[:3] <= published[:3]:")],
+     "different bytes IS an install worth making"),
+    ("un downgrade vers la release redevient possible",
+     [("                if installed and published and installed[:3] <= published[:3]:",
+       "                if installed and published:")],
+     "must not be pulled back"),
 ]
 
 

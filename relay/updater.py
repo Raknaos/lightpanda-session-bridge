@@ -607,16 +607,42 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             # downgrade, and never a silent guess about what is on disk.
             installed = parse_version(current["version"] or "")
             published = parse_version(release["version_text"])
-            if installed and published and installed[:3] <= published[:3]:
-                result.update({
-                    "update_available": True, "source": "release",
-                    "baseline_unknown": True,
-                    "from": current["version"], "to": release["version_text"],
-                })
-            else:
-                result.update({"update_available": True, "source": "main",
-                               "baseline_unknown": True, "from": None,
-                               "to": (head or {}).get("short")})
+            # An equal version is NOT an update. Measured: hand-installed
+            # 0.7.19 against release 0.7.19 answered `update_available: True,
+            # from 0.7.19 -> to 0.7.19`, a chip reinstalling the identical bytes
+            # on every check, because this branch compared versions only and
+            # never looked at the deployed tree. With no provenance the commit
+            # test cannot run - but the CONTENT test can, and it is the same
+            # question.
+            identical = False
+            tree_state = "unknown"
+            tag = release.get("tag_name") or release.get("tag") or ""
+            if installed and published and installed == published:
+                local_sha = local_tree_sha(ext_dir)
+                remote_sha = shipped_tree_sha(repo, tag) if tag else None
+                if local_sha and remote_sha:
+                    identical = local_sha == remote_sha
+                    tree_state = "same" if identical else "differs"
+                result["shipped_tree_sha"] = remote_sha
+                result["local_tree_sha"] = local_sha
+                result["shipped_tree"] = tree_state
+                if identical:
+                    result.update({
+                        "update_available": False,
+                        "note": "release %s is byte-identical to the deployed "
+                                "tree" % release["version_text"],
+                    })
+            if not identical:
+                if installed and published and installed[:3] <= published[:3]:
+                    result.update({
+                        "update_available": True, "source": "release",
+                        "baseline_unknown": True,
+                        "from": current["version"], "to": release["version_text"],
+                    })
+                else:
+                    result.update({"update_available": True, "source": "main",
+                                   "baseline_unknown": True, "from": None,
+                                   "to": (head or {}).get("short")})
         elif head and not current["commit"]:
             # No release to fall back on: install main and record the commit so the
             # next check is exact.
