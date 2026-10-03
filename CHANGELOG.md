@@ -1,3 +1,26 @@
+## [0.7.22] - « à jour » et « la branche a avancé » ne sont pas la même nouvelle
+
+`shipped_tree: "same"` couvre deux situations distinctes : `main` a avancé sur
+des commits hors `extension/` (la phrase est vraie), ou l'arbre déployé EST la
+pointe de `main` (rien n'a bougé). Le popup imposait la même phrase aux deux, et
+disait donc « la branche a avancé » à un utilisateur entièrement à jour.
+Séparation faite sur une mesure que le popup possède déjà (`current_commit`
+contre `latest_commit`) : à la pointe -> « À jour · v0.7.21 » ; sinon la phrase
+existante, inchangée. Repli sur la puce sans version quand la version est absente,
+car `updateUpToDate` l'interpole.
+
+`tests/node/test_update_card_truth.js` : 18 -> **36** tests, les deux phrases
+sont comparées par **égalité exacte** à la chaîne du dictionnaire.
+`scripts/proof_red_update_tip.py` : **3 sabotages, 3 rouges nommés, 0 invalide**,
+`popup.js` restauré à l'octet. Check `the popup tells 'at the tip of main' apart
+from 'the branch moved on'` enregistré dans `LOCAL`, influence prouvé (compte
+truqué -> `NOT READY`).
+
+Deux erreurs de harnais valent plus que le correctif : `!/avance|avanz|moved/i`
+est resté **vert sur le code non corrigé** (le français dit « avancé », et aucune
+des dix langues n'écrit « advance ») ; et deux sabotages ont rendu une sortie
+**identique**, ce qui a révélé un modèle du code faux, pas un test faux.
+
 ## [0.7.21] - le rapport de diagnostic dit POURQUOI la pastille est silencieuse
 
 Il portait `update_available = False` et rien d'autre. C'est la page que

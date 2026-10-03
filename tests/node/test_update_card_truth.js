@@ -126,16 +126,76 @@ const noCommit = render({
 ok('sans commit installe, pas de sha a afficher',
    !/commit [0-9a-f]/.test(noCommit.meta), 'meta=' + JSON.stringify(noCommit.meta));
 
-// 5. Every language must carry the key: a missing one renders FALLBACK.
+// 5. `same` covers TWO situations that must NOT share a sentence. Measured on
+//    0.7.21: adding the "deployed tree IS the tip of main" branch published
+//    `shipped_tree: 'same'` too, and the popup then claimed "the branch moved
+//    on" for a user who was already AT the tip - a lie in exactly the case
+//    where the user is fully up to date.
+const atTip = render({
+  ok: true, update_available: false, shipped_tree: 'same',
+  current_commit: '8e22d1ea9fe03070fb5da270f5c104be63f20c9d',
+  latest_commit: '8e22d1ea9fe03070fb5da270f5c104be63f20c9d',
+  current_version: '0.7.21', backup_available: true,
+});
+// Derive the discriminating literal from the FRENCH dictionary itself, never
+// from a word I pick: ten languages spell "moved on" ten ways (avance,
+// avanza, avanco, weitergezogen, advanced, moved on, ...) and a hand-written
+// regex matched NONE of them - it went green even before the fix, which is the
+// decorative-test trap (points 24 / 60). Read the real string, then assert on
+// the part of it that is NOT the language-invariant part.
+const SAME_FR = I18N.fr.updateSameBytes;
+const SAME_TAIL = SAME_FR.slice(SAME_FR.indexOf('·')).trim(); // "· la branche a avancé"
+ok('la phrase "identique" se termine bien par une raison variable',
+  /·/.test(SAME_FR) && SAME_TAIL.length > 0, 'fr=' + SAME_FR);
+ok('a la pointe de main, le popup ne rend PAS la phrase "branche avancee"',
+  atTip.meta.indexOf(SAME_TAIL) === -1,
+  'meta=' + JSON.stringify(atTip.meta) + ' tail=' + JSON.stringify(SAME_TAIL));
+ok('a la pointe de main, il annonce la version',
+  /0\.7\.21/.test(atTip.meta), 'meta=' + JSON.stringify(atTip.meta));
+// The inverse: main DID move on, so that sentence is the right one - and it must
+// be the EXACT string from the dictionary, not a hand-typed approximation.
+const movedOn = render({
+  ok: true, update_available: false, shipped_tree: 'same',
+  current_commit: '34827e43c67797e41df84f11632a218727787938',
+  latest_commit: 'cb4bdf51c67797e41df84f11632a218727787938',
+  current_version: '0.7.20', backup_available: true,
+});
+ok('si la branche a avance, il rend la phrase exacte du dictionnaire',
+  movedOn.meta === SAME_FR,
+  JSON.stringify(movedOn.meta) + ' != ' + JSON.stringify(SAME_FR));
+// The two sentences must actually differ, or the distinction is cosmetic.
+ok('les deux situations ne rendent pas la meme phrase',
+  atTip.meta !== movedOn.meta,
+  atTip.meta + '  VS  ' + movedOn.meta);
+// And the new sentence must be a real dictionary value, not an ad-hoc literal.
+ok('la phrase "a jour" vient elle aussi du dictionnaire',
+  atTip.meta === I18N.fr.updateUpToDate('0.7.21'),
+  JSON.stringify(atTip.meta) + ' != ' + JSON.stringify(I18N.fr.updateUpToDate('0.7.21')));
+// No dangling "v" when the version is missing (updateUpToDate interpolates it).
+const atTipNoVersion = render({
+  ok: true, update_available: false, shipped_tree: 'same',
+  current_commit: '8e22d1ea9fe0', latest_commit: '8e22d1ea9fe0',
+  current_version: null, backup_available: true,
+});
+ok('sans version, pas de "v" dangling',
+  !/\sv$|\s·\s*$/.test(atTipNoVersion.meta), 'meta=' + JSON.stringify(atTipNoVersion.meta));
+
+// 6. Every language must carry the key: a missing one renders FALLBACK.
 const langs = ['en', 'fr', 'es', 'de', 'zh', 'ja', 'it', 'pt', 'ar', 'ru'];
 for (const L of langs) {
   ok('cle presente en ' + L,
-     I18N[L] && I18N[L].updateSameBytes && typeof I18N[L].updateSameBytes === 'string');
+    I18N[L] && I18N[L].updateSameBytes && typeof I18N[L].updateSameBytes === 'string');
+  ok('updateUpToDate (fonction) presente en ' + L,
+    I18N[L] && typeof I18N[L].updateUpToDate === 'function',
+    typeof (I18N[L] || {}).updateUpToDate);
 }
 // And the French one must be French, not an English literal left in place.
 ok('le francais est bien en francais',
-   I18N.fr.updateSameBytes !== I18N.en.updateSameBytes,
-   'fr=' + I18N.fr.updateSameBytes);
+  I18N.fr.updateSameBytes !== I18N.en.updateSameBytes,
+  'fr=' + I18N.fr.updateSameBytes);
+ok('updateUpToDate rend la version dans les 10 langues',
+  langs.every(L => /0\.9\.9/.test(I18N[L].updateUpToDate('0.9.9'))),
+  'en=' + I18N.en.updateUpToDate('0.9.9') + ' ja=' + I18N.ja.updateUpToDate('0.9.9'));
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

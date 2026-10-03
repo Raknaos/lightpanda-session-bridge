@@ -1172,13 +1172,56 @@ def update_report_says_why_and_leaks_nothing():
     return "ok", "%d/%d sabotages red and named, 0 invalid" % (got, total)
 
 
+@check("the popup tells 'at the tip of main' apart from 'the branch moved on'")
+def update_tip_is_not_reported_as_a_moved_branch():
+    """`shipped_tree: 'same'` covers TWO situations that must not share a
+    sentence. Measured on 0.7.21: adding the "the deployed tree IS the tip of
+    main" arm published `same` as well, and the popup then told a fully
+    up-to-date user that "la branche a avancé" - a claim about the branch, when
+    nothing had moved at all.
+
+    Two ways this regresses quietly, both proven here:
+      * the arm disappears -> "moved on" becomes unrenderable (sabotage A);
+      * the guard is inverted -> the two situations SWAP sentences, which is
+        worse than a missing branch because both inputs still render something
+        plausible (sabotage B).
+    The third sabotage drops the versionless fallback, which would render
+    "À jour · v" with nothing after the v.
+
+    Runs the real revert-and-observe harness: three sabotages, each of which must
+    produce a NAMED red - and the expectation is a substring of the failure
+    NAME the suite actually prints, not a paraphrase (point 65).
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_update_tip.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) rouges nommes, (\d+) sans nom, (\d+) invalides", out)
+    if not m:
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, unnamed, invalid = (int(x) for x in m.groups())
+    if got != total or unnamed or invalid:
+        return "FAIL", ("%d/%d named red, %d unnamed, %d invalid - a PATCH-MISS or "
+                        "harness failure means the proof did not run" %
+                        (got, total, unnamed, invalid))
+    # The proof restores the file; say so, because a proof that leaves the tree
+    # sabotaged would make every later check meaningless.
+    if "restaure a l'octet   : True" not in out:
+        return "FAIL", "the proof did not restore popup.js byte for byte"
+    return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
+
+
 LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuation,
          shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
          secret_absent, i18n_parity, dom_ids_exist, python_compiles, unit_suite, popup_fits,
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
-         update_card_is_honest, update_report_says_why_and_leaks_nothing]
+         update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
+         update_report_says_why_and_leaks_nothing]
 
 @check("the installed popup translates the relay's own error codes")
 def installed_popup_translates():

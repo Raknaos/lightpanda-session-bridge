@@ -1155,11 +1155,27 @@ function renderUpdateCard() {
   } else {
     updateChip.className = 'update-chip ok';
     updateChip.textContent = t('updateChipOk');
-    // Say WHY there is nothing to install. Measured by the relay, never guessed:
-    // `shipped_tree: 'same'` means the published bytes are identical even though
-    // main moved on - a user reading a bare commit sha cannot tell that apart
-    // from "a code change is waiting". The commit stays in the tooltip.
-    if (updateInfo.shipped_tree === 'same') {
+    // Say WHY there is nothing to install. Measured by the relay, never guessed.
+    // `shipped_tree: 'same'` covers TWO materially different situations that must
+    // not share a sentence:
+    //   - main moved on, but only on commits outside extension/ (0.7.19) - "the
+    //     branch has moved on" is true and useful;
+    //   - the deployed tree IS the tip of main (measured 0.7.21) - nothing moved,
+    //     and claiming it did is a lie in the one case where the user is fully
+    //     up to date. Same state, different sentence: the relay publishes the same
+    //     `same`, and the popup separates them on the two commits it already has.
+    // A user reading a bare commit sha cannot tell either apart from "a code
+    // change is waiting". The commit stays in the tooltip.
+    const atTip = updateInfo.current_commit && updateInfo.latest_commit
+      && updateInfo.current_commit === updateInfo.latest_commit;
+    if (atTip) {
+      // `updateUpToDate` interpolates the version; a missing one would render
+      // "Up to date · v" with nothing after the v, so fall back to the versionless
+      // chip rather than showing a dangling unit.
+      updateMeta.textContent = updateInfo.current_version
+        ? t('updateUpToDate', updateInfo.current_version)
+        : t('updateChipOk');
+    } else if (updateInfo.shipped_tree === 'same') {
       updateMeta.textContent = t('updateSameBytes');
     } else if (updateInfo.current_commit) {
       updateMeta.textContent = 'commit ' + shortCommit(updateInfo.current_commit);
