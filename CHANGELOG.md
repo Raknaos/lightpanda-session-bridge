@@ -48,6 +48,29 @@ premiere execution。Apres un correctif ulterieur，la restauration remit le fic
 **avant** le correctif — l'assertion du harnais a echoue en detruisant le travail qu'elle
 devait proteger。Le snapshot est desormais pris a chaque sabotage。
 
+La suite elle-meme a ete reprise apres que la CI l'a refutee - deux fois, et
+les deux fois elle avait raison :
+
+- Elle lisait le secret de l'operateur et postait vers le relais EN SERVICE sur
+  8765 : `FileNotFoundError` sur le runner, cinq erreurs dont aucune ne parlait
+  d'expiration. Elle sert maintenant le vrai `Handler` sur un port ephemere et
+  possede son jeton.
+- La route d'import exige un **Lightpanda vivant** (`_ensure_connection`,
+  `_apply_session`, verification par `Network.getCookies`) : sur le runner sans
+  navigateur elle repondait 400 "Connection refused". Le **transport** est sature,
+  jamais le code sous test - la derivation de `cookie_for_cdp`, le garde-fou `> 0`
+  et `list_sessions()` tournent pour de vrai.
+
+Et le harnais de mesurePaint etait, lui aussi, incapable de voir la feature :
+la ligne des sessions est livree **repliee**, donc la meta d'expiration n'etait
+jamais peinte. Il clique desormais le vrai controle avant de capturer.
+
+**Verifie sur l'extension installee 0.7.18**, par le compositeur, sur la vraie
+origine : la ligne affiche `1 cookie · expirée`. Chaine complete, en francais,
+aucun litteral `cookies`/`expired`, aucune valeur de cookie lue.
+
+Gate : 34 checks (18 locaux + 16 live), 240 tests, CI verte sur `d11f3d2`.
+
 ## [0.7.17] - retracting 0.7.16: the wrong-language frame was never painted
 
 v0.7.16 claimed the popup flashed French to English users. It did not. The claim
