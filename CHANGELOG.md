@@ -1,3 +1,27 @@
+## [0.7.31] - 2026-10-03
+
+### Fixed
+- L'audit d'absence est remplace par un invariant mecanique : `render(A)` puis
+  `render(B)` dans UN jeu de noeuds doit egaler `render(B)` dans un jeu neuf. Ma
+  version manuelle annoncait 0 propriete sur une fonction qui en ecrit neuf.
+
+### Added
+- `tests/node/test_no_value_outlives_its_state.js` - 62 paires d'etats sur
+  `renderUpdateCard`, `renderSessions`, `checkRelay` et `copyDiagnostic`. Exhaustif,
+  sans analyse de flux, et il voit une ABSENCE.
+- `scripts/proof_red_state_ownership.py` - 4/4 rouges nommes, 0 invalide.
+- Check LOCAL `no rendered value outlives the state that set it`.
+
+### Notes
+- Les noeuds sont amorces depuis `popup.html`, donc la valeur qu'un utilisateur
+  voit avant tout script est ce qui est mesure. L'exemption des trois etats qui
+  conservent une valeur a dessein est elle-meme verifiee.
+- 0.7.30 n'est PAS couvert ici : `renderUpdateCard` ecrit `updateVersion` dans
+  tous ses etats, donc cette premiere image appartient a `init()`. Le harnais le
+  dit dans son en-tete plutot que de laisser croire a une couverture.
+- Le skill `release-acceptance-gate` compte 90 points apres reparation du point
+  82, supprime en patchant sur sa premiere ligne.
+
 ## [0.7.30] - la carte nomme la version installee des le premier cadre
 
 `init()` ecrivait la version du PIED de page de facon synchrone, mais ne rendait

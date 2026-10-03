@@ -1456,6 +1456,81 @@ def clear_button_never_keeps_an_armed_confirmation():
     return "ok", "%s; one shared reset owns all four button properties" % count
 
 
+@check("no rendered value outlives the state that set it")
+def no_value_outlives_its_state():
+    """The MECHANISED form of the family measured in 0.7.26-0.7.30, built after
+    the manual version of this audit reported "0 properties" on a function that
+    writes nine - a hand-written flow parser that silently measured nothing.
+
+    The invariant needs no control-flow analysis and none of my vocabulary:
+    `render(A)` then `render(B)` into ONE node set must equal `render(B)` into a
+    FRESH one. Any difference is a value that survived a state change. The
+    comparison is exhaustive over pairs, sees an ABSENCE (which a
+    duplicate-write detector cannot - point 82), and cannot be fooled by
+    mutually exclusive `if/else` arms.
+
+    A state may keep a value ON PURPOSE, and no comparison can tell that from the
+    defect. Three such cases were MEASURED on the real DOM and are declared, with
+    the line numbers that justify each - `updateBusy` leaves both buttons alone
+    because `runUpdate` disables them (popup.js:1449-1450), and the two failure
+    branches keep `rollbackBtn`'s tooltip on a node they set `display:none`, which
+    has no hover. The declaration is itself checked: a declared node that does NOT
+    survive is a FAIL, so the escape hatch cannot widen without evidence.
+
+    Every node is seeded from `popup.html`'s own content, so the values a user
+    sees before any script runs are the ones under test - which is what made the
+    clear-button proof report the English literal `Clear all`.
+
+    0.7.30's first-frame fix is deliberately NOT covered here: `renderUpdateCard`
+    writes `updateVersion` in every state, so the markup's placeholder cannot
+    survive inside it. That frame belongs to `init()` and is covered by
+    `test_card_identity_immediate.js`. A harness must not claim a defect class it
+    structurally cannot see.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_state_ownership.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=1200)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    # The tally line is read with the ACCENT it actually prints:
+    # "4 nomme(s) rouge, 0 non nomme(s), 0 invalide". Matching an ASCII
+    # "restaure" against a line that reads "restaure" with an acute on the
+    # final e is a false FAIL that reads like a product defect (points 81/86).
+    m = re.search(r"(\d+) nomm\S* rouge, (\d+) non nomm\S*, (\d+) invalide", out)
+    if not m:
+        if "HARNESS FAIL" in out:
+            return "FAIL", "audit harness refused to run: " + next(
+                (l.strip() for l in lines if "HARNESS FAIL" in l), "?")
+        return "FAIL", ("no tally from the state-ownership proof - the harness may "
+                        "have failed: %s" % (lines[-1:] or ["no output"]))
+    got, unnamed, invalid = (int(x) for x in m.groups())
+    if unnamed or invalid:
+        return "FAIL", ("%d named red, %d UNNAMED, %d invalid - an unnamed red or a "
+                        "PATCH-MISS means the proof did not run"
+                        % (got, unnamed, invalid))
+    if "PROOF-RED REFUSE" in out:
+        return "FAIL", "the proof refused: %d/%d named red" % (got, got + unnamed)
+    if re.search(r"restaur\S* . l'octet : False", out):
+        return "FAIL", "a file was not restored byte for byte - check the harness"
+    import shutil as _sh
+    node_bin = _sh.which("node")
+    if not node_bin:
+        return "SKIP", "node is absent"
+    r2 = subprocess.run([node_bin, str(REPO / "tests" / "node" / "test_no_value_outlives_its_state.js"),
+                         str(REPO)], cwd=str(REPO), capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=600)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    count = _node_pass_count(lines2)
+    if not count:
+        return "FAIL", "state-ownership suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
+    return "ok", "%s; %d sabotages named red" % (count, got)
+
+
 @check("the card names the installed version on the first frame, before any await")
 def card_names_the_installed_version_on_the_first_frame():
     """Measured on 0.7.30: `init()` wrote the FOOTER version synchronously but
@@ -1636,6 +1711,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          every_update_state_owns_its_tooltip,
          every_state_owns_the_button_wording,
          clear_button_never_keeps_an_armed_confirmation,
+         no_value_outlives_its_state,
          card_names_the_installed_version_on_the_first_frame,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]

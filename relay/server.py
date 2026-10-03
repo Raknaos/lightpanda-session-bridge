@@ -1613,7 +1613,20 @@ def self_test() -> int:
     import io as _io
     import tarfile as _tar
     import zipfile as _zip
-    _tmpdir = tempfile.mkdtemp(prefix="lp-bridge-selftest-archive-")
+    # The traversal sentinel must live in a directory THIS test owns, with a name
+    # unique to this run. Measured 0.7.31: the check looked for `%TEMP%/evil.txt` -
+    # a FIXED name in the SHARED temp directory - so a file left there by anything
+    # else (an interrupted run, another tool, an antivirus quarantine) failed the
+    # build for a reason that had nothing to do with the product. The refusal was
+    # correct; the SENSOR was not a test. The parent of a fresh `mkdtemp` is
+    # `%TEMP%` itself, so "one level up" was global state - and a test that reads
+    # global state passes on a clean machine and fails on a dirty one (point 17).
+    # Now: `mkdtemp` twice. The outer directory is the canary the `../../` member
+    # aims at; the inner one is the extraction root. Nothing is asserted about
+    # `%TEMP%` any more, because nothing there is ours to assert on.
+    _canary_root = tempfile.mkdtemp(prefix="lp-bridge-traversal-")
+    _tmpdir = os.path.join(_canary_root, "root")
+    os.makedirs(_tmpdir)
     try:
         _zip_path = os.path.join(_tmpdir, "bad.zip")
         with _zip.ZipFile(_zip_path, "w") as _z:
@@ -1630,7 +1643,10 @@ def self_test() -> int:
                 raise AssertionError("a traversal archive was accepted")
             except RuntimeError as _err:
                 assert "traversal" in str(_err) or "absolute" in str(_err), str(_err)
-        assert not os.path.exists(os.path.join(os.path.dirname(_tmpdir), "evil.txt"))
+        # Nothing escaped the extraction root: the `../../` member targets the
+        # canary directory, which must still be empty of it.
+        assert not os.path.exists(os.path.join(_canary_root, "evil.txt")), \
+            "a traversal member escaped the extraction root"
         # A tree with no extension/manifest.json is refused before any write.
         _empty = os.path.join(_tmpdir, "empty")
         os.makedirs(_empty, exist_ok=True)
@@ -1640,7 +1656,7 @@ def self_test() -> int:
         except RuntimeError:
             pass
     finally:
-        _shutil.rmtree(_tmpdir, ignore_errors=True)
+        _shutil.rmtree(_canary_root, ignore_errors=True)
 
     print("security self-test: ok")
     return 0
