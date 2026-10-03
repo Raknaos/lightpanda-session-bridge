@@ -236,6 +236,36 @@ def changelog_is_not_duplicated():
              if re.search(r"(?<!^)(?<!`)## \[", ln)]
     if glued:
         problems.append("%d heading(s) welded onto prose: %r" % (len(glued), glued[0][:50]))
+    # An empty list is the signature of a regex that stopped matching, not of a
+    # file that lost its headings. `dupe`, `drops` and `glued` are all derived
+    # from `heads` or from the same shape, so every one of them is empty too and
+    # the check reports "0 entries, unique, descending, no welded heading" - a
+    # PASS on a changelog it can no longer read. Same failure the guard in
+    # `relay_error_translation_report` already refuses: an audit that sees
+    # nothing must say so, not succeed.
+    # A heading that lost its FORM is a heading the check no longer counts, and
+    # `not heads` cannot see it: measured, turning three `## [` into `# [` left
+    # 55 entries readable, so every invariant below still passed and the verdict
+    # said "55 entries" instead of 58. The count going DOWN without any problem
+    # found is the signature - so count the lines that LOOK like a version entry
+    # and refuse when they outnumber the recognised ones.
+    unclosed = [ln for ln in text.splitlines()
+                if re.match(r"^#{1,6}\s*\[\d", ln) and "]" not in ln]
+    if unclosed:
+        return "FAIL", ("%d heading(s) open a version entry and never close it: "
+                        "%r - a title that lost its bracket is one this check no "
+                        "longer counts, so the count below would be silently low"
+                        % (len(unclosed), unclosed[0][:46]))
+    shaped = re.findall(r"(?m)^#{1,6}\s*\[([\d][^\]]*)\]", text)
+    if len(shaped) != len(heads):
+        return "FAIL", ("%d line(s) look like a version entry but %d parsed as "
+                        "`## [x]` - the heading form changed, so this check is "
+                        "counting less than the file holds"
+                        % (len(shaped), len(heads)))
+    if not heads:
+        return "FAIL", ("no `## [<version>]` heading could be read: %d bytes, "
+                        "%d lines, and the heading regex matched none - the "
+                        "check is blind, not satisfied" % (len(text), len(text.splitlines())))
     if problems:
         return "FAIL", "%d entries - %s" % (len(heads), "; ".join(problems))
     return "ok", "%d entries, unique, descending, no welded heading" % len(heads)
@@ -529,6 +559,19 @@ def dom_ids_exist():
     wanted = set(re.findall(r"getElementById\(\s*'([A-Za-z0-9_-]+)'", js))
     wanted |= set(re.findall(r"querySelector\(\s*'#([A-Za-z0-9_-]+)'", js))
     present = set(re.findall(r'id="([A-Za-z0-9_-]+)"', html))
+    # Both collections empty means the patterns stopped matching the code they
+    # were written for, and `wanted - present` is then empty - so the check
+    # reports "0 ids referenced, all present" and passes on a popup it cannot
+    # read. Measured 0.7.40: switching `getElementById('` to `getElementById("`
+    # in popup.js left the verdict green and unchanged at "31 ids referenced",
+    # because the count came from the OTHER pattern.
+    if not wanted:
+        return "FAIL", ("no id could be read from popup.js: %d bytes, and both "
+                        "getElementById and querySelector matched nothing - the "
+                        "check is blind, not satisfied" % len(js))
+    if not present:
+        return "FAIL", ("no id attribute could be read from popup.html: %d "
+                        "bytes - the check is blind, not satisfied" % len(html))
     missing = sorted(wanted - present)
     if missing:
         return "FAIL", "popup.html has no #%s" % ", #".join(missing[:4])
@@ -1906,6 +1949,19 @@ def the_gate_cannot_contain_a_check_that_cannot_be_seen():
         return "FAIL", ("%d function(s) are never registered, never decorated and never "
                         "called: %s - a check written and never wired is a comment "
                         "about a bug" % (len(unwired), ", ".join(unwired[:6])))
+    # Zero registered checks is the shape this whole guard exists to catch, and
+    # it passed: measured 0.7.40, emptying LOCAL and LIVE made this check report
+    # "0 checks: every registered name resolves and is decorated; 73 helpers are
+    # all called; nothing is neither" - green, on a gate that RUNS NOTHING. Every
+    # invariant below is an emptiness test, so an empty registration satisfies
+    # all of them. A guard that reports success about the absence of its subject
+    # is the same defect as the `?` fallback, one level up: the verdict reads
+    # like a measurement and there is nothing behind it.
+    if not registered:
+        return "FAIL", ("LOCAL and LIVE together register ZERO checks, and %d "
+                        "check function(s) are defined and unwired: %s - this "
+                        "gate would run nothing and still report success"
+                        % (len(unwired), ", ".join(unwired[:6])))
     return "ok", ("%d checks: every registered name resolves and is decorated; %d "
                   "helpers are all called; nothing is neither"
                   % (len(registered), len(defs) - len(registered)))

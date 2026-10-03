@@ -1,3 +1,21 @@
+## [0.7.40] - 2026-10-03
+
+### Fixed
+- Three checks could pass while measuring nothing, because the collection they
+  audit had emptied out and every invariant they apply is an emptiness test.
+  `changelog_is_not_duplicated` reported "55 entries" after three titles lost
+  their `##`, `dom_ids_exist` reported "31 ids referenced" when both patterns
+  had stopped matching, and `the_gate_cannot_contain_a_check_that_cannot_be_seen`
+  reported "0 checks: every registered name resolves" on a gate that RUNS
+  NOTHING. A verdict that has the shape of a measurement with nothing behind it.
+
+### Notes
+- Each fix refuses the emptiness by name and says what it did read: the bytes,
+  what was found, and that the check is blind rather than satisfied.
+- Measured across six sabotages. `i18n_parity` has the same shape and no defect,
+  because what is referenced is read from the popup and what is defined from the
+  data: decoupling them is what makes it blind-proof, not luck.
+
 ## [0.7.39] - 2026-10-03
 
 ### Fixed
