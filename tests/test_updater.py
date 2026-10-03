@@ -1025,6 +1025,72 @@ class TestNoProvenanceChannel(unittest.TestCase):
             "a version newer than the release must not be pulled back to it")
 
 
+class TestTheCommonCaseIsAlsoMeasured(unittest.TestCase):
+    """Deployed tree IS the tip of main - the outcome almost every up-to-date
+    user hits - fell through every branch of check_update and published neither
+    `shipped_tree` nor `note`. Measured live on 0.7.21: the diagnostic report
+    showed `update_state = None` and `update_note = None`, i.e. two empty
+    fields, on a relay with nothing at all wrong with it.
+
+    The branch must say WHY nothing is offered, and it must not claim the tree
+    was hashed: it was not compared, because comparing was unnecessary.
+    """
+
+    def _run(self, *, release_version, head_sha, installed_commit):
+        import updater as U
+        saved = (U.latest_release, U.latest_commit, U.installed_info)
+        self.addCleanup(lambda: setattr(U, "latest_release", saved[0]))
+        self.addCleanup(lambda: setattr(U, "latest_commit", saved[1]))
+        self.addCleanup(lambda: setattr(U, "installed_info", saved[2]))
+        if release_version is None:
+            U.latest_release = lambda repo=None: None
+        else:
+            parts = tuple(int(x) for x in release_version.split("."))
+            U.latest_release = lambda repo=None: {
+                "tag": "v" + release_version, "version": parts,
+                "version_text": release_version, "commit": None,
+                "published_at": "2026-01-01", "html_url": "u",
+                "assets": [], "notes": "n"}
+        U.latest_commit = (lambda repo=None: {"sha": head_sha, "short": head_sha[:8],
+                                              "message": "m", "date": "2026-01-01"}
+                           if head_sha else (lambda repo=None: None))
+        U.installed_info = lambda ext_dir=None: {
+            "version": "0.7.21", "commit": installed_commit,
+            "tag": "v0.7.21" if installed_commit else None}
+        return U.check_update(force=True)
+
+    def test_tip_of_main_publishes_the_state_and_the_reason(self):
+        sha = "a" * 40
+        r = self._run(release_version="0.7.21", head_sha=sha, installed_commit=sha)
+        self.assertFalse(r["update_available"])
+        self.assertEqual(
+            r.get("shipped_tree"), "same",
+            "the most common outcome published no state at all, so the report "
+            "showed an empty field and the popup had nothing to translate")
+        self.assertTrue(r.get("note"), "no reason given for a quiet chip")
+        self.assertIn(sha[:8], r["note"])
+
+    def test_it_never_claims_the_tree_was_hashed(self):
+        """Same commit means same bytes by construction - no hash ran. Saying
+        "byte-identical" here would be the unmeasured claim that 0.7.20 already
+        had to retract once (point 59 in the skill)."""
+        sha = "b" * 40
+        r = self._run(release_version="0.7.21", head_sha=sha, installed_commit=sha)
+        self.assertNotIn(
+            "byte-identical", r.get("note") or "",
+            "nothing was hashed on this path, so nothing may claim a comparison")
+
+    def test_a_newer_release_still_offers_the_update(self):
+        """The regression this branch must not cause: a genuinely different
+        tree still reports update_available True."""
+        r = self._run(release_version="0.7.22", head_sha="c" * 40,
+                      installed_commit="a" * 40)
+        self.assertTrue(
+            r["update_available"],
+            "adding a branch for the up-to-date case must not swallow the "
+            "case where there IS something to install")
+
+
 class TestNoteOnlyClaimsWhatWasMeasured(unittest.TestCase):
     """A note must not assert a measurement that was skipped.
 

@@ -514,6 +514,14 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             "published_at": None,
             "url": None,
             "notes": "",
+            # Seeded here, refined by the branches below. Measured on 0.7.21:
+            # `shipped_tree` and `note` existed ONLY inside the conditional arms,
+            # so the common up-to-date outcome (`head == current`, which falls
+            # through every arm) published neither and the report showed empty
+            # fields on a healthy relay. A key that is absent and a key that
+            # says "not measured" must never look the same (skill point 64).
+            "shipped_tree": "unknown",
+            "note": None,
         }
         current = installed_info(ext_dir)
         result.update({
@@ -665,6 +673,21 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             # next check is exact.
             result.update({"update_available": True, "source": "main",
                            "baseline_unknown": True, "from": None, "to": head["short"]})
+        elif head and current["commit"] == head["sha"]:
+            # The most COMMON outcome - deployed tree IS the tip of main - fell
+            # through every branch above and published no `shipped_tree` and no
+            # `note`. Measured live on 0.7.21: `update_available: False` with
+            # both facts absent, so the diagnostic report showed two empty
+            # fields and the popup had no state to translate. The bytes are
+            # identical BY CONSTRUCTION here (same commit), so `same` is a
+            # measurement, not a guess - but say so, and never claim the tree
+            # was hashed: it was not compared, it was never needed.
+            result.update({"update_available": False,
+                           "shipped_tree": "same",
+                           "note": ("deployed commit %s is the tip of main; "
+                                    "no update was fetched because there is "
+                                    "nothing newer to fetch" %
+                                    (current["commit"][:8] if current["commit"] else "?"))})
 
         if head:
             result["latest_commit"] = head["sha"]

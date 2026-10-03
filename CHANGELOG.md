@@ -28,6 +28,20 @@ influent : harnais muet -> `NOT READY`.
 Nouveau `scripts/proof_red_update_report.py` (4 sabotages, 4 rouges nommes,
 0 invalide). `tests/test_diagnostics.py` passe a 21 verts.
 
+**Le cas le plus frequent n'avait AUCUNE branche.** Apres la correction
+ci-dessus, le relais vivant respondeit encore `update_state: None`. La chaine
+`if / elif` de `check_update` n'a pas de bras pour `head == current` - l'arbre
+deploie EST la tete de `main`, le cas de presque tout utilisateur a jour -: il
+passe droit au `return`, et les deux faits n'existaient qu'A l'interieur des
+bras conditionnels. Deux correctifs : un bras dedie, dont la note ne dit
+jamais "byte-identical" puisque rien n'a ete hache ; et l'invariant
+structurel, `shipped_tree`/`note` initialises dans le dict de depart
+(`"unknown"` / `None`) puis rafines. Avant, les cas « ni release ni main » et
+« erreur reseau » renvoyaient une cle ABSENTE ; apres, `unknown`. Mesure sur le
+relais vivant : `update_state = same`, aucune cle absente. 3 tests, 3
+sabotages rouges nommes - dont un qui retire la garde du bras et prouve qu'un
+arbre reellement different continue d'offrir sa mise a jour.
+
 **Changelog repare.** Le fichier portait l'historique **deux fois** (74 entrees
 pour 37 versions, 34 identiques au caractere pres) et l'entree 0.7.20 etait
 collee sans saut de ligne au milieu d'une ligne 0.3.3
