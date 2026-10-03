@@ -1384,7 +1384,14 @@ function renderUpdateCard() {
       ? 'commit ' + shortCommit(updateInfo.current_commit)
       : '';
     updateBtn.style.display = 'none';
-    rollbackBtn.style.display = 'none';
+    // Measured 0.7.26: `rollbackBtn.style.display` was already computed correctly
+    // 58 lines above - `(backup_available && !update_available) ? '' : 'none'` -
+    // which is EXACTLY the state this branch is in. This line overwrote it with
+    // 'none', so undo was reachable only while an update was WAITING and never
+    // in the one moment it is useful: right after installing one. The relay
+    // measured `backup_available: true` and the popup read the field - then threw
+    // the reading away. `updateBtn` legitimately has no button to hide here;
+    // `rollbackBtn` does, and hiding it is the defect.
   }
 }
 

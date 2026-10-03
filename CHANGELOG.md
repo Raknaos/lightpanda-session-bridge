@@ -1,3 +1,28 @@
+## [0.7.26] - L'annulation est de nouveau possible apres une installation
+
+`rollbackBtn.style.display` etait calcule CORRECTEMENT en haut de
+`renderUpdateCard` - `(backup_available && !update_available) ? '' : 'none'`, soit
+exactement l'etat de la branche « rien a installer » - puis cette branche
+terminait par `rollbackBtn.style.display = 'none'`, 58 lignes plus bas.
+L'annulation n'etait donc joignable que lorsqu'une mise a jour attendait, et
+jamais dans le seul etat ou elle sert : juste apres en avoir installe une. Le
+relais avait mesure `backup_available: true`, le popup avait lu le champ, et la
+lecture avait ete jetee un ecran plus bas - ce n'est donc pas le motif
+« champ publie jamais lu » de 0.7.24, mais « valeur lue puis annulee ».
+
+Les deux sens sont asserts : afficher « annuler » sans sauvegarde derriere est
+aussi faux que le cacher alors qu'il y en a une. `tests/node/test_rollback_reachable.js`
+7 verts sur le vrai `renderUpdateCard`. `scripts/proof_red_rollback.py` 1/1 rouge
+nomme (`5 passed, 2 failed`). Nouveau check LOCAL
+`undo_is_reachable_after_install`, influent dans les deux sens : check aveugle ->
+`27 ok, READY`, produit sabote -> `NOT READY` avec `popup.js is red on disk`.
+
+Harnais, de son cote : `_node_pass_count()` itere son argument, les quatre
+appelants existants passent une LISTE de lignes, le nouveau check passait une
+CHAINe - la fonction iterait les caracteres, renvoyait None, et le check echouait
+en affichant « undo suite : 7 passed, 0 failed », la preuve meme que la suite etait
+verte.
+
 ## [0.7.25] - Un echec d'installation nomme sa cause
 
 `runUpdate` levait correctement l'erreur du relais, puis son propre `catch`

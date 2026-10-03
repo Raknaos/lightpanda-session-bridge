@@ -1235,6 +1235,69 @@ def update_tip_is_not_reported_as_a_moved_branch():
     return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
 
 
+@check("the undo button is reachable when a backup exists")
+def undo_is_reachable_after_install():
+    """Measured on 0.7.25 (found while fixing 0.7.26): `renderUpdateCard` computed
+    `rollbackBtn.style.display` CORRECTLY near its top -
+    `(backup_available && !update_available) ? '' : 'none'`, which is exactly the
+    state of the "nothing to install" branch - and that branch then overwrote it
+    with `'none'` on its last line.
+
+    So undo was reachable only while an update was WAITING, and never in the one
+    state where it is useful: the user just installed one. The relay measured
+    `backup_available: true`, the popup read the field, and the reading was
+    discarded one screen later - point 71 for a value that WAS read.
+
+    The test asserts both directions: showing undo with no backup behind it is as
+    wrong as hiding it when one exists, so a fix that simply always shows the
+    button fails too.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_rollback.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) named red, (\d+) invalid", out)
+    if not m:
+        # Two different states land here and "no tally" hides which: the harness
+        # refused to run because popup.js is RED ON DISK (a real product failure)
+        # versus it ran and printed something unrecognised (a harness failure).
+        if "ECHEC : popup.js est rouge" in out:
+            return "FAIL", ("popup.js is red on disk: %s" % next(
+                (l.strip() for l in lines if l.strip().startswith("ECHEC")), "(voir sortie)"))
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, invalid = (int(x) for x in m.groups())
+    if got != total or invalid:
+        return "FAIL", ("%d/%d named red, %d invalid - a PATCH-MISS or harness "
+                        "failure means the proof did not run" % (got, total, invalid))
+    if "popup.js restaure a l'octet : True" not in out:
+        return "FAIL", "popup.js was not restored byte for byte by the harness"
+    # The suite itself must be green now, and must name its count.
+    # `_node_pass_count` iterates its argument: the other call sites pass a LIST
+    # of lines (`.strip().splitlines()`). Handing it a raw string made it iterate
+    # CHARACTERS, so the count came back None and this check reported a FAIL with
+    # the very summary line that proves the suite was green - "undo suite: 7
+    # passed, 0 failed". Same shape as point 58 one level down: the measurement
+    # was discarded while the child was perfectly healthy.
+    import shutil as _sh
+    node_bin = _sh.which("node")
+    if not node_bin:
+        return "SKIP", "node is absent"
+    r2 = subprocess.run([node_bin, str(REPO / "tests" / "node" / "test_rollback_reachable.js"),
+                         str(REPO)], cwd=str(REPO), capture_output=True, text=True,
+                        timeout=300)
+    lines2 = (r2.stdout or r2.stderr).strip().splitlines()
+    if r2.returncode != 0:
+        failed = next((l.strip() for l in lines2 if l.strip().startswith("FAIL")), "?")
+        return "FAIL", failed[:88]
+    count = _node_pass_count(lines2)
+    if not count:
+        return "FAIL", "undo suite printed no pass count: %s" % (lines2[-1:] or ["no output"])
+    return "ok", "%s; overwriting line removed" % count
+
+
 @check("a failed update names its cause instead of blaming the relay")
 def update_failure_names_its_cause():
     """Measured on 0.7.24 (found while fixing 0.7.25): `runUpdate` threw the
@@ -1356,6 +1419,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
          upstream_failure_is_not_reported_as_offline,
          update_failure_names_its_cause,
+         undo_is_reachable_after_install,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 
