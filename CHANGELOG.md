@@ -7,6 +7,36 @@ told to add a token they already had. The figures now come from the error's own
 anonymous), not from the local token file.
 
 
+## [0.7.19] - le canal de mise a jour compare les OCTETS, pas les COMMITS
+
+`check_update` decidait "installe ceci" en comparant des **commits**. Or le commit
+enregistre a l'installation est la pointe du dernier `fetch` - regulierement un commit
+qui n'a touche que `scripts/` ou `docs/`. Mesure sur 0.7.18 : installe `045eac3`,
+dernier commit touchant `extension/` `37e958d`, et les deux portent le meme arbre
+`c1090d37`. Les octets deposes etaient identiques, donc la pastille proposait une
+mise a jour que l'utilisateur ne pouvait jamais vider - chaque installation
+enregistrait a nouveau un commit non livre.
+
+Desormais, en plus du filtre par sous-arbre, l'arbre **depose** est compare a
+l'arbre **distant** :
+
+- le local utilise le schema de **blob git** (`sha1("blob <len>\0" + octets)`),
+  parce que c'est ce que renvoie l'API ; un sha256 nu comparait deux alphabets
+  differents et signalait une difference sur les 14 fichiers livres, identiques
+  octet pour octet ;
+- les deux cotes sont cles par le meme chemin relatif au depot (`extension/popup.js`) ;
+- `.build-info.json` est exclu : ecrit par l'installeur, non suivi, different sur
+  chaque machine - l'inclure rend chaque arbre unique et la comparaison vide de sens.
+
+Trois pieges de harnais rencontres en route, tous consignes : un sabotage qui
+supprime l'argument de formatage leve `TypeError` au lieu de produire l'echec ; les
+mots-cles `expect` doivent venir du message reellement affiche, `unittest` tronquant
+une paire d'hex a la largeur de la fenetre ; et les callables remplaces doivent etre
+sauvegardes dans `setUp`, pas dans le helper, sinon les tests qui ne l'appellent pas
+lisent une constante residuelle et la faute tombe sur le produit.
+
+Prouve par `scripts/proof_red_update_channel.py` : **5 sabotages, 5 rouges nommes**.
+
 ## [0.7.18] - la chaine d'expiration de session, reellement cablee
 
 Une session, importee depuis un cookie Chrome, n'affichait jamais son expiration :

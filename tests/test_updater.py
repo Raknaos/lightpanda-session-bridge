@@ -463,6 +463,11 @@ class TestCheckUpdate(UpdateTestCase):
     def setUp(self):
         super().setUp()
         extension_tree(self.ext, version="0.4.3", popup_marker="deployed")
+        # Point 25: save the real callables in setUp, not in `_stub` - a test
+        # that never calls `_stub` had no `_real_local` to restore, and a
+        # measurement test read a leftover stub constant instead of the files.
+        self._real_local = updater.local_tree_sha
+        self._real_shipped = updater.shipped_tree_sha
 
     def _stub(self, release_version, commit, installed_commit=None):
         if installed_commit:
@@ -478,6 +483,21 @@ class TestCheckUpdate(UpdateTestCase):
         # Unless a test says otherwise, the shipped tip is the commit itself:
         # these tests are about the channel, not about the subtree filter.
         updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: head
+        # Default: the deployed bytes match the remote tree. These tests are
+        # about the CHANNEL, not about the content comparison - a test that left
+        # the lookup unmocked would hit the real GitHub and pass or fail for
+        # reasons unrelated to what it asserts.
+        same = "d" * 64
+        # Point 25: save and restore EVERY global you replace, the callables
+        # included. Leaving a stub installed made the tests that exercise the
+        # REAL local_tree_sha read a constant instead of the files on disk -
+        # four failures that pointed at the product instead of the harness.
+        def restore_trees():
+            updater.local_tree_sha = self._real_local
+            updater.shipped_tree_sha = self._real_shipped
+        self.addCleanup(restore_trees)
+        updater.local_tree_sha = lambda ext_dir="": same
+        updater.shipped_tree_sha = lambda repo=updater.REPO, ref="main": same
         self.addCleanup(updater.clear_cache)
 
     def test_newer_release_wins(self):
@@ -497,9 +517,94 @@ class TestCheckUpdate(UpdateTestCase):
 
     def test_new_commit_on_main_is_offered(self):
         self._stub("0.4.3", "b" * 40, installed_commit="a" * 40)
+        # An update is only honest if the CONTENT differs. This test used to
+        # pass with identical trees, which is the very bug the next test covers.
+        updater.local_tree_sha = lambda ext_dir="": "e" * 64
+        updater.shipped_tree_sha = lambda repo=updater.REPO, ref="main": "f" * 64
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertEqual(status["source"], "main")
+        self.assertEqual(status["shipped_tree"], "differs")
+
+    def test_a_commit_that_ships_identical_bytes_is_not_offered(self):
+        """The wolf-crying chip. Measured on 0.7.18: installed commit 045eac3,
+        newest commit touching extension/ 37e958d, and BOTH have the tree
+        c1090d37 - so the commit comparison reported an update forever, and no
+        install could clear it because the next fetch records a non-shipped
+        commit again. The invariant is the deployed BYTES."""
+        self._stub("0.4.3", "b" * 40, installed_commit="a" * 40)
+        same = "d" * 64
+        updater.local_tree_sha = lambda ext_dir="": same
+        updater.shipped_tree_sha = lambda repo=updater.REPO, ref="main": same
+        status = updater.check_update(force=True)
+        self.assertFalse(
+            status["update_available"],
+            "le popup propose d'installer des octets identiques: "
+            "shipped_tree=%s note=%s" % (status.get("shipped_tree"),
+                                         status.get("note")))
+        self.assertEqual(status["shipped_tree"], "same")
+        self.assertIn("byte-identical", status.get("note") or "")
+
+    def _different_trees(self):
+        """Declare the deployed bytes DIFFER from the remote tree.
+
+        The default in `_stub` is "identical", because that is the common case
+        and the one the wolf-crying bug was about. A test that asserts an update
+        is offered must therefore say the content changed - otherwise it passes
+        for the wrong reason (it was asserting the channel, not the content).
+        """
+        updater.local_tree_sha = lambda ext_dir="": "1" * 64
+        updater.shipped_tree_sha = lambda repo=updater.REPO, ref="main": "2" * 64
+
+    def _use_real_trees(self):
+        """Put the REAL hashing back, for tests that measure it on disk."""
+        updater.local_tree_sha = self._real_local
+        updater.shipped_tree_sha = self._real_shipped
+
+    def test_the_build_info_file_never_enters_the_tree_hash(self):
+        """`.build-info.json` is written by the installer, is untracked, and
+        differs on every machine. Hashing it would make every tree unique and
+        every comparison meaningless - the update would be offered forever for
+        the same reason this check exists."""
+        self._use_real_trees()
+        extension_tree(self.ext, version="0.4.3")
+        with open(os.path.join(self.ext, updater.BUILD_INFO), "w", encoding="utf-8") as fh:
+            json.dump({"commit": "a" * 40, "tag": "v0.4.3"}, fh)
+        first = updater.local_tree_sha()
+        with open(os.path.join(self.ext, updater.BUILD_INFO), "w", encoding="utf-8") as fh:
+            json.dump({"commit": "b" * 40, "tag": "v0.4.3", "installed_at": "later"}, fh)
+        # The message must NAME the file: unittest truncates the failing pair of
+        # hex digests to the width of the window, so "which file?" is otherwise
+        # unanswerable from the output.
+        self.assertEqual(
+            first, updater.local_tree_sha(),
+            "build-info.json change: le hash du tree a bouge alors que seul "
+            ".build-info.json a change - toute machine aura un tree unique")
+
+    def test_local_tree_hash_uses_the_git_blob_scheme(self):
+        """It must agree with the remote side, which hands back git blob shas.
+        Hashing the raw bytes with another digest compares two alphabets and
+        reports a difference on files that are byte-identical (measured on all
+        14 shipped files before this was fixed)."""
+        import hashlib
+        self._use_real_trees()
+        extension_tree(self.ext, version="0.4.3")
+        got = updater.local_tree_sha()
+        h = hashlib.sha256()
+        pairs = []
+        for base, _dirs, files in os.walk(self.ext):
+            for name in files:
+                full = os.path.join(base, name)
+                rel = "extension/" + os.path.relpath(full, self.ext).replace(os.sep, "/")
+                if rel.endswith(updater.BUILD_INFO):
+                    continue
+                with open(full, "rb") as fh:
+                    blob = fh.read()
+                pairs.append((rel, hashlib.sha1(b"blob %d\0" % len(blob) + blob).hexdigest()))
+        for path, digest in sorted(pairs):
+            h.update((path + ":" + digest + "\n").encode("utf-8"))
+        self.assertEqual(got, h.hexdigest(),
+                         "local_tree_sha n'utilise pas le schema de blob git")
 
     def test_unknown_baseline_is_flagged(self):
         # Nothing published yet: the only honest thing to offer is the commit.
@@ -541,10 +646,12 @@ class TestCheckUpdate(UpdateTestCase):
         status = updater.check_update(force=True)
         self.assertFalse(status["update_available"])
         self.assertIsNone(status["source"])
-        self.assertIn("nothing shipped changed", status.get("note") or "")
+        self.assertIn("byte-identical", status.get("note") or "",
+                      "la note doit dire POURQUOI il n'y a rien a installer")
 
     def test_a_commit_that_shipped_something_is_offered_at_that_commit(self):
         self._stub("0.4.3", "c" * 40, installed_commit="a" * 40)
+        self._different_trees()
         updater.shipped_commit = lambda repo=updater.REPO, branch=updater.BRANCH: \
             self._shipped("b" * 40)
         status = updater.check_update(force=True)
@@ -560,6 +667,10 @@ class TestCheckUpdate(UpdateTestCase):
             raise RuntimeError("rate limit reached")
 
         updater.shipped_commit = boom
+        # The shipped lookup failed, so the content lookup cannot be trusted
+        # either: fail OPEN and offer the tip, because a needless update beats
+        # a missed one.
+        self._different_trees()
         status = updater.check_update(force=True)
         self.assertTrue(status["update_available"])
         self.assertEqual(status["source"], "main")

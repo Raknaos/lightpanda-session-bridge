@@ -396,6 +396,93 @@ def shipped_commit(repo: str = REPO, branch: str = BRANCH):
     }
 
 
+def shipped_tree_sha(repo: str = REPO, ref: str = "main") -> str | None:
+    """One sha256 over the CONTENT of extension/ at `ref`.
+
+    Comparing COMMITS is not enough and, here, is the wrong test. The commit
+    channel installs `extension/`; two commits that leave that subtree byte
+    identical - a harness fix, a release note, a test - have different shas and
+    the same product. Measured: 045eac3 and 37e958d share the tree
+    `c1090d37...`, yet the shipped subtree commit (37e958d) is not the installed
+    one, so a `sha == sha` test reports an update that would install identical
+    bytes - and the user can never clear it, because the install records the
+    tip it fetched, which is again a non-shipped commit.
+
+    GitHub's tree API answers this in one request: `/git/trees/<sha>?recursive=1`
+    lists every blob under `extension/` with its own sha. Hash the (path, blob)
+    pairs so the result does not depend on ordering or on the commit message.
+    Return None when the lookup fails - the caller then falls back to comparing
+    commits, because a needless update beats a missed one.
+    """
+    query = ("%s/repos/%s/git/trees/%s?recursive=1"
+             % (API, repo, urllib.parse.quote(ref)))
+    try:
+        data = _fetch_json(query)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    entries = []
+    for node in (data.get("tree") or []):
+        if node.get("type") != "blob":
+            continue
+        path = node.get("path") or ""
+        if not path.startswith("extension/") or path == "extension/.build-info.json":
+            # The provenance file is written by the installer, not tracked, and
+            # differs on every machine: including it would make every tree
+            # unique and the comparison meaningless.
+            continue
+        entries.append((path, node.get("sha") or ""))
+    if not entries:
+        return None
+    h = hashlib.sha256()
+    for path, blob in sorted(entries):
+        h.update((path + ":" + blob + "\n").encode("utf-8"))
+    return h.hexdigest()
+
+
+def local_tree_sha(ext_dir: str = "") -> str | None:
+    """The same hash over the deployed tree on disk, for a like-for-like compare.
+
+    Hash the files, not the git tree: the relay runs from the checkout, and the
+    checkout may carry edits that were never committed. If the deployed bytes
+    match the remote tree, there is nothing to install - whatever commit is
+    recorded in .build-info.json.
+    """
+    ext_dir = ext_dir or extension_dir()
+    if not ext_dir or not os.path.isdir(ext_dir):
+        return None
+    entries = []
+    for base, _dirs, files in os.walk(ext_dir):
+        for name in files:
+            full = os.path.join(base, name)
+            # Key the hash by the REPO-relative path, not the path relative to
+            # the extension dir: the remote side lists `extension/popup.js`, and
+            # hashing the two alphabets differently reported a difference on 14
+            # files that were byte-identical.
+            rel = "extension/" + os.path.relpath(full, ext_dir).replace(os.sep, "/")
+            if rel == "extension/" + BUILD_INFO or rel.endswith("/.DS_Store"):
+                continue
+            try:
+                with open(full, "rb") as fh:
+                    blob = fh.read()
+            except OSError:
+                return None
+            # git's BLOB HASH, not a bare sha256 of the bytes: the remote side
+            # hands us git blob shas, so hashing anything else here compares two
+            # different alphabets and reports a difference that is not there
+            # (measured: every one of the 14 files matched byte for byte while
+            # the tree hashes disagreed).
+            entries.append((rel, hashlib.sha1(
+                b"blob %d\0" % len(blob) + blob).hexdigest()))
+    if not entries:
+        return None
+    h = hashlib.sha256()
+    for rel, digest in sorted(entries):
+        h.update((rel + ":" + digest + "\n").encode("utf-8"))
+    return h.hexdigest()
+
+
 # --------------------------------------------------------------------------
 # check
 # --------------------------------------------------------------------------
@@ -484,10 +571,29 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             except Exception:
                 shipped = None
             target = shipped or head
-            if shipped and shipped["sha"] == current["commit"]:
+            # Compare CONTENT, not commits. The installed commit is whatever tip
+            # the last fetch recorded, which is routinely a commit that touched
+            # only scripts/ or docs - so `shipped["sha"] != current["commit"]`
+            # was true while the deployed bytes were identical, and the chip
+            # offered an update the user could never clear (measured: installed
+            # 045eac3, shipped 37e958d, both tree c1090d37, update_available True).
+            same_shipped_commit = bool(shipped and shipped["sha"] == current["commit"])
+            identical_tree = False
+            tree_state = "unknown"
+            if not same_shipped_commit:
+                local_sha = local_tree_sha()
+                remote_sha = shipped_tree_sha(repo)
+                if local_sha and remote_sha:
+                    identical_tree = local_sha == remote_sha
+                    tree_state = "same" if identical_tree else "differs"
+                result["shipped_tree_sha"] = remote_sha
+                result["local_tree_sha"] = local_sha
+                result["shipped_tree"] = tree_state
+            if same_shipped_commit or identical_tree:
                 result.update({
                     "update_available": False,
-                    "note": "main moved to %s, but nothing shipped changed" % head["short"],
+                    "note": "main moved to %s, but the deployed tree is byte-identical"
+                            % head["short"],
                 })
             else:
                 result.update({
