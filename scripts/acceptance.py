@@ -1214,6 +1214,39 @@ def update_tip_is_not_reported_as_a_moved_branch():
     return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
 
 
+@check("an upstream GitHub failure is not reported as 'Relay Offline'")
+def upstream_failure_is_not_reported_as_offline():
+    """Measured live on 0.7.23: `/health` answered 200 with `ok: true` and the
+    update card still read "Relay Offline". The relay had answered perfectly and
+    GitHub had refused - two different failures that both collapse into
+    `!updateInfo.ok`. The user was told to debug a working installation, and the
+    relay's `error_kind` ("rate_limit" / "unreachable"), published all along, was
+    never read.
+
+    Runs the revert-and-observe harness: four sabotages, each of which must
+    produce a NAMED red. C is the false-positive direction - claiming a rate
+    limit for any upstream error would be as dishonest as the original bug.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_upstream_card.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) rouges nommes, (\d+) sans nom, (\d+) invalides", out)
+    if not m:
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, unnamed, invalid = (int(x) for x in m.groups())
+    if got != total or unnamed or invalid:
+        return "FAIL", ("%d/%d named red, %d unnamed, %d invalid - a PATCH-MISS or "
+                        "harness failure means the proof did not run" %
+                        (got, total, unnamed, invalid))
+    if "popup.js restaure a l'octet   : True" not in out:
+        return "FAIL", "the proof did not restore popup.js byte for byte"
+    return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
+
+
 @check("an unread branch is reported, never read as 'up to date'")
 def unreadable_branch_is_reported():
     """Measured 0.7.22: GitHub answered for the release but not for the branch.
@@ -1257,6 +1290,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
+         upstream_failure_is_not_reported_as_offline,
          unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 

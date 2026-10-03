@@ -1,3 +1,26 @@
+## [0.7.24] - « GitHub m'a refuse » n'est pas « le relais est mort »
+
+`/health` repondait 200 avec `ok: true` et la carte affichait quand meme
+« Relais hors-ligne ». Les deux echecs arrivent par `!updateInfo.ok` : relais muet
+(le demarrer) contre relais repondu + GitHub refuse (attendre, ou poser un jeton).
+Le popup renvoyait le meme texte dans les deux cas, donc envoyait l'utilisateur
+deboguer une installation saine. Le relais publiait `error_kind` depuis le debut ;
+`error_kind` n'apparait pas une seule fois dans `popup.js` - l'information
+existait, elle n'etait pas lue.
+
+Corrige : la carte distingue la panne locale de l'echec amont, avec deux cles
+i18n dans les 10 langues. Le message brut du relais (qui nomme la limite et
+l'identite de l'appelant) part dans l'infobulle, pas dans le panneau. Sens
+inverse assertes : `ok: false` sans `error` reste « hors-ligne », et une erreur
+amont autre qu'un rate limit ne pretend pas « limite atteinte ».
+
+`test_update_card_truth.js` 51 -> **67**. `scripts/proof_red_upstream_card.py` :
+**4 sabotages, 4 rouges nommes, 0 invalide**, `popup.js` restaure a l'octet.
+
+Preuve d'influence : ma premiere tentative (retirer la garde « sabotage mort »)
+laissait le gate dire `4/4` et `READY` - correctement, car les quatre
+sabotages rougissaient reellement. Seul le COMPTE porte.
+
 ## [0.7.23] - « je n'ai pas pu verifier » n'est pas « il n'y a rien »
 
 Quand GitHub repond pour la release mais pas pour la branche, `head` revient

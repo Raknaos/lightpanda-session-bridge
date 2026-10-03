@@ -58,6 +58,8 @@ const I18N = {
     updateRollback: "Undo the last update",
     updateRolledBack: (x) => `Restored v${x} — reloading…`,
     updateBaseline: "Exact commit tracking is off: install once so the deployed commit is recorded.",
+    updateGitHubDown: 'GitHub did not answer',
+    updateRateLimited: 'GitHub rate limit reached · try again later',
     updateBranchUnknown: 'Branch state unreadable · only the release was compared',
     updateSameBytes: "Identical to the published release \u00b7 main moved on",
     footerTag: "Isolated Profile · Localhost CDP",
@@ -124,6 +126,8 @@ const I18N = {
     updateRollback: "Annuler la dernière mise à jour",
     updateRolledBack: (x) => `v${x} restaurée — rechargement…`,
     updateBaseline: "Suivi exact désactivé : lancez une installation pour enregistrer le commit déployé.",
+    updateGitHubDown: 'GitHub n\'a pas répondu',
+    updateRateLimited: 'Limite GitHub atteinte · réessaie plus tard',
     updateBranchUnknown: 'État de la branche illisible · seule la release a été comparée',
     updateSameBytes: "Identique \u00e0 la release publi\u00e9e \u00b7 la branche a avanc\u00e9",
     footerTag: "Profil isolé · Localhost CDP",
@@ -190,6 +194,8 @@ const I18N = {
     updateRollback: "Deshacer la última actualización",
     updateRolledBack: (x) => `v${x} restaurada — recargando…`,
     updateBaseline: "El seguimiento exacto está desactivado: instala una vez para registrar el commit desplegado.",
+    updateGitHubDown: 'GitHub no respondió',
+    updateRateLimited: 'Límite de GitHub alcanzada · inténtalo más tarde',
     updateBranchUnknown: 'Estado de la rama ilegible · sólo se comparó la release',
     updateSameBytes: "Id\u00e9ntico a la release publicada \u00b7 main avanz\u00f3",
     footerTag: "Perfil aislado · Localhost CDP",
@@ -256,6 +262,8 @@ const I18N = {
     updateRollback: "Letztes Update rückgängig machen",
     updateRolledBack: (x) => `v${x} wiederhergestellt — Neuladen…`,
     updateBaseline: "Genaue Commit-Verfolgung ist aus: einmal installieren, um den Commit zu erfassen.",
+    updateGitHubDown: 'GitHub hat nicht geantwortet',
+    updateRateLimited: 'GitHub-Limit erreicht · später erneut versuchen',
     updateBranchUnknown: 'Zweigzustand nicht lesbar · nur die Release wurde verglichen',
     updateSameBytes: "Identisch mit dem ver\u00f6ffentlichten Release \u00b7 main ist weitergezogen",
     footerTag: "Isoliertes Profil · Localhost CDP",
@@ -320,6 +328,8 @@ const I18N = {
     updateRollback: "撤销上次更新",
     updateRolledBack: (x) => `已恢复 v${x} — 正在重新加载…`,
     updateBaseline: "提交跟踪未启用：安装一次即可记录当前提交。",
+    updateGitHubDown: 'GitHub 未响应',
+    updateRateLimited: '已达 GitHub 限额 · 请稍后再试',
     updateBranchUnknown: '无法读取分支状态 · 仅比较了已发布版本',
     updateSameBytes: "\u4e0e\u5df2\u53d1\u5e03\u7248\u672c\u5b8c\u5168\u4e00\u81f4 \u00b7 main \u5df2\u524d\u8fdb",
     footerTag: "隔离配置文件 · 本地 CDP",
@@ -386,6 +396,8 @@ const I18N = {
     updateRollback: "最後の更新を元に戻す",
     updateRolledBack: (x) => `v${x} を復元しました — 再読み込み中…`,
     updateBaseline: "コミット追跡は未設定です: 一度インストールすると記録されます。",
+    updateGitHubDown: 'GitHub が応答しませんでした',
+    updateRateLimited: 'GitHub の上限に達しました · 後で再試行',
     updateBranchUnknown: 'ブランチの状態が読めません · リリースのみ比較しました',
     updateSameBytes: "\u516c\u958b\u30ea\u30ea\u30fc\u30b9\u3068\u540c\u3058 \u00b7 main \u306f\u9032\u6358\u3057\u307e\u3057\u305f",
     footerTag: "分離プロファイル · Localhost CDP",
@@ -454,6 +466,8 @@ const I18N = {
     updateRollback: "Annulla l'ultimo aggiornamento",
     updateRolledBack: (x) => `v${x} ripristinata — ricarica…`,
     updateBaseline: "Tracciamento esatto disattivato: installa una volta per registrare il commit.",
+    updateGitHubDown: 'GitHub non ha risposto',
+    updateRateLimited: 'Limite GitHub raggiunto · riprova più tardi',
     updateBranchUnknown: 'Stato del ramo illeggibile · solo la release è stata confrontata',
     updateSameBytes: "Identico alla release pubblicata \u00b7 main \u00e8 avanzato",
     footerTag: "Profilo isolato · Localhost CDP",
@@ -520,6 +534,8 @@ const I18N = {
     updateRollback: "Desfazer a última atualização",
     updateRolledBack: (x) => `v${x} restaurada — recarregando…`,
     updateBaseline: "Rastreamento exato desativado: instale uma vez para registrar o commit.",
+    updateGitHubDown: 'O GitHub não respondeu',
+    updateRateLimited: 'Limite do GitHub atingido · tente mais tarde',
     updateBranchUnknown: 'Estado da branch ilegível · apenas a release foi comparada',
     updateSameBytes: "Id\u00e9ntico \u00e0 release publicada \u00b7 o main avan\u00e7ou",
     footerTag: "Perfil isolado · Localhost CDP",
@@ -584,6 +600,8 @@ const I18N = {
     updateRollback: "تراجع عن آخر تحديث",
     updateRolledBack: (x) => `تمت استعادة v${x} — جارٍ إعادة التحميل…`,
     updateBaseline: "تتبّع الالتزام غير مفعّل: ثبّت مرة واحدة لتسجيل الالتزام المنشور.",
+    updateGitHubDown: 'لم يستجب GitHub',
+    updateRateLimited: 'تم بلوغ حد GitHub · أعد المحاولة لاحقاً',
     updateBranchUnknown: 'حالة الفرع غير قابلة للقراءة · تمت مقارنة الإصدار المنشور فقط',
     updateSameBytes: "\u0645\u0637\u0627\u0628\u0642 \u0644\u0644\u0625\u0637\u0644\u0627\u0642 \u0627\u0644\u0645\u0646\u0634\u0648\u0631 \u00b7 main \u062a\u0642\u062f\u0645",
     footerTag: "ملف تعريف معزول · Localhost CDP",
@@ -652,6 +670,8 @@ const I18N = {
     updateRollback: "Отменить последнее обновление",
     updateRolledBack: (x) => `v${x} восстановлена — перезагрузка…`,
     updateBaseline: "Точное отслеживание коммита выключено: установите один раз, чтобы записать коммит.",
+    updateGitHubDown: 'GitHub не ответил',
+    updateRateLimited: 'Лимит GitHub исчерпан · попробуйте позже',
     updateBranchUnknown: 'Состояние ветки не прочитано · сравнен только релиз',
     updateSameBytes: "\u0418\u0434\u0435\u043d\u0442\u0438\u0447\u043d\u043e \u043e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d\u043d\u043e\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u00b7 main \u0440\u0430\u0441\u0448\u0438\u0440\u0438\u043b\u0441\u044f",
     footerTag: "Изолированный профиль · Localhost CDP",
@@ -1133,11 +1153,25 @@ function renderUpdateCard() {
     return;
   }
 
-  // No answer from the relay: never claim "up to date" on a guess.
+  // Two DIFFERENT failures arrive as `!updateInfo.ok` (measured 0.7.24), and
+  // they are not the same thing. `updateInfo === null` means the relay did not
+  // answer (it is down, or not started); `updateInfo.ok === false` with an
+  // `error` means the relay answered FINE and the failure is upstream - GitHub
+  // refused, rate limit reached. Both used to render "Relay Offline", which
+  // sends the user to debug their own installation while /health returns 200.
+  // `error_kind` is published by the relay and was never read here.
   if (!updateInfo || !updateInfo.ok) {
-    updateChip.className = 'update-chip off';
-    updateChip.textContent = t('relayOffline');
-    updateMeta.textContent = '';
+    const upstream = !!(updateInfo && !updateInfo.ok && updateInfo.error);
+    const kind = (updateInfo && updateInfo.error_kind) || '';
+    updateChip.className = 'update-chip' + (upstream ? '' : ' off');
+    updateChip.textContent = upstream ? t('updateGitHubDown') : t('relayOffline');
+    // The relay's own message names the rate limit and the caller's identity;
+    // it is a log line, so it belongs in the tooltip, not in the panel - the
+    // same rule as the update note (point 59).
+    updateMeta.textContent = upstream
+      ? t(kind === 'rate_limit' ? 'updateRateLimited' : 'updateGitHubDown')
+      : '';
+    updateMeta.title = upstream ? String(updateInfo.error || '') : '';
     updateBtn.style.display = 'none';
     rollbackBtn.style.display = 'none';
     return;

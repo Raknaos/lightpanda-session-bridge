@@ -228,7 +228,44 @@ ok('ancien relais sans la cle : rendu inchange (pas FALLBACK)',
   noKey.meta === I18N.fr.updateUpToDate('0.7.22'),
   'meta=' + JSON.stringify(noKey.meta));
 
-// 8. Every language must carry the key: a missing one renders FALLBACK.
+// 8. `!updateInfo.ok` covers TWO different failures. Measured 0.7.23: the relay
+//    answered perfectly (/health 200) while GitHub refused, and the card still
+//    said "Relay Offline" - sending the user to debug a working installation.
+//    The relay publishes `error_kind`; the popup had never read it.
+// A silent relay (`updateInfo === null`) must still read as offline - asserted
+// through the `ok:false` + no-error row below, which is the shape the guard
+// actually sees; a test whose body is `return true` cannot fail (point 24).
+const ghDown = render({
+  ok: false, error: 'API rate limit exceeded for 203.0.113.9',
+  error_kind: 'rate_limit', update_available: false,
+});
+ok('GitHub en erreur : il ne dit PAS que le relais est hors ligne',
+  ghDown.chip !== I18N.fr.relayOffline,
+  'chip=' + JSON.stringify(ghDown.chip));
+ok('GitHub en erreur : la puce est le texte GitHub du dictionnaire',
+  ghDown.chip === I18N.fr.updateGitHubDown,
+  JSON.stringify(ghDown.chip) + ' != ' + JSON.stringify(I18N.fr.updateGitHubDown));
+ok('rate limit : il rend la phrase dediee, pas la generique',
+  ghDown.meta === I18N.fr.updateRateLimited,
+  JSON.stringify(ghDown.meta) + ' != ' + JSON.stringify(I18N.fr.updateRateLimited));
+ok('le message brut du relais va dans l infobulle, pas dans le panneau',
+  /rate limit/.test(ghDown.metaTitle) && !/rate limit/.test(ghDown.meta),
+  'meta=' + JSON.stringify(ghDown.meta) + ' title=' + JSON.stringify(ghDown.metaTitle));
+// The inverse: a non-rate-limit upstream failure must NOT claim a rate limit.
+const ghOther = render({
+  ok: false, error: 'GitHub unreachable (ConnectionError)',
+  error_kind: 'unreachable', update_available: false,
+});
+ok('autre erreur GitHub : pas de faux "limite atteinte"',
+  ghOther.meta === I18N.fr.updateGitHubDown,
+  'meta=' + JSON.stringify(ghOther.meta));
+// And `ok: false` with NO error at all is not upstream: it stays "relay down".
+const noError = render({ ok: false, update_available: false });
+ok('ok:false sans error : traite comme relais muet, pas comme GitHub',
+  noError.chip === I18N.fr.relayOffline && noError.meta === '',
+  'chip=' + JSON.stringify(noError.chip) + ' meta=' + JSON.stringify(noError.meta));
+
+// 9. Every language must carry the key: a missing one renders FALLBACK.
 const langs = ['en', 'fr', 'es', 'de', 'zh', 'ja', 'it', 'pt', 'ar', 'ru'];
 for (const L of langs) {
   ok('cle presente en ' + L,
@@ -240,6 +277,14 @@ for (const L of langs) {
     I18N[L] && typeof I18N[L].updateBranchUnknown === 'string' &&
     I18N[L].updateBranchUnknown.length > 8,
     typeof (I18N[L] || {}).updateBranchUnknown);
+  ok('updateGitHubDown + updateRateLimited en ' + L,
+    I18N[L] && typeof I18N[L].updateGitHubDown === 'string' &&
+    I18N[L].updateGitHubDown.length > 4 &&
+    typeof I18N[L].updateRateLimited === 'string' &&
+    I18N[L].updateRateLimited.length > 4 &&
+    I18N[L].updateRateLimited !== I18N[L].updateGitHubDown,
+    L + ': ' + typeof (I18N[L] || {}).updateGitHubDown + ' / ' +
+    typeof (I18N[L] || {}).updateRateLimited);
 }
 // And the French one must be French, not an English literal left in place.
 ok('le francais est bien en francais',
