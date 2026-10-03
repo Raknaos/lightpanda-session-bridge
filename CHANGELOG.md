@@ -679,7 +679,19 @@ verifie influent: le sabotage du popup fait passer le gate de READY a NOT READY.
 Il couvre aussi le cas inverse et l'absence de provenance, pour qu un harnais
 qui ne rend rien echoue sur une sortie deja correcte.
 
-Trois sabotages rouges, chacun nommant son propre defaut. Deux lessons de
+Trois sabotages rouges, chacun nommant son propre defaut.
+
+**Preuve visuelle** sur l'extension reelle (compositeur, pas un DOM snapshot):
+avec un commit anterieur installe et `main` ayant avance, le relais renvoie
+`shipped_tree: "same"` et le popup affiche
+
+    A jour
+    Identique a la release publiee - la branche a avance   (infobulle: commit cb4bdf5)
+
+Piège de mesure: un sha factice tronque a 33 caracteres au lieu de 40 n'est pas
+reconnu comme un sha, le relais prend la branche « sans provenance » et renvoie
+`shipped_tree: None` - la feature paraissait morte alors que la sonde etait
+fausse. Point 54 du skill. Deux lessons de
 harnais au skill (points 52/53): `vm.runInContext` avec le SOURCE d une fonction
 ne fait que la DEFINIR - il faut l'appeler, sinon tous les champs restent vides
 et le harnais accuse l'accesseur; et un test qui n'exerce que le nouveau

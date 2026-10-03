@@ -154,15 +154,25 @@ def main():
         sc.pump(1.2)
         sc.cmd("Page.stopScreencast")
 
-        # What the INSTALLED popup itself says it resolved - not what storage holds.
+        #         # What the INSTALLED popup itself says it resolved - not what storage holds.
         resolved = sc.evaluate(
             "JSON.stringify({stored: localStorage.getItem('lightpanda-lang'),"
             " diag: (document.querySelector('#diag-text')||{}).textContent,"
-            " lang: (document.querySelector('.lang-value')||document.querySelector('.lang-current')||{}).textContent})")
+            " lang: (document.querySelector('.lang-value')||document.querySelector('.lang-current')||{}).textContent,"
+            # v0.7.20: the update card must be able to SAY why nothing is offered.
+            # Read the painted text, not the DOM the test suite stubs.
+            " updateChip: (document.querySelector('#update-chip')||{}).textContent,"
+            " updateMeta: (document.querySelector('#update-meta')||{}).textContent,"
+            " updateMetaTitle: (document.querySelector('#update-meta')||{}).title})")
         print("popup INSTALLE : %s" % url)
         print("langue demandee : %s | localStorage lu : %s" % (lang, stored))
         print("ligne sessions deploiee : %s" % expanded)
         print("ce que le popup a resolu : %s" % resolved)
+        upd = json.loads(resolved)
+        if upd.get("updateMeta") != "commit 34827e4":
+            print("carte de MAJ : puce=%r meta=%r (infobulle=%r)"
+                  % (upd.get("updateChip"), upd.get("updateMeta"),
+                     upd.get("updateMetaTitle")))
 
         frames = list(sc.frames)
         print("\nframes COMPOSITEES : %d" % len(frames))
