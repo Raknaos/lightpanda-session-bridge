@@ -1214,6 +1214,42 @@ def update_tip_is_not_reported_as_a_moved_branch():
     return "ok", "%d/%d sabotages red and named, popup.js restored" % (got, total)
 
 
+@check("an unread branch is reported, never read as 'up to date'")
+def unreadable_branch_is_reported():
+    """Measured 0.7.22: GitHub answered for the release but not for the branch.
+    `head` came back None, `check_update` fell through every arm, and the relay
+    answered `update_available: False`, `shipped_tree: "unknown"`, no note - so
+    the popup printed "À jour". That is the unmeasured claim 0.7.20 had to
+    retract, back through a different door.
+
+    The fixture for this also had to be corrected: its release version defaulted
+    to something NEWER than the installed one, so the release arm answered first
+    and all four tests passed while exercising a path they do not name. Same
+    family as point 24 - a green test that measures a different thing.
+
+    Runs the revert-and-observe harness: three sabotages, each of which must
+    produce a NAMED red.
+    """
+    py = REPO / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return "SKIP", "no project venv"
+    r = subprocess.run([str(py), str(REPO / "scripts" / "proof_red_unreadable_branch.py")],
+                       cwd=str(REPO), capture_output=True, text=True, timeout=900)
+    out = (r.stdout or r.stderr).strip()
+    lines = out.splitlines()
+    m = re.search(r"(\d+)/(\d+) rouges nommes, (\d+) sans nom, (\d+) invalides", out)
+    if not m:
+        return "FAIL", "proof-red harness printed no tally: %s" % (lines[-1:] or ["no output"])
+    got, total, unnamed, invalid = (int(x) for x in m.groups())
+    if got != total or unnamed or invalid:
+        return "FAIL", ("%d/%d named red, %d unnamed, %d invalid - a PATCH-MISS or "
+                        "harness failure means the proof did not run" %
+                        (got, total, unnamed, invalid))
+    if "relay/updater.py restaure   : True" not in out:
+        return "FAIL", "the proof did not restore relay/updater.py byte for byte"
+    return "ok", "%d/%d sabotages red and named, updater.py restored" % (got, total)
+
+
 LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuation,
          shipped_tree_lf, no_scaffolding, provenance_matches, ids_agree,
          pin_matches_declaration,
@@ -1221,6 +1257,7 @@ LOCAL = [versions_agree, changelog_is_not_duplicated, prose_has_no_cjk_punctuati
          diagnostics_are_sanitized, diagnostic_report_is_origin_only, archive_reproducible,
          popup_calls_are_bounded, relay_errors_are_translated, badge_is_refreshed,
          update_card_is_honest, update_tip_is_not_reported_as_a_moved_branch,
+         unreadable_branch_is_reported,
          update_report_says_why_and_leaks_nothing]
 
 @check("the installed popup translates the relay's own error codes")

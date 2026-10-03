@@ -1091,6 +1091,88 @@ class TestTheCommonCaseIsAlsoMeasured(unittest.TestCase):
             "case where there IS something to install")
 
 
+class TestAnUnreadableBranchIsNotSilence(unittest.TestCase):
+    """GitHub did not answer for the BRANCH. Measured 0.7.22: `head` came back
+    None, `check_update` fell through every arm, and the relay answered
+    `update_available: False` with `shipped_tree: "unknown"` and no note.
+
+    That reads as "up to date" in the popup, and it is the exact unmeasured
+    claim 0.7.20 had to retract - reintroduced through a different door. The
+    release lookup DID succeed (we got past it), so the strongest honest
+    statement is "no published release supersedes what you have", NOT "nothing
+    changed": a main-branch commit may be waiting and unread.
+    """
+
+    # The release version defaults to the INSTALLED one on purpose. With a newer
+    # release the `release_is_newer` arm answers first and every test below would
+    # pass while exercising a different path than the one its name claims -
+    # three green tests that measured nothing (points 24 / 54).
+    def _run(self, *, release_version="0.7.21", head_sha=None,
+             installed_commit="a" * 40):
+        import updater as U
+        saved = (U.latest_release, U.latest_commit, U.installed_info)
+        self.addCleanup(lambda: setattr(U, "latest_release", saved[0]))
+        self.addCleanup(lambda: setattr(U, "latest_commit", saved[1]))
+        self.addCleanup(lambda: setattr(U, "installed_info", saved[2]))
+        parts = tuple(int(x) for x in release_version.split("."))
+        U.latest_release = lambda repo=None: {
+            "tag": "v" + release_version, "version": parts,
+            "version_text": release_version, "commit": None,
+            "published_at": "2026-01-01", "html_url": "u",
+            "assets": [], "notes": "n"}
+        U.latest_commit = (lambda repo=None: {"sha": head_sha, "short": head_sha[:8],
+                                              "message": "m", "date": "2026-01-01"}
+                           if head_sha else (lambda repo=None: None))
+        U.installed_info = lambda ext_dir=None: {
+            "version": "0.7.21", "commit": installed_commit,
+            "tag": "v0.7.21" if installed_commit else None}
+        return U.check_update(force=True)
+
+    def test_it_says_the_branch_could_not_be_read(self):
+        r = self._run()
+        self.assertTrue(
+            r.get("unreachable_branch"),
+            "with head=None nothing marked the state as unread, so False read "
+            "as 'up to date' - the popup then printed reassurance nobody measured")
+        self.assertTrue(r.get("note"),
+                        "an unread branch must still carry a reason")
+
+    def test_the_key_always_exists_even_when_the_branch_was_read(self):
+        """A state that is only set on failure is indistinguishable from a relay
+        that never learned to report it (point 64): seed it in the initial dict.
+
+        The release version must EQUAL the installed one here, or the release arm
+        wins first and this never reaches the branch under test - a fixture that
+        quietly exercises a different path than the one it names.
+        """
+        sha = "a" * 40
+        r = self._run(release_version="0.7.21", head_sha=sha)
+        self.assertIn("unreachable_branch", r)
+        self.assertFalse(r["unreachable_branch"])
+        # and the common up-to-date case must not have been swallowed
+        self.assertEqual(r.get("shipped_tree"), "same")
+        self.assertTrue(r.get("note"))
+
+    def test_it_never_claims_nothing_changed(self):
+        r = self._run()
+        note = r.get("note") or ""
+        self.assertNotIn("nothing newer", note)
+        self.assertNotIn("byte-identical", note)
+        self.assertFalse(
+            r.get("update_available"),
+            "the release lookup succeeded and superseded nothing, so no update "
+            "is offered - but that is not the same as saying nothing changed")
+
+    def test_a_newer_release_still_wins_over_the_unreadable_branch(self):
+        """An unread branch must not mask a real published update."""
+        r = self._run(release_version="0.7.30")
+        self.assertTrue(r["update_available"])
+        self.assertEqual(r.get("source"), "release")
+        self.assertFalse(r.get("unreachable_branch"),
+                         "the release arm answers, so the branch was not needed "
+                         "and must not be reported as unread")
+
+
 class TestNoteOnlyClaimsWhatWasMeasured(unittest.TestCase):
     """A note must not assert a measurement that was skipped.
 

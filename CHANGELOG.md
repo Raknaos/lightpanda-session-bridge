@@ -1,3 +1,28 @@
+## [0.7.23] - « je n'ai pas pu verifier » n'est pas « il n'y a rien »
+
+Quand GitHub repond pour la release mais pas pour la branche, `head` revient
+`None` et `check_update` traverse toutes les branches : le relais repondait
+`update_available: False`, `shipped_tree: "unknown"`, aucune note - et le popup
+affichait « À jour ». C'est l'affirmation non mesuree que 0.7.20 avait du
+retracter, rentree par une autre porte. Etat propre `unreachable_branch`
+(initialise dans le dict de depart), et phrase traduite dans les 10 langues,
+lue AVANT `atTip` car sans `latest_commit` `atTip` est faux.
+
+Second defaut trouve par le meme test : `head["sha"]` sans garde levait
+`TypeError` dans la comparaison sur toute valeur non-dict renvoyee par
+`latest_commit` - un 500 sur le chemin de MAJ. `latest_commit` est une donnee
+externe : on valide sa forme a la frontiere, pas seulement sa veracite.
+
+Trois tests de la nouvelle classe passaient en executant le bras `release`
+(leur `release_version` par defaut etait plus recente que l'installee) ; seul
+un `shipped_tree == "same"` divergent l'a revele. `test_updater.py` 68 -> **72**,
+`test_update_card_truth.js` 36 -> **51**. `scripts/proof_red_unreadable_branch.py`
+: **3 sabotages, 3 rouges nommes, 0 invalide**, `updater.py` restaure a l'octet.
+
+Le harnais voisin a signale un **PATCH-MISS** pendant ce travail : son ancre
+`if (atTip) {` etait devenue `} else if (atTip) {` apres l'insertion de la
+nouvelle branche. Corrige - c'est exactement le trou que le PATCH-MISS voit.
+
 ## [0.7.22] - « à jour » et « la branche a avancé » ne sont pas la même nouvelle
 
 `shipped_tree: "same"` couvre deux situations distinctes : `main` a avancé sur

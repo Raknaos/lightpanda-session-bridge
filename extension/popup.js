@@ -58,6 +58,7 @@ const I18N = {
     updateRollback: "Undo the last update",
     updateRolledBack: (x) => `Restored v${x} — reloading…`,
     updateBaseline: "Exact commit tracking is off: install once so the deployed commit is recorded.",
+    updateBranchUnknown: 'Branch state unreadable · only the release was compared',
     updateSameBytes: "Identical to the published release \u00b7 main moved on",
     footerTag: "Isolated Profile · Localhost CDP",
     sessionsLabel: "Active sessions in Lightpanda",
@@ -123,6 +124,7 @@ const I18N = {
     updateRollback: "Annuler la dernière mise à jour",
     updateRolledBack: (x) => `v${x} restaurée — rechargement…`,
     updateBaseline: "Suivi exact désactivé : lancez une installation pour enregistrer le commit déployé.",
+    updateBranchUnknown: 'État de la branche illisible · seule la release a été comparée',
     updateSameBytes: "Identique \u00e0 la release publi\u00e9e \u00b7 la branche a avanc\u00e9",
     footerTag: "Profil isolé · Localhost CDP",
     sessionsLabel: "Sessions actives dans Lightpanda",
@@ -188,6 +190,7 @@ const I18N = {
     updateRollback: "Deshacer la última actualización",
     updateRolledBack: (x) => `v${x} restaurada — recargando…`,
     updateBaseline: "El seguimiento exacto está desactivado: instala una vez para registrar el commit desplegado.",
+    updateBranchUnknown: 'Estado de la rama ilegible · sólo se comparó la release',
     updateSameBytes: "Id\u00e9ntico a la release publicada \u00b7 main avanz\u00f3",
     footerTag: "Perfil aislado · Localhost CDP",
     sessionsLabel: "Sesiones activas en Lightpanda",
@@ -253,6 +256,7 @@ const I18N = {
     updateRollback: "Letztes Update rückgängig machen",
     updateRolledBack: (x) => `v${x} wiederhergestellt — Neuladen…`,
     updateBaseline: "Genaue Commit-Verfolgung ist aus: einmal installieren, um den Commit zu erfassen.",
+    updateBranchUnknown: 'Zweigzustand nicht lesbar · nur die Release wurde verglichen',
     updateSameBytes: "Identisch mit dem ver\u00f6ffentlichten Release \u00b7 main ist weitergezogen",
     footerTag: "Isoliertes Profil · Localhost CDP",
     sessionsLabel: "Aktive Sitzungen in Lightpanda",
@@ -316,6 +320,7 @@ const I18N = {
     updateRollback: "撤销上次更新",
     updateRolledBack: (x) => `已恢复 v${x} — 正在重新加载…`,
     updateBaseline: "提交跟踪未启用：安装一次即可记录当前提交。",
+    updateBranchUnknown: '无法读取分支状态 · 仅比较了已发布版本',
     updateSameBytes: "\u4e0e\u5df2\u53d1\u5e03\u7248\u672c\u5b8c\u5168\u4e00\u81f4 \u00b7 main \u5df2\u524d\u8fdb",
     footerTag: "隔离配置文件 · 本地 CDP",
     sessionsLabel: "Lightpanda 中的活动会话",
@@ -381,6 +386,7 @@ const I18N = {
     updateRollback: "最後の更新を元に戻す",
     updateRolledBack: (x) => `v${x} を復元しました — 再読み込み中…`,
     updateBaseline: "コミット追跡は未設定です: 一度インストールすると記録されます。",
+    updateBranchUnknown: 'ブランチの状態が読めません · リリースのみ比較しました',
     updateSameBytes: "\u516c\u958b\u30ea\u30ea\u30fc\u30b9\u3068\u540c\u3058 \u00b7 main \u306f\u9032\u6358\u3057\u307e\u3057\u305f",
     footerTag: "分離プロファイル · Localhost CDP",
     sessionsLabel: "Lightpanda内のアクティブなセッション",
@@ -448,6 +454,7 @@ const I18N = {
     updateRollback: "Annulla l'ultimo aggiornamento",
     updateRolledBack: (x) => `v${x} ripristinata — ricarica…`,
     updateBaseline: "Tracciamento esatto disattivato: installa una volta per registrare il commit.",
+    updateBranchUnknown: 'Stato del ramo illeggibile · solo la release è stata confrontata',
     updateSameBytes: "Identico alla release pubblicata \u00b7 main \u00e8 avanzato",
     footerTag: "Profilo isolato · Localhost CDP",
     sessionsLabel: "Sessioni attive in Lightpanda",
@@ -513,6 +520,7 @@ const I18N = {
     updateRollback: "Desfazer a última atualização",
     updateRolledBack: (x) => `v${x} restaurada — recarregando…`,
     updateBaseline: "Rastreamento exato desativado: instale uma vez para registrar o commit.",
+    updateBranchUnknown: 'Estado da branch ilegível · apenas a release foi comparada',
     updateSameBytes: "Id\u00e9ntico \u00e0 release publicada \u00b7 o main avan\u00e7ou",
     footerTag: "Perfil isolado · Localhost CDP",
     sessionsLabel: "Sessões ativas no Lightpanda",
@@ -576,6 +584,7 @@ const I18N = {
     updateRollback: "تراجع عن آخر تحديث",
     updateRolledBack: (x) => `تمت استعادة v${x} — جارٍ إعادة التحميل…`,
     updateBaseline: "تتبّع الالتزام غير مفعّل: ثبّت مرة واحدة لتسجيل الالتزام المنشور.",
+    updateBranchUnknown: 'حالة الفرع غير قابلة للقراءة · تمت مقارنة الإصدار المنشور فقط',
     updateSameBytes: "\u0645\u0637\u0627\u0628\u0642 \u0644\u0644\u0625\u0637\u0644\u0627\u0642 \u0627\u0644\u0645\u0646\u0634\u0648\u0631 \u00b7 main \u062a\u0642\u062f\u0645",
     footerTag: "ملف تعريف معزول · Localhost CDP",
     sessionsLabel: "الجلسات النشطة في Lightpanda",
@@ -643,6 +652,7 @@ const I18N = {
     updateRollback: "Отменить последнее обновление",
     updateRolledBack: (x) => `v${x} восстановлена — перезагрузка…`,
     updateBaseline: "Точное отслеживание коммита выключено: установите один раз, чтобы записать коммит.",
+    updateBranchUnknown: 'Состояние ветки не прочитано · сравнен только релиз',
     updateSameBytes: "\u0418\u0434\u0435\u043d\u0442\u0438\u0447\u043d\u043e \u043e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d\u043d\u043e\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u00b7 main \u0440\u0430\u0441\u0448\u0438\u0440\u0438\u043b\u0441\u044f",
     footerTag: "Изолированный профиль · Localhost CDP",
     sessionsLabel: "Активные сеансы в Lightpanda",
@@ -1168,7 +1178,15 @@ function renderUpdateCard() {
     // change is waiting". The commit stays in the tooltip.
     const atTip = updateInfo.current_commit && updateInfo.latest_commit
       && updateInfo.current_commit === updateInfo.latest_commit;
-    if (atTip) {
+    // GitHub did not answer for the branch (relay/updater.py, measured
+    // 0.7.23). The release lookup DID succeed, so `update_available` is False -
+    // but False here means "we could not look", not "nothing is waiting". This
+    // must be read BEFORE `atTip`: with `latest_commit` absent, `atTip` is
+    // falsy, so the chain below would have fallen through to the versionless
+    // chip and printed reassurance we did not measure.
+    if (updateInfo.unreachable_branch) {
+      updateMeta.textContent = t('updateBranchUnknown');
+    } else if (atTip) {
       // `updateUpToDate` interpolates the version; a missing one would render
       // "Up to date · v" with nothing after the v, so fall back to the versionless
       // chip rather than showing a dangling unit.

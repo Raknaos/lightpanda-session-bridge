@@ -30,8 +30,8 @@ TARGET = ROOT / "extension" / "popup.js"
 SUITE = ["node", "tests/node/test_update_card_truth.js", str(ROOT)]
 
 # ---- the real anchors, read from the source, not remembered (point 60) ------
-ARM = b"    if (atTip) {"
-ARM_GONE = b"    if (updateInfo.shipped_tree === 'same') {"
+ARM = b"    } else if (atTip) {"
+ARM_GONE = b"    } else if (updateInfo.shipped_tree === 'same') {"
 GUARD = (
     b"    const atTip = updateInfo.current_commit && updateInfo.latest_commit\n"
     b"      && updateInfo.current_commit === updateInfo.latest_commit;"

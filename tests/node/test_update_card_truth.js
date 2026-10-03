@@ -180,7 +180,55 @@ const atTipNoVersion = render({
 ok('sans version, pas de "v" dangling',
   !/\sv$|\s·\s*$/.test(atTipNoVersion.meta), 'meta=' + JSON.stringify(atTipNoVersion.meta));
 
-// 6. Every language must carry the key: a missing one renders FALLBACK.
+// 7. GitHub did not answer for the BRANCH (relay/updater.py, measured
+//    0.7.22). `update_available` is still False - the release lookup succeeded -
+//    but False means "we could not look", not "nothing is waiting". Before the
+//    fix the popup printed reassurance it had not measured. The ordering is the
+//    fix: `unreachable_branch` is read BEFORE `atTip`, because `latest_commit`
+//    is absent here, so `atTip` is falsy and the chain used to fall through to
+//    the versionless chip.
+const branchDown = render({
+  ok: true, update_available: false, shipped_tree: 'unknown',
+  unreachable_branch: true,
+  current_commit: '8e22d1ea9fe0', latest_commit: null,
+  current_version: '0.7.22', backup_available: true,
+});
+const UNK_FR = I18N.fr.updateBranchUnknown;
+ok('branche illisible : il ne dit PAS qu on est a jour',
+  branchDown.meta !== I18N.fr.updateUpToDate('0.7.22') &&
+  branchDown.meta !== I18N.fr.updateChipOk,
+  'meta=' + JSON.stringify(branchDown.meta));
+ok('branche illisible : il rend la phrase exacte du dictionnaire',
+  branchDown.meta === UNK_FR,
+  JSON.stringify(branchDown.meta) + ' != ' + JSON.stringify(UNK_FR));
+// It must also not fall back to the bare-sha or baseline sentences.
+ok('branche illisible : ni sha nu, ni baseline',
+  !/commit [0-9a-f]/.test(branchDown.meta) &&
+  branchDown.meta !== I18N.fr.updateBaseline,
+  'meta=' + JSON.stringify(branchDown.meta));
+// The honest state must NOT leak into the cases that can be measured: a False
+// `unreachable_branch` changes nothing for the two `same` situations (point 50).
+const atTipKnown = render({
+  ok: true, update_available: false, shipped_tree: 'same',
+  unreachable_branch: false,
+  current_commit: '8e22d1ea9fe0', latest_commit: '8e22d1ea9fe0',
+  current_version: '0.7.22', backup_available: true,
+});
+ok('branche lisible : le cas "a la pointe" est intact',
+  atTipKnown.meta === I18N.fr.updateUpToDate('0.7.22'),
+  'meta=' + JSON.stringify(atTipKnown.meta));
+// And a key that is simply MISSING must not be read as "unreachable": an old
+// relay (pre-0.7.22) never sends the field, and it must render as before.
+const noKey = render({
+  ok: true, update_available: false, shipped_tree: 'same',
+  current_commit: '8e22d1ea9fe0', latest_commit: '8e22d1ea9fe0',
+  current_version: '0.7.22', backup_available: true,
+});
+ok('ancien relais sans la cle : rendu inchange (pas FALLBACK)',
+  noKey.meta === I18N.fr.updateUpToDate('0.7.22'),
+  'meta=' + JSON.stringify(noKey.meta));
+
+// 8. Every language must carry the key: a missing one renders FALLBACK.
 const langs = ['en', 'fr', 'es', 'de', 'zh', 'ja', 'it', 'pt', 'ar', 'ru'];
 for (const L of langs) {
   ok('cle presente en ' + L,
@@ -188,6 +236,10 @@ for (const L of langs) {
   ok('updateUpToDate (fonction) presente en ' + L,
     I18N[L] && typeof I18N[L].updateUpToDate === 'function',
     typeof (I18N[L] || {}).updateUpToDate);
+  ok('updateBranchUnknown presente en ' + L,
+    I18N[L] && typeof I18N[L].updateBranchUnknown === 'string' &&
+    I18N[L].updateBranchUnknown.length > 8,
+    typeof (I18N[L] || {}).updateBranchUnknown);
 }
 // And the French one must be French, not an English literal left in place.
 ok('le francais est bien en francais',

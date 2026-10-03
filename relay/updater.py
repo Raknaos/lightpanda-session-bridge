@@ -522,6 +522,11 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             # says "not measured" must never look the same (skill point 64).
             "shipped_tree": "unknown",
             "note": None,
+            # Seeded for the same reason as `shipped_tree`: `True` must be a
+            # deliberate statement, never a key that only exists when a branch
+            # set it. The popup reads its ABSENCE as "the branch was read and
+            # there is nothing to report".
+            "unreachable_branch": False,
         }
         current = installed_info(ext_dir)
         result.update({
@@ -553,6 +558,14 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
         try:
             head = latest_commit(repo)
         except Exception:
+            head = None
+        # `latest_commit` is external data too: if a stub, a proxy or a future
+        # refactor hands back something that is not a commit mapping, the truthy
+        # value used to reach `head["sha"]` and raise TypeError INSIDE the check -
+        # a 500 on the popup's update path. Measured 0.7.22: a non-dict `head`
+        # crashed the whole comparison. Treat anything that is not a mapping as
+        # "could not be read", which is what it is.
+        if not isinstance(head, dict) or not head.get("sha"):
             head = None
 
         if release:
@@ -682,12 +695,32 @@ def check_update(force: bool = False, repo: str = REPO) -> dict:
             # identical BY CONSTRUCTION here (same commit), so `same` is a
             # measurement, not a guess - but say so, and never claim the tree
             # was hashed: it was not compared, it was never needed.
-            result.update({"update_available": False,
-                           "shipped_tree": "same",
-                           "note": ("deployed commit %s is the tip of main; "
-                                    "no update was fetched because there is "
-                                    "nothing newer to fetch" %
-                                    (current["commit"][:8] if current["commit"] else "?"))})
+            result.update({
+                "update_available": False,
+                "shipped_tree": "same",
+                "note": ("deployed commit %s is the tip of main; "
+                         "no update was fetched because there is "
+                         "nothing newer to fetch"
+                         % (current["commit"][:8] if current["commit"] else "?")),
+            })
+
+        elif head is None:
+            # GitHub did not answer for the branch (measured 0.7.22: the commit
+            # lookup raised and `head` came back None). This also fell through
+            # every arm - but here it is NOT "up to date", it is "we could not
+            # look". `update_available: False` with no note made the popup print
+            # "À jour": the unmeasured claim 0.7.20 had to retract, reintroduced
+            # by a different route. The release lookup DID succeed (we got here),
+            # so the strongest honest claim is that no PUBLISHED release
+            # supersedes what is deployed - not that nothing changed. A state
+            # the popup can translate beats silence read as reassurance.
+            result.update({
+                "update_available": False,
+                "unreachable_branch": True,
+                "note": ("the branch state could not be read from GitHub; only "
+                         "the published release was compared, so a main-branch "
+                         "commit may be waiting"),
+            })
 
         if head:
             result["latest_commit"] = head["sha"]
