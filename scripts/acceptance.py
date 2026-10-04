@@ -901,8 +901,20 @@ def session_roundtrip():
 @check("the extension in Comet serves the repo version")
 def extension_live_version():
     import websocket
-    with urllib.request.urlopen(COMET_CDP + "/json/version", timeout=5) as resp:
-        ws_url = json.loads(resp.read().decode())["webSocketDebuggerUrl"]
+    # MEASURED 2026-10-04: Comet was closed, so urlopen raised URLError and the
+    # exception left this check with no verdict at all - the gate reported 54
+    # checks without ever saying the extension had not been measured. A browser
+    # that is not running is a MISSING MEASUREMENT, not a passing one, so it
+    # answers SKIP and says which endpoint was unreachable. The gate keeps the
+    # distinction because `SKIP` is counted separately from `ok`.
+    try:
+        with urllib.request.urlopen(COMET_CDP + "/json/version", timeout=5) as resp:
+            ws_url = json.loads(resp.read().decode())["webSocketDebuggerUrl"]
+    except (urllib.error.URLError, OSError) as err:
+        return "SKIP", ("no browser on %s to measure the loaded extension (%s) - "
+                        "start Comet and re-run to measure it; an unreachable "
+                        "browser is an unmeasured check, not a passing one"
+                        % (COMET_CDP, type(err).__name__))
     ws = websocket.create_connection(ws_url, timeout=15, suppress_origin=True)
     seq = [0]
 
@@ -1917,6 +1929,37 @@ def the_gate_cannot_contain_a_check_that_cannot_be_seen():
         return "FAIL", "the gate no longer declares LOCAL/LIVE as list literals"
     registered = lists["LOCAL"] + lists["LIVE"]
 
+    # MEASURED 0.7.40, proved 2026-10-04 by emptying LIVE and running the gate:
+    # with LIVE = [] the verdict was "38 checks: 38 ok, 0 failed, 0 skipped" and
+    # "READY: every check passed." Nothing went red. The `registered` checks below
+    # all pass on a tree where 16 of 54 checks were never executed, because they ask
+    # "is every registered name defined and decorated?" - an empty list is trivially
+    # a list of defined names. The message was the lie: it claimed every registered
+    # check was resolvable while half the suite had not run.
+    #
+    # Do not delete this. A gate that can empty its own measurement list and still
+    # say READY is the exact shape 0.7.40 was published for, one level down.
+    # An emptied list must FAIL and must NAME what stopped being measured, so the
+    # red line can be read without guessing which family went dark.
+    for _nm, _entries in (("LOCAL", lists["LOCAL"]), ("LIVE", lists["LIVE"])):
+        if not _entries:
+            return "FAIL", ("%s is empty, so none of its checks ran and this gate "
+                            "cannot see that they are gone; the other list still "
+                            "reports green and the verdict would read READY while "
+                            "an entire family of checks went unmeasured" % _nm)
+    if len(lists["LOCAL"]) < MIN_LOCAL_CHECKS:
+        return "FAIL", ("LOCAL registers only %d check(s) (floor MIN_LOCAL_CHECKS=%d); "
+                        "a local check was deleted or renamed out of the list. Change "
+                        "MIN_LOCAL_CHECKS in the same commit and name in the release "
+                        "notes what stopped being measured."
+                        % (len(lists["LOCAL"]), MIN_LOCAL_CHECKS))
+    if len(lists["LIVE"]) < MIN_LIVE_CHECKS:
+        return "FAIL", ("LIVE registers only %d check(s) (floor MIN_LIVE_CHECKS=%d); "
+                        "the live half of the suite is the part that measures the "
+                        "running relay, the pinned extension and the installed "
+                        "popup, and a shrunken LIVE hides a shrunken product"
+                        % (len(lists["LIVE"]), MIN_LIVE_CHECKS))
+
     ghosts = sorted(n for n in registered if n not in defs)
     if ghosts:
         return "FAIL", ("%d registered name(s) have no function: %s - the gate would "
@@ -1949,6 +1992,24 @@ def the_gate_cannot_contain_a_check_that_cannot_be_seen():
         return "FAIL", ("%d function(s) are never registered, never decorated and never "
                         "called: %s - a check written and never wired is a comment "
                         "about a bug" % (len(unwired), ", ".join(unwired[:6])))
+    # MEASURED 2026-10-04 while cutting v0.7.41. The `unwired` test above skips every
+    # decorated function (`decorators.get(n) != "check"`), so a @check that is never
+    # added to LOCAL or LIVE is structurally invisible to it - and this guard's own
+    # docstring promised to catch exactly that ("DEFINED but never REGISTERED"). I
+    # proved it by deleting one LOCAL entry on a temp copy: the guard answered "ok".
+    # The fix is its own test, because @check and not-registered is the only shape
+    # that is neither a helper (called, but undecorated) nor dead code (uncalled).
+    #
+    # Do not relax this to a warning. A registered check that nothing runs is the
+    # same silent-green family as an emptied list, one shape over: the function
+    # exists, reads well, and measures nothing.
+    unplugged = sorted(n for n, dec in decorators.items()
+                       if dec == "check" and n not in registered)
+    if unplugged:
+        return "FAIL", ("%d @check function(s) are defined but never REGISTERED in "
+                        "LOCAL or LIVE: %s - they carry the decorator that makes a "
+                        "check look wired while nothing ever runs them"
+                        % (len(unplugged), ", ".join(unplugged[:6])))
     # Zero registered checks is the shape this whole guard exists to catch, and
     # it passed: measured 0.7.40, emptying LOCAL and LIVE made this check report
     # "0 checks: every registered name resolves and is decorated; 73 helpers are
@@ -2007,8 +2068,30 @@ def pristine_copies_match_the_committed_product():
     import hashlib
 
     pr_dir = REPO / "scripts" / "artifacts_pristine"
+    # MEASURED 2026-10-04: the 9 stored baselines this repo actually ships. The
+    # old denominator was `len(list(pr_dir.iterdir()))` - the files PRESENT -
+    # so deleting a copy printed "8/8" and an emptied directory printed SKIP.
+    # A self-referential denominator cannot detect its own shrinkage.
+    MIN_PRISTINE_COPIES = 9
     if not pr_dir.is_dir():
-        return "SKIP", "no pristine directory yet (copies are made per run)"
+        return ("FAIL",
+                "no scripts/artifacts_pristine directory, yet %d stored baseline(s) are "
+                "required - the harnesses restore from these, so with the directory "
+                "gone they install whatever is on disk as the base they verify "
+                "against" % MIN_PRISTINE_COPIES)
+
+    # FLOOR FIRST, ON PURPOSE. This runs before resolve(), before the git lookup,
+    # and before every SKIP below: a pruned set used to reach the git branch with
+    # nothing left to resolve, and left through `if not allowed: return "SKIP"`,
+    # so deleting every baseline printed "no committed source, no reference" and
+    # never once said the baselines were gone. Order is the whole fix here.
+    _present = [f for f in sorted(pr_dir.iterdir()) if f.is_file()]
+    if len(_present) < MIN_PRISTINE_COPIES:
+        return ("FAIL",
+                "only %d stored baseline(s) present, %d required - a pruned baseline "
+                "is not a clean state, it is an unmeasured one: the harnesses restore "
+                "from whatever survives, so a missing copy silently stops protecting "
+                "its file" % (len(_present), MIN_PRISTINE_COPIES))
 
     def resolve(name):
         """The repo file this stored copy backs up, or None if unrecognised.
@@ -2072,7 +2155,7 @@ def pristine_copies_match_the_committed_product():
         return "SKIP", "git unavailable, cannot read the committed sources"
 
     wrong, unknown, seen = [], [], 0
-    for f in sorted(p for p in pr_dir.iterdir() if p.is_file()):
+    for f in _present:
         target = resolve(f.name)
         if target is None:
             unknown.append(f.name)
@@ -2089,14 +2172,12 @@ def pristine_copies_match_the_committed_product():
                         "refreshes these from the file on disk, so a killed run "
                         "can install the damage as the base it verifies against"
                         % (len(wrong), "; ".join(sorted(wrong))))
-    if not seen:
-        return "SKIP", "no pristine copy maps to a committed source yet"
     if unknown:
         return "FAIL", ("%d stored cop(y|ies) name no file I can resolve, so they are "
                         "unchecked: %s - resolve every name or delete the copy"
                         % (len(unknown), ", ".join(sorted(unknown))))
-    return "ok", ("%d/%d copies hold a version this repo actually committed"
-                  % (seen, len(list(p for p in pr_dir.iterdir() if p.is_file()))))
+    return "ok", ("%d/%d stored baselines hold a version this repo actually committed"
+                  % (seen, MIN_PRISTINE_COPIES))
 
 @check("the product is byte-identical after every proof-red harness has run")
 def product_survives_the_proof_red_harnesses():
@@ -2623,6 +2704,35 @@ def installed_popup_translates():
         return "FAIL", "the suite ran green but printed no pass count"
     return "ok", f"{passed} (installed popup, fr codes resolved)"
 
+
+# Floor on the live half of the suite, asserted by
+# the_gate_cannot_contain_a_check_that_cannot_be_seen.
+#
+# Measured, not guessed: LIVE registers 16 checks today (relay health, single-relay
+# ownership, auth, update_check, release asset, main tarball, lightpanda up, cdp
+# proxy, session roundtrip, live extension version, updates.xml live, audit log,
+# double-check pin, diagnostics endpoint, silent sockets, installed popup i18n).
+# Those are the only checks that observe a RUNNING product, so a shrunken LIVE is a
+# product that stopped being watched. 8 is the largest half that keeps every family
+# represented: relay (health, single, auth), packaging (update, asset, tarball, xml),
+# engine (lightpanda, cdp), session (roundtrip, pin, audit), surface (diagnostics,
+# sockets, popup). Below half the families can vanish while the gate stays green -
+# which is precisely what the measured LIVE = [] run proved.
+#
+# If you ever remove a live check, change this number in the SAME commit and say in
+# the release notes what stopped being measured. A silent floor edit is the bug
+# this constant exists to make visible.
+MIN_LIVE_CHECKS = 8
+
+# The twin floor, added 2026-10-04 in v0.7.41. MIN_LIVE_CHECKS existed but LOCAL had
+# none, and LOCAL is the list that registers 38 of the 54 @check functions. Measured
+# hole: deleting ONE entry from LOCAL left the gate green - scripts/acceptance.py was
+# served a LOCAL of 37 with a @check function still defined, and the wiring guard
+# answered `ok`. A missing LOCAL floor is a check that can be deleted in one line and
+# never noticed; the 38 below is the measured count, not a guess, so removing a local
+# check must now either break this floor or state in the release notes what stopped
+# being measured.
+MIN_LOCAL_CHECKS = 38
 
 LIVE = [relay_health, single_relay, relay_auth, update_check, release_asset, main_tarball,
         lightpanda_up, cdp_proxy, session_roundtrip, extension_live_version, updates_xml_live,

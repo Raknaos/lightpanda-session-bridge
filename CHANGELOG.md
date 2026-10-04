@@ -1,3 +1,38 @@
+## [0.7.41] - 2026-10-04
+
+### Fixed
+- The gate could empty its own measurement lists and still report READY. Viding
+  `LIVE` printed `READY: every check passed.` while 16 checks — the whole live
+  half — never ran. Both lists now FAIL when empty, naming which family went dark,
+  and floors `MIN_LOCAL_CHECKS = 38` / `MIN_LIVE_CHECKS = 8` refuse a list that
+  was shrunk rather than emptied.
+- A `@check` function that is defined, decorated, and registered in neither list
+  was invisible to the wiring guard: nothing ever ran it, so it could never
+  influence the verdict, while carrying the decorator that makes a check look
+  wired. The guard now reports that direction by name.
+- `no stored 'pristine' copy can become a false reference` counted the files
+  PRESENT as its denominator, so deleting a baseline printed `8/8` and emptying
+  the directory printed `SKIP`. The floor runs before `resolve()`, before the git
+  lookup and before every `SKIP`, and the silent `SKIP` is gone.
+- `the extension in Comet serves the repo version` had no guard for an external
+  prerequisite. With the browser closed, `URLError` left the check with no verdict
+  at all, so the gate reported a count that silently excluded the extension. It
+  now answers `SKIP` naming the unreachable endpoint: an unmeasured check is not a
+  passing one.
+
+### Added
+- `scripts/proof_red_gate_wiring.py` proves six wiring and baseline refusals by
+  re-running the real gate functions against a mutated copy of the gate's own
+  text: 6 named red, 0 unnamed, 0 invalid, control ok. A red that does not name
+  its refusal counts as unnamed and is not proof — which is how the first version
+  of the `LIVE` floor case was caught rejecting on the wrong guard.
+
+### Known
+- Two gate runs overlapping produce false failures: the 18 proof-red harnesses
+  edit product files and none reserves them. This release records the three
+  failures it produced rather than hiding them; the lock that fixes it is not in
+  this release.
+
 ## [0.7.40] - 2026-10-03
 
 ### Fixed
