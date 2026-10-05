@@ -47,6 +47,7 @@ import urllib.parse
 import urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
+_LOCK_MARK = "lightpanda-bridge-gate.lock"
 EXT = REPO / "extension"
 CONFIG = pathlib.Path(os.path.expanduser("~"), ".config", "lightpanda-bridge")
 RELAY = "http://127.0.0.1:8765"
@@ -59,6 +60,119 @@ LANGS = ["en", "fr", "es", "de", "zh", "ja", "it", "pt", "ar", "ru"]
 QUIET = False
 
 sys.path.insert(0, str(REPO / "relay"))
+
+
+def _gate_exclusive_lock():
+    """Refuse a second concurrent gate run, and say which run holds the tree.
+
+    MEASURED, not hypothetical. On 2026-10-04 three to four gate failures came
+    from MY two overlapping runs: run f started while run g was still alive, both
+    drove the same proof_red_* harnesses, and each harness WRITES the product to
+    sabotage it (proof_red_unreadable_branch.py:107 `RELAY.write_bytes(data)`)
+    then restores it in a `finally`. A harness from run A can read run B's
+    sabotage as its own "original" (L75) and restore B's bytes instead of its
+    own, leaving the tree dirty for whichever harness runs next.
+
+    The existing fence (product_survives_the_proof_red_harnesses) hashes the
+    tree before and after and so DETECTS the drift - but only after the damage,
+    and the victim is indistinguishable from a real regression. Detection is not
+    prevention; there was no exclusion anywhere in scripts/.
+
+    OS-level exclusive create (`O_CREAT|O_EXCL`) because two of my runs can be
+    Python processes on any platform, and `fcntl`/`msvcrt` locking is advisory
+    and easy to bypass by accident. Stale locks are cleared by a liveness check
+    on the recorded pid, so a killed run cannot wedge the gate forever - and the
+    refusal NAMES the holder instead of silently waiting, because a silent wait
+    is how two runs end up interleaved again.
+
+    Returns None on refusal (caller exits non-zero), the lock path on success.
+    """
+    import errno
+    # CONFIG, never scripts/: a lock inside the tree would be an untracked file
+    # in the directory the release zip walks, so merely running the gate would
+    # change the archive's contents and fail its reproducibility check. CONFIG
+    # is read only by exact filename (secret, pinned_extension_id), never
+    # enumerated, so a fourth file there is invisible to every check.
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    lock = CONFIG / _LOCK_MARK
+    holder = "%s pid=%d" % (os.uname().nodename if hasattr(os, "uname") else
+                            __import__("socket").gethostname(), os.getpid())
+    for _ in range(2):
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except OSError as exc:
+            if exc.errno != errno.EEXIST:
+                raise
+            # Someone holds it. Refuse loudly unless that pid is gone (a run
+            # killed mid-flight must not wedge every later run).
+            try:
+                pid = int(lock.read_text(encoding="utf-8").split("pid=")[1].split()[0])
+                alive = _pid_alive(pid)
+            except (OSError, ValueError, IndexError):
+                alive, pid = False, -1
+            if alive:
+                print("GATE LOCK: another gate run already holds the tree"
+                      " (pid %d). Refusing: two runs would drive the same"
+                      " proof_red harnesses and corrupt each other's"
+                      " snapshots.\n  holder: %s\n  lock:   %s"
+                      % (pid, lock.read_text(encoding="utf-8").strip(), lock))
+                return None
+            lock.unlink(missing_ok=True)  # stale, reclaim it and retry once
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(holder)
+        return lock
+    print("GATE LOCK: could not claim the gate lock after clearing a stale"
+          " holder: %s" % lock)
+    return None
+
+
+def _pid_alive(pid: int) -> bool:
+    """True if `pid` is a running process. Portable, no psutil dependency.
+
+    Windows gets a direct OpenProcess probe rather than `tasklist` (a ~1s
+    process spawn per refusal, on the one path where a wrong answer wedges or
+    corrupts a run) and NEVER `os.kill(pid, 0)`: on Windows CPython maps that
+    to TerminateProcess, so a liveness CHECK would KILL the holder - the one
+    caller here is about to refuse on. GetExitCodeProcess is read-only, needs
+    no elevation for our own children, and answers STILL_ACTIVE directly.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not h:
+                # Gone (or belongs to another user): ESRCH-equivalent.
+                return False
+            try:
+                code = ctypes.c_ulong()
+                if not k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                    return True  # cannot prove death: assume alive, refuse
+                return code.value == STILL_ACTIVE
+            finally:
+                k32.CloseHandle(h)
+        except (AttributeError, OSError, ImportError):
+            # No ctypes (or a locked-down host): fall back to the slow probe
+            # rather than guess. A timeout counts as alive - refusing a run we
+            # cannot disprove is the safe direction.
+            try:
+                out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid],
+                                     capture_output=True, text=True, timeout=20)
+                return str(pid) in out.stdout
+            except (OSError, subprocess.SubprocessError):
+                return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def use_github_token():
@@ -2749,6 +2863,19 @@ def main():
     args = ap.parse_args()
     QUIET = args.quiet
 
+    # Exclusive BEFORE any product write: the proof_red harnesses below sabotage
+    # the tree on purpose and restore it in a `finally`, so two overlapping runs
+    # restore each other's bytes and the victim looks like a real regression.
+    lock = _gate_exclusive_lock()
+    if lock is None:
+        return 1
+    try:
+        return _run_gate(args)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _run_gate(args):
     if not args.local:
         source = use_github_token()
         if not args.quiet:
