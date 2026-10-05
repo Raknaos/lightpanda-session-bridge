@@ -739,6 +739,13 @@ _LAST_STORAGE_APPLIED_COUNT = 0
 # dropped in silence). Names only.
 _LAST_STORAGE_REFUSED: list = []
 
+# Cookie twin of the three above, same reason (L903-904): Lightpanda silently
+# DROPS a cookie whose domain/path the navigation does not match, so a ratio
+# without names came back identical on every resync. NAMES only, never values.
+_LAST_COOKIE_EXPECTED = 0
+_LAST_COOKIE_VERIFIED = 0
+_LAST_COOKIE_MISSING: list = []
+
 
 def _missing_from_verify(raw) -> list:
     """Normalize the page's verification result into a list of missing NAMES.
@@ -888,6 +895,9 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
     global _LAST_STORAGE_REFUSED
     global _LAST_STORAGE_EXPECTED
     global _LAST_STORAGE_MISSING
+    global _LAST_COOKIE_EXPECTED
+    global _LAST_COOKIE_VERIFIED
+    global _LAST_COOKIE_MISSING
     # Reset the WHOLE per-request state here, not just the two counters below.
     # `_LAST_STORAGE_EXPECTED` was only assigned after the early `raise`s, so an
     # import that failed on a refused key answered 400 with the PREVIOUS site's
@@ -898,6 +908,10 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
     _LAST_STORAGE_REFUSED = []
     _LAST_STORAGE_EXPECTED = 0
     _LAST_STORAGE_MISSING = []
+    # Same cross-site leak for cookies, same fix.
+    _LAST_COOKIE_EXPECTED = 0
+    _LAST_COOKIE_VERIFIED = 0
+    _LAST_COOKIE_MISSING = []
 
     # Sanitize BEFORE the live page is touched. A key the relay cannot carry has
     # to fail fast AND by name: the x.com bug was a silent removal here, which
@@ -933,8 +947,16 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
             # Fallback verification without urls filter
             fallback = _CDP_TRANSPORT.request("Network.getCookies", {}, session_id=_CDP_SESSION_ID)
             names = {str(item.get("name")) for item in fallback.get("cookies", [])}
-        if not any(str(item["name"]) in names for item in converted):
-            raise RuntimeError("Lightpanda cookie verification failed: no cookies found")
+        # ``all()``, not ``any()``: Lightpanda applies cookies per domain/path and
+        # silently DROPS the ones whose domain or path the navigation does not
+        # match. ``any()`` answered "did at least ONE survive", so a sync that lost
+        # 3 cookies out of 5 returned SUCCESS and popup.js rendered "synchronized"
+        # while every authenticated call came back 401/407 -- the same lie the
+        # localStorage path refuses below.
+        _LAST_COOKIE_MISSING = [str(item["name"]) for item in converted
+                                if str(item["name"]) not in names]
+        _LAST_COOKIE_EXPECTED = len(converted)
+        _LAST_COOKIE_VERIFIED = len(converted) - len(_LAST_COOKIE_MISSING)
 
         # Remember the session for automatic resync after a Lightpanda restart
         # AND persist it, so a relay restart / reboot / watchdog restart no
@@ -943,6 +965,22 @@ def set_session(origin: str, cookies: list[dict], storage: dict | None = None) -
         with SESSIONS_LOCK:
             _SYNCED_SESSIONS[origin] = converted
         _persist_session(_LAST_SESSION)
+
+        # A half-transferred cookie jar is worse than a visible failure, for the
+        # same reason and with the same ordering as the storage check below:
+        # bookkeeping is already done (a resync can finish the job), but the
+        # caller is told the truth. ``x/y cookies verified (missing: <names>)``
+        # names are what makes this actionable -- without them the same mystery
+        # ratio came back on every single sync.
+        if _LAST_COOKIE_MISSING:
+            missing_detail = " (missing: %s)" % ", ".join(
+                _short_key(n, 40) for n in _LAST_COOKIE_MISSING[:5]
+            )
+            raise RuntimeError(
+                "cookie transfer incomplete: %d/%d cookies verified%s"
+                % (max(_LAST_COOKIE_VERIFIED, 0), _LAST_COOKIE_EXPECTED,
+                   missing_detail)
+            )
 
         # A half-transferred localStorage snapshot is worse than a visible
         # failure: cookies + some keys look "synced" while every authenticated
