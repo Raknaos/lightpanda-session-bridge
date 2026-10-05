@@ -7,10 +7,14 @@ a harness reason (NameError, a missing attribute, an unbound port).
 
 NEVER `git checkout <file>` for this: relay/server.py carries uncommitted
 work. The pristine copy is written to disk BEFORE the edit and restored from it.
+
+If this script is ever killed mid-run, the sabotage stays in the tree. Run
+`python scripts/proof_red_socket_timeout.py --repair` to put it back; it reads
+the on-disk marker and cannot re-sabotage anything. Same flag, same meaning in
+scripts/proof_red_update_report.py for relay/diagnostics.py.
 """
 import pathlib
 import re
-import hashlib
 import subprocess
 import sys
 import tempfile
@@ -22,27 +26,55 @@ PY = str(REPO_ROOT / ".venv" / "Scripts" / "python.exe")
 REDUCED = re.compile(r"^(\s*)timeout = \d+$", re.MULTILINE)
 
 
+def repair() -> int:
+    """Restore relay/server.py from the marker, byte-exactly. Standalone.
+
+    Measured 2026-10-05: a 420s tool timeout killed this harness mid-run, so
+    neither the edit nor its `finally` completed and the tree kept `timeout =
+    45`. The gate caught it a step later, but only the gate. `python
+    proof_red_socket_timeout.py --repair` puts the recovery in one command that
+    cannot re-sabotage anything, so the next person (or the next agent) does not
+    have to re-derive the fix by hand the way I had to.
+    """
+    marker = SERVER.with_suffix(".py.sabotaged-by-socket-timeout")
+    if not marker.exists():
+        print("nothing to repair: no marker at", marker)
+        return 0
+    pristine = marker.read_bytes()
+    current = SERVER.read_bytes()
+    if current == pristine:
+        print("tree already pristine; retiring marker")
+        marker.unlink()
+        return 0
+    print("repairing: %d bytes on disk, %d pristine in marker"
+          % (len(current), len(pristine)))
+    SERVER.write_bytes(pristine)
+    assert SERVER.read_bytes() == pristine, "repair not byte-exact"
+    marker.unlink()
+    print("repaired byte-exactly")
+    return 0
+
+
 def main() -> int:
+    if "--repair" in sys.argv:
+        return repair()
     original = SERVER.read_text(encoding="utf-8")
     backup = pathlib.Path(tempfile.mkdtemp(prefix="lp-proofred-")) / "server.py"
     backup.write_text(original, encoding="utf-8", newline="")
     assert backup.read_text(encoding="utf-8") == original, "backup not faithful"
 
     # A kill -9, a timeout, or a closed laptop leaves the `finally` restore
-    # unrun, and the sabotage becomes the tree the NEXT run verifies against --
-    # exactly how `timeout = 15` silently became `timeout = 45` on 2026-10-05
-    # (the gate caught it: "1 product file(s) differ from the COMMITTED tree").
-    # A marker file named after this harness is therefore written BEFORE the
-    # edit and removed only on a clean restore, so a later run (the gate's own
-    # byte-identity check, or a human) can see that the tree owes a restore and
-    # can repair it byte-exactly without re-running this harness (which would
-    # re-sabotage the file).
+    # unrun, and the sabotage becomes the tree the NEXT run verifies against -
+    # exactly how `timeout = 15` silently became `timeout = 45` on 2026-10-05.
+    # The marker is written BEFORE the edit and removed only on a clean restore,
+    # and it carries the PRISTINE BYTES rather than just their hash: the marker
+    # that survived that kill had a hash and no way to act on it, so the only
+    # recovery was re-deriving the fix by hand. With the source in the marker,
+    # repair() can put the tree back byte-exactly without re-running this
+    # harness (which would re-sabotage the file).
     marker = SERVER.with_suffix(".py.sabotaged-by-socket-timeout")
-    marker.write_text(
-        "original=%d bytes sha256=%s\n"
-        % (len(original.encode("utf-8")),
-           hashlib.sha256(original.encode("utf-8")).hexdigest()),
-        encoding="utf-8", newline="")
+    marker.write_bytes(original.encode("utf-8"))
+    assert marker.read_bytes() == original.encode("utf-8"), "marker not faithful"
 
     # The sabotage must be long enough that the 15s deadline cannot explain the
     # failure, and SHORT enough to finish. My first choice, 600s, made the
@@ -71,6 +103,7 @@ def main() -> int:
         return 2
     SERVER.write_text(sabotaged, encoding="utf-8", newline="")
     budget = 420
+    restored = False
     try:
         proc = subprocess.run(
             [PY, "-m", "unittest", "discover", "-s", "tests",
@@ -78,12 +111,14 @@ def main() -> int:
             cwd=REPO_ROOT, capture_output=True, text=True, timeout=budget)
     finally:
         SERVER.write_text(original, encoding="utf-8", newline="")
-        assert SERVER.read_text(encoding="utf-8") == original, "restore failed"
-        # Only a verified byte-exact restore retires the marker. If the restore
-        # itself raised, the marker survives and the next run knows the tree
-        # still owes a restore.
-        marker.unlink(missing_ok=True)
-        print("fix restored:", ("timeout = 15" in original))
+        restored = SERVER.read_text(encoding="utf-8") == original
+        assert restored, "restore failed"
+        # Only a VERIFIED byte-exact restore retires the marker. If the restore
+        # raised, `unlink` below never runs, so the marker survives and the next
+        # run still knows the tree owes a restore.
+        if restored:
+            marker.unlink(missing_ok=True)
+        print("fix restored:", restored)
 
     out = proc.stdout + proc.stderr
     summary = [ln for ln in out.splitlines()
