@@ -228,11 +228,33 @@ def main():
     assert not box.dir.exists(), "sandbox dir outlived the run"
 
     invalid = len(INVALID)
+    # The tally contract is three buckets, and the vocabulary is load-bearing:
+    # `audit_proof_red_coverage.py` reads named / unnamed / invalid out of this
+    # file, so a French "nomme(s)" here reads to the audit exactly like a harness
+    # that cannot tell a named red from an unnamed one.
+    #
+    # MEASURED 2026-10-05: `unnamed` used to be computed here and then PRINTED as
+    # a second copy of NAMED (`% (len(CASES), NAMED, NAMED, invalid)`), which made
+    # the column structurally unreachable - a case that went red WITHOUT naming
+    # its defect could not be reported at all, so the gate read unnamed=0 by
+    # construction. The gate can read a real unnamed (`proof_red_tally` returns
+    # it, L1421) so the fix is to let a case say so.
+    unnamed = len(CASES) - NAMED - invalid
+    # The line shape is load-bearing too: `proof_red_tally()` in the gate parses
+    # four slots in this order - sabotages, ROUGE, named, invalid - and
+    # `_TALLY_PATTERNS` derives unnamed = reds - named. So `rouge` must be the
+    # number of cases that WENT RED, not the number that named it. Printing NAMED
+    # twice made reds == named == total, which hid exactly that gap.
+    reds = NAMED + unnamed
     print("\n%d sabotage(s), %d rouge(s), %d nomme(s), %d invalide(s)"
-          % (len(CASES), NAMED, NAMED, invalid))
+          % (len(CASES), reds, NAMED, invalid))
     if invalid:
         print("UNPROVEN cases (a check that did not flip is not a proof): %s"
               % ", ".join(INVALID))
+        return 1
+    if unnamed:
+        print("UNNAMED red cases (something broke without naming its defect): %d"
+              % unnamed)
         return 1
     if NAMED != len(CASES):
         return 1

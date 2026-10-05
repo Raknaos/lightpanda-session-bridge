@@ -269,6 +269,26 @@ def relay_call(method, path, payload=None, headers=None, timeout=30):
             return err.code, json.loads(err.read().decode() or "{}")
         except Exception:
             return err.code, {}
+    except (urllib.error.URLError, OSError) as err:
+        # MESURE 2026-10-05 : relais eteint -> urlopen leve URLError, que le
+        # except HTTPError laisse remonter hors du check, qui finit SANS VERDICT
+        # (reproduit : WinError 10061). Le decorateur @check transforme deja toute
+        # exception en FAIL "<Type>: <msg>" ; on lui delegue donc le verdict, ce qui
+        # donne un nom honnete ET bloquant.
+        #
+        # Pourquoi FAIL et non SKIP, alors que la garde Comet de
+        # extension_live_version repond SKIP sur la meme situation ? Parce que le
+        # verdict final est `return len(failures)` : le SKIP se compte a part et ne
+        # bloque RIEN (mesure : L2927-2931). Un SKIP ici laisserait le gate
+        # ecrire READY avec les 10 checks du relais non mesures - exactement le vert
+        # muet que ce projet existe pour empecher. Un navigateur absent ne bloque pas,
+        # parce que Comet est un temoin opcional ; le relais est le sujet du gate.
+        # Et un code 0 serait pire : aucun appelant ne teste `== 0`, mais
+        # double_check_pin aurait alors affiche "the relay refused the pinned
+        # origin (0)", en attribuant a une politique un port simplement eteint.
+        raise RuntimeError("relay unreachable at %s (%s: %s) - this check is "
+                           "UNMEASURED, not passed; start the relay and re-run"
+                           % (RELAY, type(err).__name__, err)) from err
 
 
 def pinned_id():
@@ -1908,7 +1928,28 @@ def every_fail_names_a_cause():
                 # a helper returning a bare string: its whole body can reach a
                 # verdict, so treat the body as the detail under audit
                 detail = value
-                if detail is None:
+                # MEASURED 2026-10-05: this guard never fired for the reason it
+                # was written for. `return None` parses to `ast.Constant(
+                # value=None)` - a NODE, not Python's None - so `detail is None`
+                # was False and the exemption was dead code. `_gate_exclusive_lock`
+                # is the only helper that returns a bare None, and main is its
+                # only caller: `if lock is None: return 1`, so the sentinel becomes
+                # a PROCESS EXIT, never a verdict tuple, and the cause is already
+                # printed with the holder pid and lock path. Exempting it is what
+                # this guard intends.
+                #
+                # Both spellings must be tested, and testing only the node would be
+                # a REGRESSION: a bare `return` parses to `value is None` (no node
+                # at all), which the isinstance test below cannot see. Measured on
+                # this file: no helper currently uses the bare form, so the loss is
+                # latent - but the guard's job is to stay correct for the next
+                # helper written, so both are covered.
+                #
+                # The banned "None" further down still catches a real
+                # `return ("FAIL", None)`: a tuple return is read on the branch
+                # above and never reaches this guard.
+                if detail is None or (isinstance(detail, _ast.Constant)
+                                      and detail.value is None):
                     continue
             else:
                 continue

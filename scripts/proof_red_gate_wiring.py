@@ -389,23 +389,63 @@ def case_d(clean):
     return grade(status, detail, EXPECT["D_pristine_absent"], "D")
 
 
+def floor_value(text, name):
+    """Read a floor constant out of the gate source at ANY scope.
+
+    `const_value` only walks module level, which is why case E drifted: its
+    floor `MIN_PRISTINE_COPIES` is function-LOCAL (acceptance.py L2189), so
+    the module reader could not see it and the case kept a hardcoded
+    denominator. Walk every assignment in the tree instead, and fail loudly
+    if the name is gone - a harness that silently prunes to the wrong number
+    is exactly the unwitnessed-check failure this harness exists to catch.
+    """
+    for node in ast.walk(ast.parse(text)):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id == name:
+                try:
+                    return ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    raise AssertionError("%s is not a literal in the gate" % name)
+    raise AssertionError("no %s in the gate source" % name)
+
+
 def case_e(clean):
-    """Prune the baseline set to 8 of 9 - the directory still exists, so the
-    "no directory" floor stays quiet and only MIN_PRISTINE_COPIES can see it.
-    This is the case that matters most: the old denominator was
+    """Prune the baseline set BELOW the floor - the directory still exists, so
+    the "no directory" floor stays quiet and only MIN_PRISTINE_COPIES can see
+    it. This is the case that matters most: the old denominator was
     len(list(iterdir())) - the files PRESENT - so a deletion printed 8/8 green.
     The victim is the lexicographically LAST file so the remaining ones still
-    resolve against the temp tree the same way."""
+    resolve against the temp tree the same way.
+
+    The floor is READ FROM THE GATE, never hardcoded, and the case prunes
+    strictly below it. Both halves matter: the repo shipped 10 baselines while
+    this case pruned one file to 9 against a floor of 9, and the floor fires on
+    `len < floor`, so `9 >= 9` let the check fall through to `resolve()` - no
+    `.git` in the temp tree, so it answered SKIP and proved nothing. Reading the
+    floor removes the drift; pruning below it removes the boundary."""
     root, mod = build(clean, "e", pristine=True)
     pdir = root / "scripts" / "artifacts_pristine"
     files = sorted(f for f in pdir.iterdir() if f.is_file())
-    victim = files[-1]
-    victim.unlink()
+    # The floor is read off the SAME gate text this case is mutating, at any
+    # scope (it is function-local in the real file), so it can never drift.
+    floor = floor_value(clean, "MIN_PRISTINE_COPIES")
+    keep = floor - 1
+    if keep < 0 or len(files) <= keep:
+        return False, ("denominator drift: %d baselines, floor %d, cannot prune "
+                       "strictly below it" % (len(files), floor))
+    for victim in files[keep:]:
+        victim.unlink()
     left = [f for f in pdir.iterdir() if f.is_file()]
-    print("  E: pruned %r  %d -> %d baselines, directory still present=%s"
-          % (victim.name, len(files), len(left), pdir.is_dir()))
-    if len(left) != len(files) - 1:
-        return False, "patch-miss"
+    print("  E: pruned %d -> %d baselines (floor=%d, pruned strictly below),"
+          " directory still present=%s"
+          % (len(files), len(left), floor, pdir.is_dir()))
+    if len(left) != keep:
+        return False, "patch-miss: expected %d left, got %d" % (keep, len(left))
     try:
         status, detail = run_guard(mod, PRISTINE)
     finally:

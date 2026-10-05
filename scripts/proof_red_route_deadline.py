@@ -25,15 +25,23 @@ SABOTAGES = [
         "test_no_route_can_widen_the_deadline_without_being_declared",
     ),
     (
+        # Anchored on the SHAPE (`timeout = <int>`) rather than the literal 15.
+        # Hardcoding the deadline made this harness silently vacuous: when the
+        # production value drifted (15 -> 45, via a sabotage that a killed run
+        # failed to restore, on 2026-10-05) both anchors below matched nothing,
+        # the harness ABORTed, and the audit check reported "printed no tally"
+        # instead of saying "your anchor is stale". A value-shaped anchor keeps
+        # working when the constant is retuned deliberately, and the test's own
+        # 5..60s bound still decides whether the result is sane.
         "le backstop de classe disparait",
-        r"^    timeout = 15$",
-        "    timeout = None",
+        r"^(    timeout = )\d+$",
+        r"\g<1>None",
         "test_the_class_deadline_is_still_present_and_sane",
     ),
     (
         "le backstop devient enorme (300s)",
-        r"^    timeout = 15$",
-        "    timeout = 300",
+        r"^(    timeout = )\d+$",
+        r"\g<1>300",
         "test_the_class_deadline_is_still_present_and_sane",
     ),
     (

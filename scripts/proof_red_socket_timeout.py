@@ -10,6 +10,7 @@ work. The pristine copy is written to disk BEFORE the edit and restored from it.
 """
 import pathlib
 import re
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,22 @@ def main() -> int:
     backup = pathlib.Path(tempfile.mkdtemp(prefix="lp-proofred-")) / "server.py"
     backup.write_text(original, encoding="utf-8", newline="")
     assert backup.read_text(encoding="utf-8") == original, "backup not faithful"
+
+    # A kill -9, a timeout, or a closed laptop leaves the `finally` restore
+    # unrun, and the sabotage becomes the tree the NEXT run verifies against --
+    # exactly how `timeout = 15` silently became `timeout = 45` on 2026-10-05
+    # (the gate caught it: "1 product file(s) differ from the COMMITTED tree").
+    # A marker file named after this harness is therefore written BEFORE the
+    # edit and removed only on a clean restore, so a later run (the gate's own
+    # byte-identity check, or a human) can see that the tree owes a restore and
+    # can repair it byte-exactly without re-running this harness (which would
+    # re-sabotage the file).
+    marker = SERVER.with_suffix(".py.sabotaged-by-socket-timeout")
+    marker.write_text(
+        "original=%d bytes sha256=%s\n"
+        % (len(original.encode("utf-8")),
+           hashlib.sha256(original.encode("utf-8")).hexdigest()),
+        encoding="utf-8", newline="")
 
     # The sabotage must be long enough that the 15s deadline cannot explain the
     # failure, and SHORT enough to finish. My first choice, 600s, made the
@@ -62,6 +79,10 @@ def main() -> int:
     finally:
         SERVER.write_text(original, encoding="utf-8", newline="")
         assert SERVER.read_text(encoding="utf-8") == original, "restore failed"
+        # Only a verified byte-exact restore retires the marker. If the restore
+        # itself raised, the marker survives and the next run knows the tree
+        # still owes a restore.
+        marker.unlink(missing_ok=True)
         print("fix restored:", ("timeout = 15" in original))
 
     out = proc.stdout + proc.stderr

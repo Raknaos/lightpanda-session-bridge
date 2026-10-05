@@ -20,6 +20,16 @@ TEST = ROOT / "tests" / "node" / "test_tooltip_state_truth.js"
 
 # Snapshot taken at sabotage time, EVERY run: a once-only snapshot silently
 # reverts the fix the moment the product legitimately changes (point 45).
+#
+# The unconditional refresh is ALSO the hole `acceptance.py`'s
+# "no stored 'pristine' copy can become a false reference" check exists to
+# catch, and on 2026-10-05 it caught one for real: a killed
+# proof_red_socket_timeout run left `timeout = 45` in relay/server.py, a later
+# run refreshed `artifacts_pristine/relay__server.py` FROM that sabotage, and
+# from then on every restore-verification compared against a false base. An
+# unbounded refresh is only safe because that check runs FIRST and refuses the
+# run; do not "optimise" the copy into a guarded or once-only one here without
+# re-measuring that ordering (points 45, 101).
 PRISTINE = ROOT / "scripts" / "artifacts_pristine" / "popup.js.pristine"
 PRISTINE.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(POPUP, PRISTINE)
